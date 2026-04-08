@@ -20,7 +20,15 @@ with st.form("add_expense_form", clear_on_submit=True):
         item = st.text_input("Item / Description", placeholder="e.g. Weekly groceries")
 
     with col2:
-        amount = st.number_input("Amount (₹)", min_value=0.01, step=0.01, format="%.2f")
+        st.markdown("**Amount**")
+        inr_col, num_col = st.columns([0.12, 0.88])
+        inr_col.markdown(
+            "<div style='font-size:22px; font-weight:bold; padding-top:6px; text-align:center'>₹</div>",
+            unsafe_allow_html=True,
+        )
+        amount = num_col.number_input(
+            "Amount", min_value=0.01, step=0.01, format="%.2f", label_visibility="collapsed"
+        )
         payer = st.radio("Who paid?", PEOPLE, horizontal=True)
         split = st.radio("Split", SPLIT_OPTIONS, horizontal=True)
 
