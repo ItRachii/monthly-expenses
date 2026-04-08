@@ -67,16 +67,16 @@ def compute_net_balance(df: pd.DataFrame) -> tuple:
     if df.empty:
         return 0.0, "No expenses recorded."
 
-    # Iterate with explicit Python casts to avoid pandas scalar ambiguity
-    total_b_owes = 0.0
-    for _, row in df.iterrows():
-        _, b_owes = compute_owes(float(row["amount"]), str(row["split"]))
-        total_b_owes += b_owes
+    # .tolist() converts numpy/pandas scalars to native Python types,
+    # keeping all arithmetic in pure Python and avoiding pandas __bool__ errors
+    amounts = df["amount"].tolist()
+    splits = df["split"].tolist()
+    payers = df["payer"].tolist()
 
-    mask = df["payer"].astype(str) == "Person B"
-    total_b_paid = float(df.loc[mask, "amount"].sum())
+    total_b_owes: float = sum(compute_owes(a, s)[1] for a, s in zip(amounts, splits))
+    total_b_paid: float = sum(a for a, p in zip(amounts, payers) if p == "Person B")
 
-    balance = float(round(total_b_owes - total_b_paid, 2))
+    balance = round(total_b_owes - total_b_paid, 2)
 
     if abs(balance) < 0.01:
         description = "All settled up!"
