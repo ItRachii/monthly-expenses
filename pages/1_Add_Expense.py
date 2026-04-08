@@ -27,7 +27,7 @@ with st.form("add_expense_form", clear_on_submit=True):
             unsafe_allow_html=True,
         )
         amount = num_col.number_input(
-            "Amount", min_value=0.01, step=0.01, format="%.2f", label_visibility="collapsed"
+            "Amount", min_value=1.0, step=1.0, format="%.2f", label_visibility="collapsed"
         )
         payer = st.radio("Who paid?", PEOPLE, horizontal=True)
         split = st.radio("Split", SPLIT_OPTIONS, horizontal=True)
