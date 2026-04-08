@@ -3,11 +3,13 @@ import datetime
 import pandas as pd
 import streamlit as st
 
-from db.database import get_session, init_db
+from db.database import get_session
 from db.models import Expense, Settlement
+from utils.auth import setup, require_login
 from utils.calculations import PEOPLE, add_owe_columns, compute_net_balance
 
-init_db()
+setup()
+require_login()
 
 st.set_page_config(page_title="Settlement", page_icon="💰", layout="wide")
 st.title("Settlement")

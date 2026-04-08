@@ -2,11 +2,13 @@ import datetime
 
 import streamlit as st
 
-from db.database import get_session, init_db
+from db.database import get_session
 from db.models import Expense
+from utils.auth import setup, require_login
 from utils.calculations import CATEGORIES, PEOPLE, SPLIT_OPTIONS, compute_owes
 
-init_db()
+setup()
+require_login()
 
 st.set_page_config(page_title="Add Expense", page_icon="➕", layout="wide")
 st.title("Add Expense")

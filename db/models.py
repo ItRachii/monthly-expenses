@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Boolean
 from db.database import Base
 
 
@@ -23,3 +23,12 @@ class Settlement(Base):
     settled_by = Column(String, nullable=False)     # who made the payment
     amount = Column(Float, nullable=False)          # net amount transferred
     note = Column(String, nullable=True)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)   # "salt:hash" (pbkdf2_hmac)
+    display_name = Column(String, nullable=False)    # "Person A" or "Person B"

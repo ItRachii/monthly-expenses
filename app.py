@@ -1,13 +1,15 @@
 import streamlit as st
-from db.database import init_db
+from utils.auth import setup, require_login
 
-init_db()
+setup()
 
 st.set_page_config(
     page_title="Monthly Expense Tracker",
     page_icon="💸",
     layout="wide",
 )
+
+require_login()
 
 st.title("Monthly Expense Tracker")
 st.markdown(
@@ -34,5 +36,3 @@ st.markdown(
     > These are tracked independently so the balance is always accurate.
     """
 )
-
-st.sidebar.success("Select a page above to get started.")
