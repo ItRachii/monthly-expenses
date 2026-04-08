@@ -67,10 +67,9 @@ def compute_net_balance(df: pd.DataFrame) -> tuple:
     if df.empty:
         return 0.0, "No expenses recorded."
 
-    df = add_owe_columns(df)
-
-    total_b_owes = df["person_b_owes"].sum()
-    total_b_paid = df.loc[df["payer"] == "Person B", "amount"].sum()
+    # Compute directly to avoid duplicate columns if add_owe_columns was already called
+    total_b_owes = float(sum(compute_owes(row["amount"], row["split"])[1] for _, row in df.iterrows()))
+    total_b_paid = float(df.loc[df["payer"] == "Person B", "amount"].sum())
 
     balance = round(total_b_owes - total_b_paid, 2)
 
