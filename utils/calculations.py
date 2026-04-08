@@ -77,8 +77,8 @@ def compute_net_balance(df: pd.DataFrame) -> tuple:
     if abs(balance) < 0.01:
         description = "All settled up!"
     elif balance > 0:
-        description = f"Person B owes Person A ${balance:.2f}"
+        description = f"Person B owes Person A ₹{balance:.2f}"
     else:
-        description = f"Person A owes Person B ${abs(balance):.2f}"
+        description = f"Person A owes Person B ₹{abs(balance):.2f}"
 
     return balance, description

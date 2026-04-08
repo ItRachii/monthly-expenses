@@ -37,7 +37,7 @@ def category_bar_chart(df: pd.DataFrame):
         y="category",
         orientation="h",
         title="Spending by Category",
-        labels={"amount": "Total ($)", "category": "Category"},
+        labels={"amount": "Total (₹)", "category": "Category"},
         color="category",
         color_discrete_sequence=PALETTE,
     )
@@ -71,7 +71,7 @@ def per_person_bar_chart(df: pd.DataFrame):
     fig.update_layout(
         barmode="group",
         title="Paid vs. Share per Person",
-        yaxis_title="Amount ($)",
+        yaxis_title="Amount (₹)",
     )
     return fig
 
@@ -86,8 +86,8 @@ def monthly_trend_chart(df: pd.DataFrame):
         x="month",
         y="amount",
         title="Monthly Spending Trend",
-        labels={"amount": "Total ($)", "month": "Month"},
+        labels={"amount": "Total (₹)", "month": "Month"},
         color_discrete_sequence=["#4C72B0"],
     )
-    fig.update_layout(xaxis_title="Month", yaxis_title="Total ($)")
+    fig.update_layout(xaxis_title="Month", yaxis_title="Total (₹)")
     return fig

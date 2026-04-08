@@ -66,9 +66,9 @@ filtered = add_owe_columns(filtered)
 st.subheader("Summary")
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Expenses", len(filtered))
-m2.metric("Total Spent", f"${filtered['amount'].sum():.2f}")
-m3.metric("Person A's Share", f"${filtered['person_a_owes'].sum():.2f}")
-m4.metric("Person B's Share", f"${filtered['person_b_owes'].sum():.2f}")
+m2.metric("Total Spent", f"₹{filtered['amount'].sum():.2f}")
+m3.metric("Person A's Share", f"₹{filtered['person_a_owes'].sum():.2f}")
+m4.metric("Person B's Share", f"₹{filtered['person_b_owes'].sum():.2f}")
 
 # ── Table ─────────────────────────────────────────────────────────────────────
 st.subheader("Expenses")
@@ -80,11 +80,11 @@ st.dataframe(
         "date": "Date",
         "category": "Category",
         "item": "Item",
-        "amount": "Amount ($)",
+        "amount": "Amount (₹)",
         "payer": "Payer",
         "split": "Split",
-        "person_a_owes": "Person A Share ($)",
-        "person_b_owes": "Person B Share ($)",
+        "person_a_owes": "Person A Share (₹)",
+        "person_b_owes": "Person B Share (₹)",
     }),
     use_container_width=True,
     hide_index=True,
@@ -106,7 +106,7 @@ if filtered.empty:
     st.info("No expenses match the current filters.")
 else:
     expense_labels = {
-        row["id"]: f"[{row['date'].date()}]  {row['category']}  —  {row['item']}  (${row['amount']:.2f}, {row['payer']})"
+        row["id"]: f"[{row['date'].date()}]  {row['category']}  —  {row['item']}  (₹{row['amount']:.2f}, {row['payer']})"
         for _, row in filtered.iterrows()
     }
     selected_id = st.selectbox(

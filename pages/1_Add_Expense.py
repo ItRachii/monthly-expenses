@@ -20,7 +20,7 @@ with st.form("add_expense_form", clear_on_submit=True):
         item = st.text_input("Item / Description", placeholder="e.g. Weekly groceries")
 
     with col2:
-        amount = st.number_input("Amount ($)", min_value=0.01, step=0.01, format="%.2f")
+        amount = st.number_input("Amount (₹)", min_value=0.01, step=0.01, format="%.2f")
         payer = st.radio("Who paid?", PEOPLE, horizontal=True)
         split = st.radio("Split", SPLIT_OPTIONS, horizontal=True)
 
@@ -47,10 +47,10 @@ if submitted:
 
         a_owes, b_owes = compute_owes(amount, split)
 
-        st.success(f"Expense saved: **{item.strip()}** — ${amount:.2f}")
+        st.success(f"Expense saved: **{item.strip()}** — ₹{amount:.2f}")
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Amount", f"${amount:.2f}")
+        c1.metric("Total Amount", f"₹{amount:.2f}")
         c2.metric("Paid by", payer)
-        c3.metric("Person A's Share", f"${a_owes:.2f}")
-        c4.metric("Person B's Share", f"${b_owes:.2f}")
+        c3.metric("Person A's Share", f"₹{a_owes:.2f}")
+        c4.metric("Person B's Share", f"₹{b_owes:.2f}")

@@ -64,16 +64,16 @@ a_share = month_df["person_a_owes"].sum()
 b_share = month_df["person_b_owes"].sum()
 
 r1c1, r1c2, r1c3 = st.columns(3)
-r1c1.metric("Total Spent", f"${total:.2f}")
-r1c2.metric("Person A Paid", f"${a_paid:.2f}", delta=f"share ${a_share:.2f}")
-r1c3.metric("Person B Paid", f"${b_paid:.2f}", delta=f"share ${b_share:.2f}")
+r1c1.metric("Total Spent", f"₹{total:.2f}")
+r1c2.metric("Person A Paid", f"₹{a_paid:.2f}", delta=f"share ₹{a_share:.2f}")
+r1c3.metric("Person B Paid", f"₹{b_paid:.2f}", delta=f"share ₹{b_share:.2f}")
 
 if abs(balance) < 0.01:
     st.success("All settled up for this month!")
 elif balance > 0:
-    st.warning(f"Person B owes Person A **${balance:.2f}**")
+    st.warning(f"Person B owes Person A **₹{balance:.2f}**")
 else:
-    st.warning(f"Person A owes Person B **${abs(balance):.2f}**")
+    st.warning(f"Person A owes Person B **₹{abs(balance):.2f}**")
 
 # ── Charts ────────────────────────────────────────────────────────────────────
 st.subheader("Spending Breakdown")
@@ -103,11 +103,11 @@ st.dataframe(
         "date": "Date",
         "category": "Category",
         "item": "Item",
-        "amount": "Amount ($)",
+        "amount": "Amount (₹)",
         "payer": "Payer",
         "split": "Split",
-        "person_a_owes": "Person A Share ($)",
-        "person_b_owes": "Person B Share ($)",
+        "person_a_owes": "Person A Share (₹)",
+        "person_b_owes": "Person B Share (₹)",
     }),
     use_container_width=True,
     hide_index=True,
