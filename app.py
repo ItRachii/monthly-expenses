@@ -1,10 +1,6 @@
 import streamlit as st
-<<<<<<< HEAD
-from utils.auth import setup, require_login
-=======
 from db.database import init_db
 from utils.auth import require_login
->>>>>>> e3df6a1419b417cbfe86132c8b0ba2e89a731df4
 
 setup()
 
@@ -14,15 +10,10 @@ st.set_page_config(
     layout="wide",
 )
 
-<<<<<<< HEAD
-require_login()
-
-=======
 # ── Auth guard ─────────────────────────────────────────────────────────────────
 require_login()
 
 # ── Page content ───────────────────────────────────────────────────────────────
->>>>>>> e3df6a1419b417cbfe86132c8b0ba2e89a731df4
 st.title("Monthly Expense Tracker")
 st.markdown(
     """
