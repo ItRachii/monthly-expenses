@@ -39,5 +39,3 @@ st.markdown(
     > These are tracked independently so the balance is always accurate.
     """
 )
-
-st.sidebar.success("Select a page above to get started.")

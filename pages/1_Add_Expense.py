@@ -2,12 +2,13 @@ import datetime
 
 import streamlit as st
 
-from db.database import get_session, init_db
+from db.database import get_session
 from db.models import Expense
 from utils.auth import require_login
 from utils.calculations import CATEGORIES, PEOPLE, SPLIT_OPTIONS, compute_owes
 
-init_db()
+setup()
+require_login()
 
 st.set_page_config(page_title="Add Expense", page_icon="➕", layout="wide")
 require_login()
@@ -22,15 +23,7 @@ with st.form("add_expense_form", clear_on_submit=True):
         item = st.text_input("Item / Description", placeholder="e.g. Weekly groceries")
 
     with col2:
-        st.markdown("**Amount**")
-        inr_col, num_col = st.columns([0.12, 0.88])
-        inr_col.markdown(
-            "<div style='font-size:22px; font-weight:bold; padding-top:6px; text-align:center'>₹</div>",
-            unsafe_allow_html=True,
-        )
-        amount = num_col.number_input(
-            "Amount", min_value=0.01, step=0.01, format="%.2f", label_visibility="collapsed"
-        )
+        amount = st.number_input("Amount (₹)", min_value=1.0, step=1.0, format="%.2f")
         payer = st.radio("Who paid?", PEOPLE, horizontal=True)
         split = st.radio("Split", SPLIT_OPTIONS, horizontal=True)
 
