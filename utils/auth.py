@@ -146,9 +146,19 @@ def require_login() -> None:
                 )
                 session.add(new_user)
                 session.commit()
-                st.session_state.app_user = new_user
+                st.session_state.app_user = {
+                    "email": new_user.email,
+                    "first_name": new_user.first_name,
+                    "username": new_user.username,
+                    "system_role": new_user.system_role
+                }
             else:
-                st.session_state.app_user = user
+                st.session_state.app_user = {
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "username": user.username,
+                    "system_role": user.system_role
+                }
         finally:
             session.close()
 
@@ -156,7 +166,8 @@ def require_login() -> None:
     with st.sidebar:
         avatar = getattr(st.user, "picture", None)
         # Use custom username if set, else display first name, else full name
-        custom_name = st.session_state.app_user.username if "app_user" in st.session_state and st.session_state.app_user.username else fname
+        app_user_dict = st.session_state.get("app_user", {})
+        custom_name = app_user_dict.get("username") if app_user_dict else fname
         
         name = custom_name or getattr(st.user, "name", None) or email
 
