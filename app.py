@@ -1,14 +1,23 @@
 import streamlit as st
-from db.database import init_db
+from db.database import init_db, engine, get_session
+from db.models import Expense
 from utils.auth import show_login_page, register_user_if_needed, display_user_profile, display_logout_button
-
-init_db()
 
 st.set_page_config(
     page_title="Monthly Expense Tracker",
     page_icon="💸",
     layout="wide",
 )
+
+init_db()
+
+try:
+    session = get_session()
+    count = session.query(Expense).count()
+    session.close()
+    st.sidebar.caption(f"DB Protocol: {engine.url.drivername} | Records: {count}")
+except Exception as e:
+    st.sidebar.caption("DB Error: Connection failed")
 
 def home_page():
     st.title("Monthly Expense Tracker")
