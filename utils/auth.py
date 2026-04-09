@@ -106,17 +106,25 @@ def require_login() -> None:
     """
     Call at the top of every page.
 
-    - If the user is not authenticated, render the login screen and stop.
-    - If the user is authenticated, inject a sidebar logout button.
+    - If st.user.is_logged_in is unavailable (OIDC not configured), skips auth.
+    - If the user is not authenticated, renders the login screen and stops.
+    - If the user is authenticated, injects a sidebar logout button.
     """
-    if not st.user.is_logged_in:
+    # Guard: st.user.is_logged_in only exists when [auth] secrets are configured.
+    is_logged_in = getattr(st.user, "is_logged_in", None)
+
+    if is_logged_in is None:
+        # Auth not configured — skip auth entirely (dev mode / missing secrets).
+        return
+
+    if not is_logged_in:
         show_login_page()
 
     # ── Sidebar: user info + logout ────────────────────────────────────────────
     with st.sidebar:
         avatar = getattr(st.user, "picture", None)
-        name = getattr(st.user, "name", st.user.get("email", "User"))
-        email = st.user.get("email", "")
+        name = getattr(st.user, "name", None) or getattr(st.user, "email", "User")
+        email = getattr(st.user, "email", "")
 
         if avatar:
             col_av, col_txt = st.columns([1, 3])
