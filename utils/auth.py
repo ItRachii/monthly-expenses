@@ -174,6 +174,10 @@ def require_login() -> None:
         if avatar:
             st.markdown(
                 f"""
+                <style>
+                [data-testid="stSidebarNav"] {{ order: 2; }}
+                [data-testid="stSidebarUserContent"] {{ order: 1; }}
+                </style>
                 <div style="display: flex; align-items: center; margin-top: -15px; margin-bottom: 15px;">
                     <img src="{avatar}" style="width: 28px; height: 28px; border-radius: 50%; margin-right: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     <span style="font-size: 15px; font-weight: 600;">{name}</span>
@@ -184,6 +188,10 @@ def require_login() -> None:
         else:
             st.markdown(
                 f"""
+                <style>
+                [data-testid="stSidebarNav"] {{ order: 2; }}
+                [data-testid="stSidebarUserContent"] {{ order: 1; }}
+                </style>
                 <div style="display: flex; align-items: center; margin-top: -15px; margin-bottom: 15px;">
                     <span style="font-size: 22px; margin-right: 12px;">👤</span>
                     <span style="font-size: 15px; font-weight: 600;">{name}</span>
