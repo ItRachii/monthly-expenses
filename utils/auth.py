@@ -172,17 +172,28 @@ def require_login() -> None:
         name = custom_name or getattr(st.user, "name", None) or email
 
         if avatar:
-            col_av, col_txt = st.columns([1, 3])
-            with col_av:
-                st.image(avatar, width=48)
-            with col_txt:
-                st.markdown(f"**{name}**")
+            st.markdown(
+                f"""
+                <div style="display: flex; align-items: center; margin-top: -15px; margin-bottom: 15px;">
+                    <img src="{avatar}" style="width: 28px; height: 28px; border-radius: 50%; margin-right: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <span style="font-size: 15px; font-weight: 600;">{name}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.markdown(f"👤 **{name}**")
+            st.markdown(
+                f"""
+                <div style="display: flex; align-items: center; margin-top: -15px; margin-bottom: 15px;">
+                    <span style="font-size: 22px; margin-right: 12px;">👤</span>
+                    <span style="font-size: 15px; font-weight: 600;">{name}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        st.divider()
         st.button("Sign out", on_click=st.logout, use_container_width=True)
-        st.divider()
+        st.markdown("<hr style='margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
 
 @st.cache_data(ttl=60)
 def get_user_names() -> dict:
