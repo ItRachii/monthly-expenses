@@ -2,7 +2,7 @@ import streamlit as st
 from db.database import init_db
 from utils.auth import require_login
 
-setup()
+init_db()
 
 st.set_page_config(
     page_title="Monthly Expense Tracker",
