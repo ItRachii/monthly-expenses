@@ -175,10 +175,19 @@ def require_login() -> None:
             st.markdown(
                 f"""
                 <style>
-                [data-testid="stSidebarNav"] {{ order: 2; }}
-                [data-testid="stSidebarUserContent"] {{ order: 1; }}
+                [data-testid="stSidebarNav"] {{
+                    margin-top: 4rem; 
+                }}
+                #custom-user-profile {{
+                    position: absolute;
+                    top: 2rem;
+                    left: 1.5rem;
+                    z-index: 9999;
+                    display: flex;
+                    align-items: center;
+                }}
                 </style>
-                <div style="display: flex; align-items: center; margin-top: -15px; margin-bottom: 15px;">
+                <div id="custom-user-profile">
                     <img src="{avatar}" style="width: 28px; height: 28px; border-radius: 50%; margin-right: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     <span style="font-size: 15px; font-weight: 600;">{name}</span>
                 </div>
@@ -189,10 +198,19 @@ def require_login() -> None:
             st.markdown(
                 f"""
                 <style>
-                [data-testid="stSidebarNav"] {{ order: 2; }}
-                [data-testid="stSidebarUserContent"] {{ order: 1; }}
+                [data-testid="stSidebarNav"] {{
+                    margin-top: 4rem; 
+                }}
+                #custom-user-profile {{
+                    position: absolute;
+                    top: 2rem;
+                    left: 1.5rem;
+                    z-index: 9999;
+                    display: flex;
+                    align-items: center;
+                }}
                 </style>
-                <div style="display: flex; align-items: center; margin-top: -15px; margin-bottom: 15px;">
+                <div id="custom-user-profile">
                     <span style="font-size: 22px; margin-right: 12px;">👤</span>
                     <span style="font-size: 15px; font-weight: 600;">{name}</span>
                 </div>
@@ -200,8 +218,8 @@ def require_login() -> None:
                 unsafe_allow_html=True,
             )
 
+        st.markdown("<hr style='margin-top: 20px; margin-bottom: 20px;'>", unsafe_allow_html=True)
         st.button("Sign out", on_click=st.logout, use_container_width=True)
-        st.markdown("<hr style='margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
 
 @st.cache_data(ttl=60)
 def get_user_names() -> dict:
