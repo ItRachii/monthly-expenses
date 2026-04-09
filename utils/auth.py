@@ -177,11 +177,8 @@ def require_login() -> None:
                 st.image(avatar, width=48)
             with col_txt:
                 st.markdown(f"**{name}**")
-                st.caption(email)
         else:
             st.markdown(f"👤 **{name}**")
-            if email:
-                st.caption(email)
 
         st.divider()
         st.button("Sign out", on_click=st.logout, use_container_width=True)
