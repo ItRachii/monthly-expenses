@@ -3,11 +3,13 @@ import streamlit as st
 
 from db.database import get_session, init_db
 from db.models import Expense
+from utils.auth import require_login
 from utils.calculations import CATEGORIES, PEOPLE, SPLIT_OPTIONS, add_owe_columns
 
 init_db()
 
 st.set_page_config(page_title="Expense Log", page_icon="📋", layout="wide")
+require_login()
 st.title("Expense Log")
 
 

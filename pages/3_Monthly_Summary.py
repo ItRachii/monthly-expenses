@@ -3,6 +3,7 @@ import streamlit as st
 
 from db.database import get_session, init_db
 from db.models import Expense
+from utils.auth import require_login
 from utils.calculations import add_owe_columns, compute_net_balance
 from utils.charts import (
     category_bar_chart,
@@ -14,6 +15,7 @@ from utils.charts import (
 init_db()
 
 st.set_page_config(page_title="Monthly Summary", page_icon="📊", layout="wide")
+require_login()
 st.title("Monthly Summary")
 
 
