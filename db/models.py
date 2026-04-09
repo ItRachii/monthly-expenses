@@ -25,10 +25,10 @@ class Settlement(Base):
     note = Column(String, nullable=True)
 
 
-class User(Base):
-    __tablename__ = "users"
+class AppUser(Base):
+    __tablename__ = "app_users"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String, unique=True, nullable=False)
-    password_hash = Column(String, nullable=False)   # "salt:hash" (pbkdf2_hmac)
-    display_name = Column(String, nullable=False)    # "Person A" or "Person B"
+    email = Column(String, primary_key=True)
+    first_name = Column(String, nullable=False)
+    username = Column(String, nullable=True)         # Custom username
+    system_role = Column(String, nullable=False)     # "Person A" or "Person B"

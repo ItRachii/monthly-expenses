@@ -13,5 +13,5 @@ def get_session():
 
 
 def init_db():
-    from db.models import Expense, Settlement, User  # noqa: F401 — registers models with Base.metadata
+    from db.models import Expense, Settlement, AppUser  # noqa: F401 — registers models with Base.metadata
     Base.metadata.create_all(bind=engine)

@@ -3,16 +3,16 @@ import datetime
 import pandas as pd
 import streamlit as st
 
-from db.database import get_session, init_db
+from db.database import get_session
 from db.models import Expense, Settlement
-from utils.auth import require_login
+from utils.auth import require_login, get_user_names
 from utils.calculations import PEOPLE, add_owe_columns, compute_net_balance
-
-init_db()
 
 st.set_page_config(page_title="Settlement", page_icon="💰", layout="wide")
 require_login()
 st.title("Settlement")
+
+user_names = get_user_names()
 
 
 def load_expenses() -> pd.DataFrame:
@@ -73,6 +73,8 @@ month_df = df[df["month"] == selected_month].copy()
 month_df = add_owe_columns(month_df)
 
 balance, balance_desc = compute_net_balance(month_df)
+balance_desc = balance_desc.replace("Person A", user_names.get("Person A", "Person A")).replace("Person B", user_names.get("Person B", "Person B"))
+
 is_settled = selected_month in settled_months
 
 # ── Balance for selected month ────────────────────────────────────────────────
@@ -83,7 +85,7 @@ if is_settled:
     rec = settlements_df[settlements_df["month"] == selected_month].iloc[0]
     c1, c2, c3 = st.columns(3)
     c1.metric("Amount Settled", f"₹{rec['amount']:.2f}")
-    c2.metric("Settled By", rec["settled_by"])
+    c2.metric("Settled By", user_names.get(rec["settled_by"], rec["settled_by"]))
     c3.metric("Settled On", str(rec["settled_at"])[:10])
     if rec["note"]:
         st.info(f"Note: {rec['note']}")
@@ -108,6 +110,7 @@ else:
                 PEOPLE,
                 index=default_index,
                 horizontal=True,
+                format_func=lambda x: user_names.get(x, x),
             )
             note = st.text_input("Note (optional)", placeholder="e.g. Bank transfer on 2024-04-01")
             confirm = st.form_submit_button("Confirm Settlement", type="primary")
@@ -125,7 +128,7 @@ else:
                 session.commit()
             finally:
                 session.close()
-            st.success(f"{selected_month} marked as settled. {settled_by} paid ₹{abs(balance):.2f}.")
+            st.success(f"{selected_month} marked as settled. {user_names.get(settled_by, settled_by)} paid ₹{abs(balance):.2f}.")
             st.rerun()
 
 # ── Settlement history ────────────────────────────────────────────────────────
@@ -136,6 +139,7 @@ if settlements_df.empty:
 else:
     history = settlements_df[["month", "settled_at", "settled_by", "amount", "note"]].copy()
     history["settled_at"] = history["settled_at"].astype(str).str[:16]
+    history = history.replace({"settled_by": user_names})
     st.dataframe(
         history.rename(columns={
             "month": "Month",

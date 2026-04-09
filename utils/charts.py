@@ -45,8 +45,11 @@ def category_bar_chart(df: pd.DataFrame):
     return fig
 
 
-def per_person_bar_chart(df: pd.DataFrame):
+def per_person_bar_chart(df: pd.DataFrame, user_names: dict = None):
     """Grouped bar: what each person paid vs. what their share is."""
+    if user_names is None:
+        user_names = {"Person A": "Person A", "Person B": "Person B"}
+        
     df = add_owe_columns(df)
 
     person_a_paid = df.loc[df["payer"] == "Person A", "amount"].sum()
@@ -54,16 +57,19 @@ def per_person_bar_chart(df: pd.DataFrame):
     person_a_share = df["person_a_owes"].sum()
     person_b_share = df["person_b_owes"].sum()
 
+    a_name = user_names.get("Person A", "Person A")
+    b_name = user_names.get("Person B", "Person B")
+
     fig = go.Figure(data=[
         go.Bar(
             name="Paid",
-            x=["Person A", "Person B"],
+            x=[a_name, b_name],
             y=[person_a_paid, person_b_paid],
             marker_color=["#4C72B0", "#DD8452"],
         ),
         go.Bar(
             name="Share Owed",
-            x=["Person A", "Person B"],
+            x=[a_name, b_name],
             y=[person_a_share, person_b_share],
             marker_color=["#4C72B080", "#DD845280"],
         ),
