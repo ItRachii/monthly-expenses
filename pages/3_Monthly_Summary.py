@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from db.database import get_session
+from db.database import get_session, init_db
 from db.models import Expense
 from utils.auth import require_login
 from utils.calculations import add_owe_columns, compute_net_balance
@@ -12,8 +12,7 @@ from utils.charts import (
     per_person_bar_chart,
 )
 
-setup()
-require_login()
+init_db()
 
 st.set_page_config(page_title="Monthly Summary", page_icon="📊", layout="wide")
 require_login()
