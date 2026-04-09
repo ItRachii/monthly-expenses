@@ -102,25 +102,11 @@ def show_login_page() -> None:
     st.stop()
 
 
-def require_login() -> None:
-    """
-    Call at the top of every page.
-
-    - If st.user.is_logged_in is unavailable (OIDC not configured), skips auth.
-    - If the user is not authenticated, renders the login screen and stops.
-    - If the user is authenticated, injects a sidebar logout button.
-    """
-    # Guard: st.user.is_logged_in only exists when [auth] secrets are configured.
+def register_user_if_needed() -> None:
     is_logged_in = getattr(st.user, "is_logged_in", None)
-
-    if is_logged_in is None:
-        # Auth not configured — skip auth entirely (dev mode / missing secrets).
-        return
-
     if not is_logged_in:
-        show_login_page()
-
-    # Auto-register user in database if they don't exist
+        return
+        
     from db.database import get_session
     from db.models import AppUser
     
@@ -132,13 +118,8 @@ def require_login() -> None:
         try:
             user = session.query(AppUser).filter_by(email=email).first()
             if not user:
-                # Count current users to assign role
                 user_count = session.query(AppUser).count()
                 role = "Person A" if user_count == 0 else "Person B"
-                
-                # If there are already >= 2 users, we can just assign them a transient role
-                # but let's stick to Person B for anyone > 1
-                
                 new_user = AppUser(
                     email=email,
                     first_name=fname,
@@ -162,34 +143,24 @@ def require_login() -> None:
         finally:
             session.close()
 
-    # ── Sidebar: user info + logout ────────────────────────────────────────────
+def display_user_profile() -> None:
+    is_logged_in = getattr(st.user, "is_logged_in", None)
+    if not is_logged_in:
+        return
+
     with st.sidebar:
         avatar = getattr(st.user, "picture", None)
-        # Use custom username if set, else display first name, else full name
         app_user_dict = st.session_state.get("app_user", {})
+        fname = getattr(st.user, "name", "User").split()[0]
         custom_name = app_user_dict.get("username") if app_user_dict else fname
-        
-        name = custom_name or getattr(st.user, "name", None) or email
+        name = custom_name or getattr(st.user, "name", None) or getattr(st.user, "email", "")
 
         if avatar:
             st.markdown(
                 f"""
-                <style>
-                [data-testid="stSidebarNav"] {{
-                    margin-top: 4rem; 
-                }}
-                #custom-user-profile {{
-                    position: absolute;
-                    top: 2rem;
-                    left: 1.5rem;
-                    z-index: 9999;
-                    display: flex;
-                    align-items: center;
-                }}
-                </style>
-                <div id="custom-user-profile">
-                    <img src="{avatar}" style="width: 28px; height: 28px; border-radius: 50%; margin-right: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <span style="font-size: 15px; font-weight: 600;">{name}</span>
+                <div style="display: flex; align-items: center; margin-bottom: 20px;">
+                    <img src="{avatar}" style="width: 32px; height: 32px; border-radius: 50%; margin-right: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <span style="font-size: 16px; font-weight: 600;">{name}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -197,27 +168,20 @@ def require_login() -> None:
         else:
             st.markdown(
                 f"""
-                <style>
-                [data-testid="stSidebarNav"] {{
-                    margin-top: 4rem; 
-                }}
-                #custom-user-profile {{
-                    position: absolute;
-                    top: 2rem;
-                    left: 1.5rem;
-                    z-index: 9999;
-                    display: flex;
-                    align-items: center;
-                }}
-                </style>
-                <div id="custom-user-profile">
-                    <span style="font-size: 22px; margin-right: 12px;">👤</span>
-                    <span style="font-size: 15px; font-weight: 600;">{name}</span>
+                <div style="display: flex; align-items: center; margin-bottom: 20px;">
+                    <span style="font-size: 24px; margin-right: 12px;">👤</span>
+                    <span style="font-size: 16px; font-weight: 600;">{name}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
+def display_logout_button() -> None:
+    is_logged_in = getattr(st.user, "is_logged_in", None)
+    if not is_logged_in:
+        return
+        
+    with st.sidebar:
         st.markdown("<hr style='margin-top: 20px; margin-bottom: 20px;'>", unsafe_allow_html=True)
         st.button("Sign out", on_click=st.logout, use_container_width=True)
 
