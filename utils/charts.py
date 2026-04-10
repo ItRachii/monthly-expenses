@@ -71,7 +71,7 @@ def per_person_bar_chart(df: pd.DataFrame, user_names: dict = None):
             name="Share Owed",
             x=[a_name, b_name],
             y=[person_a_share, person_b_share],
-            marker_color=["#4C72B080", "#DD845280"],
+            marker_color=["rgba(76, 114, 176, 0.5)", "rgba(221, 132, 82, 0.5)"],
         ),
     ])
     fig.update_layout(
