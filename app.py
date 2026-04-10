@@ -11,13 +11,6 @@ st.set_page_config(
 
 init_db()
 
-try:
-    session = get_session()
-    count = session.query(Expense).count()
-    session.close()
-    st.sidebar.caption(f"DB Protocol: {engine.url.drivername} | Records: {count}")
-except Exception as e:
-    st.sidebar.caption("DB Error: Connection failed")
 
 def home_page():
     st.title("Monthly Expense Tracker")
