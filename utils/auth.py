@@ -77,7 +77,7 @@ def show_login_page() -> None:
         <div class="login-card">
           <span class="login-emoji">💸</span>
           <p class="login-title">Monthly Expense Tracker</p>
-          <p class="login-subtitle">Shared expense tracking for two people.</p>
+          <p class="login-subtitle">Track personal & shared group expenses.</p>
           <hr class="login-divider">
         </div>
         """,
@@ -175,6 +175,65 @@ def display_user_profile() -> None:
                 """,
                 unsafe_allow_html=True,
             )
+
+
+def display_context_switcher() -> None:
+    """
+    Render a context switcher in the sidebar.
+
+    Lets the user toggle between 'Personal' expenses and any group they belong to.
+    Updates st.session_state["active_context"].
+    """
+    is_logged_in = getattr(st.user, "is_logged_in", None)
+    if not is_logged_in:
+        return
+
+    from utils.groups import get_user_groups, set_active_context, get_active_context
+
+    email = getattr(st.user, "email", "")
+    if not email:
+        return
+
+    groups = get_user_groups(email)
+
+    with st.sidebar:
+        st.markdown("### 📂 Context")
+
+        options = ["🏠 Personal"] + [f"👥 {g['name']}" for g in groups]
+        group_map = {f"👥 {g['name']}": g for g in groups}
+
+        # Determine current selection index
+        ctx = get_active_context()
+        if ctx.get("type") == "group":
+            current_group_id = ctx.get("group_id")
+            try:
+                current_label = next(
+                    f"👥 {g['name']}" for g in groups if g["id"] == current_group_id
+                )
+                current_idx = options.index(current_label)
+            except (StopIteration, ValueError):
+                current_idx = 0
+        else:
+            current_idx = 0
+
+        selected = st.selectbox(
+            "View expenses for",
+            options,
+            index=current_idx,
+            label_visibility="collapsed",
+            key="context_switcher",
+        )
+
+        if selected == "🏠 Personal":
+            set_active_context({"type": "personal", "email": email})
+        else:
+            g = group_map[selected]
+            set_active_context(
+                {"type": "group", "group_id": g["id"], "group_name": g["name"]}
+            )
+
+        st.markdown("<hr style='margin: 8px 0 16px;'>", unsafe_allow_html=True)
+
 
 def display_logout_button() -> None:
     is_logged_in = getattr(st.user, "is_logged_in", None)

@@ -1,6 +1,7 @@
 import streamlit as st
 from db.database import get_session
 from db.models import AppUser
+from utils.groups import get_active_context
 
 
 st.title("User Profile")
@@ -18,7 +19,11 @@ if "app_user" in st.session_state:
         # Determine current username for default value
         current_username = user.get("username", "") or ""
         
-        new_username = st.text_input("Username (Optional)", value=current_username, placeholder="Enter an alias or custom display name")
+        new_username = st.text_input(
+            "Username (Optional)",
+            value=current_username,
+            placeholder="Enter an alias or custom display name",
+        )
         
         submitted = st.form_submit_button("Save Profile")
         
@@ -42,5 +47,14 @@ if "app_user" in st.session_state:
                 st.rerun()
             finally:
                 session.close()
+
+    st.markdown("---")
+
+    # Active context info
+    ctx = get_active_context()
+    if ctx["type"] == "personal":
+        st.info("📂 Active Context: **Personal** expenses")
+    else:
+        st.info(f"📂 Active Context: **{ctx.get('group_name', 'Group')}** (group)")
 else:
     st.error("User profile not found. Please try logging in again.")
