@@ -74,7 +74,7 @@ def create_group(name: str, description: str, creator_email: str) -> int:
         member = GroupMember(
             group_id=group.id,
             email=creator_email,
-            display_name=_get_display_name(session, creator_email),
+            display_name="", # satisfies legacy NOT NULL column
             role="admin",
             joined_at=now,
         )
@@ -300,7 +300,7 @@ def respond_to_invite(invite_id: int, accept: bool, user_email: str):
             member = GroupMember(
                 group_id=invite.group_id,
                 email=user_email,
-                display_name=_get_display_name(session, user_email),
+                display_name="", # satisfies legacy NOT NULL column
                 role="member",
                 joined_at=datetime.datetime.now(),
             )
