@@ -118,13 +118,13 @@ if is_personal:
         ["Category (Pie)", "Category (Bar)", "Per Person", "Monthly Trend"]
     )
     with tab_pie:
-        st.plotly_chart(category_pie_chart(month_df), use_container_width=True)
+        st.plotly_chart(category_pie_chart(month_df), width='stretch')
     with tab_bar:
-        st.plotly_chart(category_bar_chart(month_df), use_container_width=True)
+        st.plotly_chart(category_bar_chart(month_df), width='stretch')
     with tab_person:
-        st.plotly_chart(per_person_bar_chart(month_df, user_names), use_container_width=True)
+        st.plotly_chart(per_person_bar_chart(month_df, user_names), width='stretch')
     with tab_trend:
-        st.plotly_chart(monthly_trend_chart(df), use_container_width=True)
+        st.plotly_chart(monthly_trend_chart(df), width='stretch')
 
     # ── Expense table ────────────────────────────────────────────────────────
     st.subheader("Expense Detail")
@@ -142,7 +142,7 @@ if is_personal:
             "person_a_owes": f"{user_names.get('Person A', 'Person A')} Share (₹)",
             "person_b_owes": f"{user_names.get('Person B', 'Person B')} Share (₹)",
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
 
@@ -178,11 +178,11 @@ else:
         ["Category (Pie)", "Category (Bar)", "Monthly Trend"]
     )
     with tab_pie:
-        st.plotly_chart(category_pie_chart(month_df), use_container_width=True)
+        st.plotly_chart(category_pie_chart(month_df), width='stretch')
     with tab_bar:
-        st.plotly_chart(category_bar_chart(month_df), use_container_width=True)
+        st.plotly_chart(category_bar_chart(month_df), width='stretch')
     with tab_trend:
-        st.plotly_chart(monthly_trend_chart(df), use_container_width=True)
+        st.plotly_chart(monthly_trend_chart(df), width='stretch')
 
     # ── Expense table ────────────────────────────────────────────────────────
     st.subheader("Expense Detail")
@@ -199,6 +199,6 @@ else:
             "payer": "Payer",
             "split": "Split",
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )

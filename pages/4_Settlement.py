@@ -219,7 +219,7 @@ else:
                     "Status": f"Gets back ₹{net:.2f}" if net > 0.01 else (f"Owes ₹{abs(net):.2f}" if net < -0.01 else "Settled"),
                 })
 
-            st.dataframe(pd.DataFrame(net_balances), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(net_balances), width='stretch', hide_index=True)
 
             if abs(total) > 0.01 and not is_settled:
                 st.subheader("Mark as Settled")
@@ -268,6 +268,6 @@ else:
             "amount": "Amount (₹)",
             "note": "Note",
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )

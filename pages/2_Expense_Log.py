@@ -132,7 +132,7 @@ if is_personal:
             "person_a_owes": f"{user_names.get('Person A', 'Person A')} Share (₹)",
             "person_b_owes": f"{user_names.get('Person B', 'Person B')} Share (₹)",
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
 else:
@@ -149,7 +149,7 @@ else:
             "payer": "Payer",
             "split": "Split",
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
 
