@@ -8,51 +8,80 @@ import streamlit as st
 
 def _get_smtp_config() -> dict:
     """
-    Read SMTP config from Streamlit secrets.
+    Read SMTP credentials from Streamlit secrets.
 
-    Expected secrets.toml layout:
+    Supports three key layouts — use whichever matches your secrets.toml:
+
+    Layout 1 — same keys as a .env file (recommended, matches the working app):
+        SMTP_SERVER   = "smtp.gmail.com"
+        SMTP_PORT     = "587"
+        SMTP_USERNAME = "you@gmail.com"
+        SMTP_PASSWORD = "abcd efgh ijkl mnop"   # spaces are stripped automatically
+        EMAIL_FROM    = "you@gmail.com"          # optional
+
+    Layout 2 — nested [smtp] section:
         [smtp]
-        host       = "smtp.gmail.com"
-        port       = 587
-        username   = "you@gmail.com"
-        password   = "abcd efgh ijkl mnop"   # spaces OK — they are stripped automatically
-        from_email = "you@gmail.com"          # optional, defaults to username
+        host = "smtp.gmail.com"  port = 587
+        username = "you@gmail.com"  password = "..."
 
-    Flat-key fallback also supported:
-        smtp_host, smtp_port, smtp_username, smtp_password, smtp_from
+    Layout 3 — flat smtp_ keys:
+        smtp_host = "smtp.gmail.com"  smtp_username = "..."  etc.
     """
-    secrets = st.secrets
-    if "smtp" in secrets:
-        cfg = secrets["smtp"]
+    s = st.secrets
+
+    # Layout 1: uppercase .env-style keys (SMTP_SERVER, SMTP_USERNAME, ...)
+    if "SMTP_USERNAME" in s:
+        raw_pass = str(s["SMTP_PASSWORD"])
+        return {
+            "host": str(s.get("SMTP_SERVER", "smtp.gmail.com")),
+            "port": int(s.get("SMTP_PORT", 587)),
+            "username": str(s["SMTP_USERNAME"]).strip(),
+            "password": raw_pass.replace(" ", "").strip(),
+            "from_email": str(s.get("EMAIL_FROM", s["SMTP_USERNAME"])).strip(),
+        }
+
+    # Layout 2: [smtp] section
+    if "smtp" in s:
+        cfg = s["smtp"]
         raw_pass = str(cfg["password"])
         return {
-            "host": str(cfg["host"]),
+            "host": str(cfg.get("host", "smtp.gmail.com")),
             "port": int(cfg.get("port", 587)),
             "username": str(cfg["username"]).strip(),
-            # Gmail App Passwords are shown with spaces in the UI — strip them
             "password": raw_pass.replace(" ", "").strip(),
             "from_email": str(cfg.get("from_email", cfg["username"])).strip(),
         }
-    # Flat-key fallback
-    raw_pass = str(secrets["smtp_password"])
+
+    # Layout 3: flat smtp_ keys
+    raw_pass = str(s["smtp_password"])
     return {
-        "host": str(secrets["smtp_host"]),
-        "port": int(secrets.get("smtp_port", 587)),
-        "username": str(secrets["smtp_username"]).strip(),
+        "host": str(s.get("smtp_host", "smtp.gmail.com")),
+        "port": int(s.get("smtp_port", 587)),
+        "username": str(s["smtp_username"]).strip(),
         "password": raw_pass.replace(" ", "").strip(),
-        "from_email": str(secrets.get("smtp_from", secrets["smtp_username"])).strip(),
+        "from_email": str(s.get("smtp_from", s["smtp_username"])).strip(),
     }
 
 
-def send_invite_email(to_email: str, group_name: str, invited_by: str) -> bool:
+def send_invite_email(to_email: str, group_name: str, invited_by: str) -> tuple:
     """
     Send a group invite notification via SMTP.
 
-    Tries port 587 (STARTTLS) first; falls back to port 465 (SSL) if that fails.
-    Returns True on success, False on failure.
-    Errors are returned as the second element of a (bool, str) tuple.
+    Mirrors the logic from the working EmailService:
+      - Strips spaces from the App Password
+      - Tries port 587 (STARTTLS) first
+      - Falls back to port 465 (SSL) on any SMTP failure
+
+    Returns (True, None) on success or (False, error_string) on failure.
+    Never raises — all exceptions are caught and returned as the error string.
     """
-    cfg = _get_smtp_config()
+    try:
+        cfg = _get_smtp_config()
+    except Exception as e:
+        return False, f"Could not read SMTP credentials from secrets: {e}"
+
+    if not cfg["username"] or not cfg["password"]:
+        return False, "SMTP_USERNAME or SMTP_PASSWORD is missing from secrets."
 
     html_body = f"""
     <html>
@@ -76,6 +105,7 @@ def send_invite_email(to_email: str, group_name: str, invited_by: str) -> bool:
     msg.attach(MIMEText(html_body, "html"))
 
     # ── Attempt 1: port 587 STARTTLS ─────────────────────────────────────────
+    first_error = None
     try:
         server = smtplib.SMTP(cfg["host"], cfg["port"], timeout=15)
         server.starttls()
@@ -83,7 +113,7 @@ def send_invite_email(to_email: str, group_name: str, invited_by: str) -> bool:
         server.sendmail(cfg["from_email"], to_email, msg.as_string())
         server.quit()
         return True, None
-    except (smtplib.SMTPAuthenticationError, smtplib.SMTPException) as e:
+    except Exception as e:
         first_error = str(e)
 
     # ── Fallback: port 465 SSL ────────────────────────────────────────────────
@@ -94,4 +124,4 @@ def send_invite_email(to_email: str, group_name: str, invited_by: str) -> bool:
         server.quit()
         return True, None
     except Exception as e:
-        return False, f"Port 587 error: {first_error} | Port 465 error: {e}"
+        return False, f"Port {cfg['port']} error: {first_error} | Port 465 error: {e}"
