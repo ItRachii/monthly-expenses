@@ -7,16 +7,59 @@ from db.database import get_session
 from db.models import Expense, Settlement
 from utils.auth import get_user_names
 from utils.calculations import PEOPLE, add_owe_columns, compute_net_balance
+from utils.groups import (
+    get_group_members,
+    get_user_groups,
+    is_group_member,
+)
 
 st.title("Settlement")
 
-user_names = get_user_names()
+current_email = getattr(st.user, "email", "")
+
+# ── Context Selector ──────────────────────────────────────────────────────────
+user_groups = get_user_groups(current_email) if current_email else []
+context_options = ["Personal"] + [g["name"] for g in user_groups]
+group_by_name = {g["name"]: g for g in user_groups}
+
+selected = st.selectbox("Settle expenses for:", context_options)
+
+st.divider()
+
+# ── Resolve context from selection ───────────────────────────────────────────
+if selected == "Personal":
+    is_personal = True
+    group_id = None
+    member_email_to_name = {}
+    user_names = get_user_names()
+    payer_options = PEOPLE
+    payer_fmt = lambda x: user_names.get(x, x)
+else:
+    group_info = group_by_name[selected]
+    group_id = group_info["id"]
+
+    if not current_email or not is_group_member(group_id, current_email):
+        st.error("You are not a member of this group.")
+        st.stop()
+
+    is_personal = False
+    group_members = get_group_members(group_id)
+    member_email_to_name = {m["email"]: m["display_name"] for m in group_members}
+    member_emails = [m["email"] for m in group_members]
+    user_names = member_email_to_name
+    payer_options = member_emails
+    payer_fmt = lambda x: member_email_to_name.get(x, x)
 
 
 def load_expenses() -> pd.DataFrame:
     session = get_session()
     try:
-        rows = session.query(Expense).order_by(Expense.date.asc()).all()
+        q = session.query(Expense)
+        if is_personal:
+            q = q.filter(Expense.owner_email == current_email)
+        else:
+            q = q.filter(Expense.group_id == group_id)
+        rows = q.order_by(Expense.date.asc()).all()
         return pd.DataFrame([
             {
                 "id": r.id,
@@ -36,7 +79,12 @@ def load_expenses() -> pd.DataFrame:
 def load_settlements() -> pd.DataFrame:
     session = get_session()
     try:
-        rows = session.query(Settlement).order_by(Settlement.settled_at.desc()).all()
+        q = session.query(Settlement)
+        if is_personal:
+            q = q.filter(Settlement.owner_email == current_email)
+        else:
+            q = q.filter(Settlement.group_id == group_id)
+        rows = q.order_by(Settlement.settled_at.desc()).all()
         return pd.DataFrame([
             {
                 "id": r.id,
@@ -68,68 +116,144 @@ months = sorted(df["month"].unique().tolist(), reverse=True)
 selected_month = st.selectbox("Select Month", months)
 
 month_df = df[df["month"] == selected_month].copy()
-month_df = add_owe_columns(month_df)
-
-balance, balance_desc = compute_net_balance(month_df)
-balance_desc = balance_desc.replace("Person A", user_names.get("Person A", "Person A")).replace("Person B", user_names.get("Person B", "Person B"))
-
 is_settled = selected_month in settled_months
 
-# ── Balance for selected month ────────────────────────────────────────────────
-st.subheader(f"Balance — {selected_month}")
+# ── Personal Settlement ───────────────────────────────────────────────────────
+if is_personal:
+    month_df = add_owe_columns(month_df)
+    balance, balance_desc = compute_net_balance(month_df)
+    balance_desc = (
+        balance_desc
+        .replace("Person A", user_names.get("Person A", "Person A"))
+        .replace("Person B", user_names.get("Person B", "Person B"))
+    )
 
-if is_settled:
-    st.success(f"This month is marked as **settled**.")
-    rec = settlements_df[settlements_df["month"] == selected_month].iloc[0]
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Amount Settled", f"₹{rec['amount']:.2f}")
-    c2.metric("Settled By", user_names.get(rec["settled_by"], rec["settled_by"]))
-    c3.metric("Settled On", str(rec["settled_at"])[:10])
-    if rec["note"]:
-        st.info(f"Note: {rec['note']}")
-else:
-    total = month_df["amount"].sum()
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Spent", f"₹{total:.2f}")
-    c2.metric("Net Balance", f"₹{abs(balance):.2f}")
-    c3.metric("Status", "Unsettled")
+    st.subheader(f"Balance — {selected_month}")
 
-    if abs(balance) < 0.01:
-        st.success("No balance to settle — you're even for this month!")
+    if is_settled:
+        st.success("This month is marked as **settled**.")
+        rec = settlements_df[settlements_df["month"] == selected_month].iloc[0]
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Amount Settled", f"₹{rec['amount']:.2f}")
+        c2.metric("Settled By", user_names.get(rec["settled_by"], rec["settled_by"]))
+        c3.metric("Settled On", str(rec["settled_at"])[:10])
+        if rec["note"]:
+            st.info(f"Note: {rec['note']}")
     else:
-        st.warning(f"**{balance_desc}**")
+        total = month_df["amount"].sum()
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total Spent", f"₹{total:.2f}")
+        c2.metric("Net Balance", f"₹{abs(balance):.2f}")
+        c3.metric("Status", "Unsettled")
 
-        st.subheader("Mark as Settled")
-        with st.form("settle_form"):
-            # Pre-select the person who owes (they make the payment)
-            default_index = 1 if balance > 0 else 0   # balance>0 → B owes A → B pays
-            settled_by = st.radio(
-                "Who is making the payment?",
-                PEOPLE,
-                index=default_index,
-                horizontal=True,
-                format_func=lambda x: user_names.get(x, x),
-            )
-            note = st.text_input("Note (optional)", placeholder="e.g. Bank transfer on 2024-04-01")
-            confirm = st.form_submit_button("Confirm Settlement", type="primary")
+        if abs(balance) < 0.01:
+            st.success("No balance to settle — you're even for this month!")
+        else:
+            st.warning(f"**{balance_desc}**")
 
-        if confirm:
-            session = get_session()
-            try:
-                session.add(Settlement(
-                    month=selected_month,
-                    settled_at=datetime.datetime.now(),
-                    settled_by=settled_by,
-                    amount=abs(balance),
-                    note=note.strip() or None,
-                ))
-                session.commit()
-            finally:
-                session.close()
-            st.success(f"{selected_month} marked as settled. {user_names.get(settled_by, settled_by)} paid ₹{abs(balance):.2f}.")
-            st.rerun()
+            st.subheader("Mark as Settled")
+            with st.form("settle_form"):
+                default_index = 1 if balance > 0 else 0
+                settled_by = st.radio(
+                    "Who is making the payment?",
+                    PEOPLE,
+                    index=default_index,
+                    horizontal=True,
+                    format_func=lambda x: user_names.get(x, x),
+                )
+                note = st.text_input("Note (optional)", placeholder="e.g. Bank transfer on 2024-04-01")
+                confirm = st.form_submit_button("Confirm Settlement", type="primary")
 
-# ── Settlement history ────────────────────────────────────────────────────────
+            if confirm:
+                session = get_session()
+                try:
+                    session.add(Settlement(
+                        month=selected_month,
+                        settled_at=datetime.datetime.now(),
+                        settled_by=settled_by,
+                        amount=abs(balance),
+                        note=note.strip() or None,
+                        owner_email=current_email,
+                        group_id=None,
+                    ))
+                    session.commit()
+                finally:
+                    session.close()
+                st.success(f"{selected_month} marked as settled. {user_names.get(settled_by, settled_by)} paid ₹{abs(balance):.2f}.")
+                st.rerun()
+
+# ── Group Settlement ──────────────────────────────────────────────────────────
+else:
+    n_members = len(group_members)
+    total = month_df["amount"].sum()
+
+    st.subheader(f"Balance — {selected_month}")
+
+    if is_settled:
+        st.success("This month is marked as **settled**.")
+        rec = settlements_df[settlements_df["month"] == selected_month].iloc[0]
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Amount Settled", f"₹{rec['amount']:.2f}")
+        c2.metric("Settled By", member_email_to_name.get(rec["settled_by"], rec["settled_by"]))
+        c3.metric("Settled On", str(rec["settled_at"])[:10])
+        if rec["note"]:
+            st.info(f"Note: {rec['note']}")
+    else:
+        st.write(f"**Total spent this month:** ₹{total:.2f}")
+        if n_members:
+            equal_share = round(total / n_members, 2)
+            st.write(f"Equal share per member: ₹{equal_share:.2f}")
+
+            net_balances = []
+            for member in group_members:
+                em = member["email"]
+                paid = month_df.loc[month_df["payer"] == em, "amount"].sum()
+                resp = (
+                    month_df.loc[month_df["split"] == em, "amount"].sum()
+                    + month_df.loc[month_df["split"] == "equal", "amount"].sum() / n_members
+                )
+                net = round(paid - resp, 2)
+                net_balances.append({
+                    "Member": member["display_name"],
+                    "Paid (₹)": paid,
+                    "Owes (₹)": resp,
+                    "Net (₹)": net,
+                    "Status": f"Gets back ₹{net:.2f}" if net > 0.01 else (f"Owes ₹{abs(net):.2f}" if net < -0.01 else "Settled"),
+                })
+
+            st.dataframe(pd.DataFrame(net_balances), width='stretch', hide_index=True)
+
+            if abs(total) > 0.01 and not is_settled:
+                st.subheader("Mark as Settled")
+                with st.form("group_settle_form"):
+                    settled_by = st.selectbox(
+                        "Who is making the settlement payment?",
+                        payer_options,
+                        format_func=payer_fmt,
+                    )
+                    settle_amount = st.number_input("Settlement Amount (₹)", min_value=0.01, value=float(round(total / n_members, 2)), step=0.01, format="%.2f")
+                    note = st.text_input("Note (optional)")
+                    confirm = st.form_submit_button("Confirm Settlement", type="primary")
+
+                if confirm:
+                    session = get_session()
+                    try:
+                        session.add(Settlement(
+                            month=selected_month,
+                            settled_at=datetime.datetime.now(),
+                            settled_by=settled_by,
+                            amount=settle_amount,
+                            note=note.strip() or None,
+                            owner_email=None,
+                            group_id=group_id,
+                        ))
+                        session.commit()
+                    finally:
+                        session.close()
+                    st.success(f"{selected_month} marked as settled by {member_email_to_name.get(settled_by, settled_by)}.")
+                    st.rerun()
+
+# ── Settlement History ────────────────────────────────────────────────────────
 st.subheader("Settlement History")
 
 if settlements_df.empty:
@@ -137,7 +261,7 @@ if settlements_df.empty:
 else:
     history = settlements_df[["month", "settled_at", "settled_by", "amount", "note"]].copy()
     history["settled_at"] = history["settled_at"].astype(str).str[:16]
-    history = history.replace({"settled_by": user_names})
+    history["settled_by"] = history["settled_by"].map(lambda x: user_names.get(x, x))
     st.dataframe(
         history.rename(columns={
             "month": "Month",
@@ -146,6 +270,6 @@ else:
             "amount": "Amount (₹)",
             "note": "Note",
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )

@@ -8,7 +8,7 @@ available since Streamlit 1.42.  Credentials live in
 Auto-logoff: Streamlit's identity cookie already expires after 30 days
 of inactivity — no extra code required.
 """
-
+# v2 — adds display_context_switcher for group/personal context switching
 import streamlit as st
 
 
@@ -77,7 +77,7 @@ def show_login_page() -> None:
         <div class="login-card">
           <span class="login-emoji">💸</span>
           <p class="login-title">Monthly Expense Tracker</p>
-          <p class="login-subtitle">Shared expense tracking for two people.</p>
+          <p class="login-subtitle">Track personal & shared group expenses.</p>
           <hr class="login-divider">
         </div>
         """,
@@ -175,6 +175,7 @@ def display_user_profile() -> None:
                 """,
                 unsafe_allow_html=True,
             )
+
 
 def display_logout_button() -> None:
     is_logged_in = getattr(st.user, "is_logged_in", None)
