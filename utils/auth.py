@@ -8,7 +8,7 @@ available since Streamlit 1.42.  Credentials live in
 Auto-logoff: Streamlit's identity cookie already expires after 30 days
 of inactivity — no extra code required.
 """
-
+# v2 — adds display_context_switcher for group/personal context switching
 import streamlit as st
 
 
