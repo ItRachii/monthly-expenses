@@ -31,12 +31,11 @@ def _get_smtp_config() -> dict:
 
     # Layout 1: uppercase .env-style keys (SMTP_SERVER, SMTP_USERNAME, ...)
     if "SMTP_USERNAME" in s:
-        raw_pass = str(s["SMTP_PASSWORD"])
         return {
             "host": str(s.get("SMTP_SERVER", "smtp.gmail.com")),
             "port": int(s.get("SMTP_PORT", 587)),
             "username": str(s["SMTP_USERNAME"]).strip(),
-            "password": raw_pass.replace(" ", "").strip(),
+            "password": str(s["SMTP_PASSWORD"]).strip(),
             "from_email": str(s.get("EMAIL_FROM", s["SMTP_USERNAME"])).strip(),
         }
 
