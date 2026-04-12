@@ -104,7 +104,17 @@ with tab_my:
                         else:
                             result = send_invite(g["id"], invite_email.strip(), invited_by=current_email)
                             if result == "ok":
-                                st.success(f"Invite sent to **{invite_email.strip()}**.")
+                                from utils.email import send_invite_email
+                                try:
+                                    send_invite_email(
+                                        to_email=invite_email.strip(),
+                                        group_name=g["name"],
+                                        invited_by=current_email,
+                                    )
+                                    st.success(f"Invite sent to **{invite_email.strip()}**.")
+                                except Exception as e:
+                                    st.success(f"Invite recorded for **{invite_email.strip()}**.")
+                                    st.warning(f"Email could not be delivered: {e}")
                             elif result == "already_member":
                                 st.warning("That person is already a member of this group.")
                             elif result == "already_invited":
