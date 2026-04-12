@@ -44,6 +44,15 @@ def get_context_group_id() -> Optional[int]:
 # ── Group CRUD ───────────────────────────────────────────────────────────────
 
 
+def _get_display_name(session, email: str) -> str:
+    """Fetch the display name for an email from app_users, falling back to the email prefix."""
+    from db.models import AppUser
+    user = session.query(AppUser).filter_by(email=email).first()
+    if user:
+        return user.username.strip() if (user.username and user.username.strip()) else user.first_name
+    return email.split("@")[0]  # safe fallback so NOT NULL is never violated
+
+
 def create_group(name: str, description: str, creator_email: str) -> int:
     """Create a group and add creator as admin. Returns new group id."""
     import secrets
@@ -65,7 +74,7 @@ def create_group(name: str, description: str, creator_email: str) -> int:
         member = GroupMember(
             group_id=group.id,
             email=creator_email,
-            display_name=None,
+            display_name=_get_display_name(session, creator_email),
             role="admin",
             joined_at=now,
         )
@@ -291,7 +300,7 @@ def respond_to_invite(invite_id: int, accept: bool, user_email: str):
             member = GroupMember(
                 group_id=invite.group_id,
                 email=user_email,
-                display_name=None,
+                display_name=_get_display_name(session, user_email),
                 role="member",
                 joined_at=datetime.datetime.now(),
             )
