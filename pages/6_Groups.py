@@ -95,30 +95,49 @@ with tab_my:
 
                 # ── Invite section ───────────────────────────────────────
                 st.markdown("**Invite by Email**")
+
+                # Display invite result from previous submission (survives rerun)
+                _inv_key = f"invite_result_{g['id']}"
+                if _inv_key in st.session_state:
+                    _res = st.session_state.pop(_inv_key)
+                    if _res["level"] == "success":
+                        st.success(_res["msg"])
+                    elif _res["level"] == "error":
+                        st.error(_res["msg"])
+                    else:
+                        st.warning(_res["msg"])
+
                 with st.form(f"invite_form_{g['id']}"):
                     invite_email = st.text_input("Email address", placeholder="friend@email.com", key=f"inv_email_{g['id']}")
                     send_btn = st.form_submit_button("Send Invite")
                     if send_btn:
-                        if not invite_email.strip():
-                            st.error("Please enter an email address.")
+                        _email = invite_email.strip()
+                        if not _email:
+                            st.session_state[_inv_key] = {"level": "error", "msg": "Please enter an email address."}
                         else:
-                            result = send_invite(g["id"], invite_email.strip(), invited_by=current_email)
+                            result = send_invite(g["id"], _email, invited_by=current_email)
                             if result == "ok":
                                 from utils.email import send_invite_email
                                 try:
                                     send_invite_email(
-                                        to_email=invite_email.strip(),
+                                        to_email=_email,
                                         group_name=g["name"],
                                         invited_by=current_email,
                                     )
-                                    st.success(f"Invite sent to **{invite_email.strip()}**.")
+                                    st.session_state[_inv_key] = {
+                                        "level": "success",
+                                        "msg": f"Invite recorded and email sent to **{_email}**.",
+                                    }
                                 except Exception as e:
-                                    st.success(f"Invite recorded for **{invite_email.strip()}**.")
-                                    st.warning(f"Email could not be delivered: {e}")
+                                    st.session_state[_inv_key] = {
+                                        "level": "error",
+                                        "msg": f"Invite recorded for **{_email}** but email failed: {e}",
+                                    }
                             elif result == "already_member":
-                                st.warning("That person is already a member of this group.")
+                                st.session_state[_inv_key] = {"level": "warning", "msg": "That person is already a member of this group."}
                             elif result == "already_invited":
-                                st.warning("A pending invite already exists for that email.")
+                                st.session_state[_inv_key] = {"level": "warning", "msg": "A pending invite already exists for that email."}
+                        st.rerun()
 
                 # ── Pending invites for this group (admin only) ──────────
                 if is_admin:
