@@ -8,54 +8,70 @@ from utils.auth import get_user_names
 from utils.calculations import CATEGORIES, PEOPLE, SPLIT_OPTIONS, compute_owes
 from utils.groups import (
     get_active_context,
-    is_personal_context,
-    get_context_group_id,
     get_group_members,
+    get_user_groups,
     is_group_member,
-    get_group,
 )
 
-# ── Resolve current context ───────────────────────────────────────────────────
-ctx = get_active_context()
+st.title("Add Expense")
+
 current_email = getattr(st.user, "email", "")
 
-if ctx["type"] == "personal":
-    st.title("Add Expense — Personal")
+# ── Context Selector ──────────────────────────────────────────────────────────
+user_groups = get_user_groups(current_email) if current_email else []
+
+# Build options: Personal + all groups the user belongs to
+context_options = ["Personal"] + [g["name"] for g in user_groups]
+group_by_name = {g["name"]: g for g in user_groups}
+
+# Default to the current active context so sidebar switcher is still respected
+active_ctx = get_active_context()
+if active_ctx["type"] == "group":
+    default_name = active_ctx.get("group_name", "Personal")
+    if default_name not in context_options:
+        default_name = "Personal"
+else:
+    default_name = "Personal"
+
+default_idx = context_options.index(default_name)
+
+selected = st.selectbox("Add expense to:", context_options, index=default_idx)
+
+st.divider()
+
+# ── Resolve context from selection ───────────────────────────────────────────
+if selected == "Personal":
     is_personal = True
     group_id = None
     group_members = []
+    member_email_to_name = {}
     user_names = get_user_names()
 
-    # For personal context keep the classic Person A / Person B payer & split
     payer_options = PEOPLE
     split_options = SPLIT_OPTIONS
     payer_fmt = lambda x: user_names.get(x, x)
     split_fmt = lambda x: user_names.get(x, x)
 
 else:
-    group_id = ctx["group_id"]
-    group_name = ctx.get("group_name", "Group")
+    group_info = group_by_name[selected]
+    group_id = group_info["id"]
 
     # Gate: only members may add expenses
     if not current_email or not is_group_member(group_id, current_email):
-        st.error("⛔ You are not a member of this group.")
+        st.error("You are not a member of this group.")
         st.stop()
 
-    st.title(f"Add Expense — {group_name}")
     is_personal = False
-
     group_members = get_group_members(group_id)
-
-    # Build payer / split options from group member emails & names
     member_email_to_name = {m["email"]: m["display_name"] for m in group_members}
     member_emails = [m["email"] for m in group_members]
+    user_names = {}
 
     payer_options = member_emails
-    # Split: "equal" means split equally among all members; or assign to one member
+    # "equal" = split equally among all members; or assign full cost to one member
     split_options = ["equal"] + member_emails
     payer_fmt = lambda x: member_email_to_name.get(x, x)
     split_fmt = lambda x: "Equal Split" if x == "equal" else member_email_to_name.get(x, x)
-    user_names = {}   # not used for group context display
 
 # ── Form ──────────────────────────────────────────────────────────────────────
 with st.form("add_expense_form", clear_on_submit=True):
