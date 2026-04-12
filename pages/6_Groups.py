@@ -118,20 +118,20 @@ with tab_my:
                             result = send_invite(g["id"], _email, invited_by=current_email)
                             if result == "ok":
                                 from utils.email import send_invite_email
-                                try:
-                                    send_invite_email(
-                                        to_email=_email,
-                                        group_name=g["name"],
-                                        invited_by=current_email,
-                                    )
+                                ok, err = send_invite_email(
+                                    to_email=_email,
+                                    group_name=g["name"],
+                                    invited_by=current_email,
+                                )
+                                if ok:
                                     st.session_state[_inv_key] = {
                                         "level": "success",
                                         "msg": f"Invite recorded and email sent to **{_email}**.",
                                     }
-                                except Exception as e:
+                                else:
                                     st.session_state[_inv_key] = {
                                         "level": "error",
-                                        "msg": f"Invite recorded for **{_email}** but email failed: {e}",
+                                        "msg": f"Invite recorded for **{_email}** but email failed: {err}",
                                     }
                             elif result == "already_member":
                                 st.session_state[_inv_key] = {"level": "warning", "msg": "That person is already a member of this group."}
