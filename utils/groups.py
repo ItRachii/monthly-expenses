@@ -46,6 +46,7 @@ def get_context_group_id() -> Optional[int]:
 
 def create_group(name: str, description: str, creator_email: str) -> int:
     """Create a group and add creator as admin. Returns new group id."""
+    import secrets
     from db.database import get_session
     from db.models import Group, GroupMember
 
@@ -55,6 +56,7 @@ def create_group(name: str, description: str, creator_email: str) -> int:
         group = Group(
             name=name.strip(),
             description=description.strip() or None,
+            invite_code=secrets.token_hex(8),   # satisfies legacy NOT NULL column
             created_by=creator_email,
             created_at=now,
         )

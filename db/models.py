@@ -49,7 +49,8 @@ class Group(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
-    description = Column(String, nullable=True)      # migrated in if missing
+    description = Column(String, nullable=True)      # added via migration
+    invite_code = Column(String, nullable=True)      # legacy NOT NULL column — always populated on insert
     created_by = Column(String, ForeignKey("app_users.email"), nullable=False)
     created_at = Column(DateTime, nullable=False)
 
