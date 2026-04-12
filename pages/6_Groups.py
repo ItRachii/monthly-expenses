@@ -24,7 +24,6 @@ from utils.groups import (
     remove_member,
     delete_group,
     cancel_invite,
-    set_active_context,
 )
 
 current_email = getattr(st.user, "email", "")
@@ -127,11 +126,6 @@ with tab_my:
 
                 st.markdown("---")
 
-                # ── Switch context button ────────────────────────────────
-                if st.button(f"Switch to {g['name']}", key=f"switch_{g['id']}", type="primary"):
-                    set_active_context({"type": "group", "group_id": g["id"], "group_name": g["name"]})
-                    st.success(f"Switched to **{g['name']}** context. Navigate to any expense page.")
-
                 # ── Danger zone ──────────────────────────────────────────
                 with st.expander("⚠️ Danger Zone", expanded=False):
                     if current_email != g["created_by"]:
@@ -176,6 +170,4 @@ with tab_create:
                     creator_email=current_email,
                 )
                 st.success(f"Group **{group_name.strip()}** created! You are the admin.")
-                # Auto-switch to the new group
-                set_active_context({"type": "group", "group_id": new_id, "group_name": group_name.strip()})
                 st.rerun()

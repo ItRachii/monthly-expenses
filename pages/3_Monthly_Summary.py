@@ -6,10 +6,8 @@ from db.models import Expense
 from utils.auth import get_user_names
 from utils.calculations import add_owe_columns, compute_net_balance
 from utils.groups import (
-    get_active_context,
-    is_personal_context,
-    get_context_group_id,
     get_group_members,
+    get_user_groups,
     is_group_member,
 )
 from utils.charts import (
@@ -19,28 +17,34 @@ from utils.charts import (
     per_person_bar_chart,
 )
 
-# ── Resolve current context ───────────────────────────────────────────────────
-ctx = get_active_context()
+st.title("Monthly Summary")
+
 current_email = getattr(st.user, "email", "")
 
-if ctx["type"] == "personal":
-    st.title("Monthly Summary — Personal")
+# ── Context Selector ──────────────────────────────────────────────────────────
+user_groups = get_user_groups(current_email) if current_email else []
+context_options = ["Personal"] + [g["name"] for g in user_groups]
+group_by_name = {g["name"]: g for g in user_groups}
+
+selected = st.selectbox("View summary for:", context_options)
+
+st.divider()
+
+# ── Resolve context from selection ───────────────────────────────────────────
+if selected == "Personal":
     is_personal = True
     group_id = None
     user_names = get_user_names()
     member_email_to_name = {}
-
 else:
-    group_id = ctx["group_id"]
-    group_name = ctx.get("group_name", "Group")
+    group_info = group_by_name[selected]
+    group_id = group_info["id"]
 
     if not current_email or not is_group_member(group_id, current_email):
-        st.error("⛔ You are not a member of this group.")
+        st.error("You are not a member of this group.")
         st.stop()
 
-    st.title(f"Monthly Summary — {group_name}")
     is_personal = False
-
     group_members = get_group_members(group_id)
     member_email_to_name = {m["email"]: m["display_name"] for m in group_members}
     user_names = member_email_to_name
@@ -161,7 +165,6 @@ else:
         for i, member in enumerate(group_members):
             em = member["email"]
             paid = month_df.loc[month_df["payer"] == em, "amount"].sum()
-            # Compute responsibility: expenses where split == em or split == "equal"
             resp = (
                 month_df.loc[month_df["split"] == em, "amount"].sum()
                 + month_df.loc[month_df["split"] == "equal", "amount"].sum() / n_members

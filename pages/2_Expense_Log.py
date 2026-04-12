@@ -6,36 +6,41 @@ from db.models import Expense
 from utils.auth import get_user_names
 from utils.calculations import CATEGORIES, PEOPLE, SPLIT_OPTIONS, add_owe_columns
 from utils.groups import (
-    get_active_context,
-    is_personal_context,
-    get_context_group_id,
     get_group_members,
+    get_user_groups,
     is_group_member,
 )
 
-# ── Resolve current context ───────────────────────────────────────────────────
-ctx = get_active_context()
+st.title("Expense Log")
+
 current_email = getattr(st.user, "email", "")
 
-if ctx["type"] == "personal":
-    st.title("Expense Log — Personal")
+# ── Context Selector ──────────────────────────────────────────────────────────
+user_groups = get_user_groups(current_email) if current_email else []
+context_options = ["Personal"] + [g["name"] for g in user_groups]
+group_by_name = {g["name"]: g for g in user_groups}
+
+selected = st.selectbox("View expenses for:", context_options)
+
+st.divider()
+
+# ── Resolve context from selection ───────────────────────────────────────────
+if selected == "Personal":
     is_personal = True
     group_id = None
+    member_email_to_name = {}
     user_names = get_user_names()
     payer_options = PEOPLE
     split_filter_options = SPLIT_OPTIONS
-
 else:
-    group_id = ctx["group_id"]
-    group_name = ctx.get("group_name", "Group")
+    group_info = group_by_name[selected]
+    group_id = group_info["id"]
 
     if not current_email or not is_group_member(group_id, current_email):
-        st.error("⛔ You are not a member of this group.")
+        st.error("You are not a member of this group.")
         st.stop()
 
-    st.title(f"Expense Log — {group_name}")
     is_personal = False
-
     group_members = get_group_members(group_id)
     member_email_to_name = {m["email"]: m["display_name"] for m in group_members}
     member_emails = [m["email"] for m in group_members]

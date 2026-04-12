@@ -11,35 +11,6 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
-import streamlit as st
-
-
-# ── Context helpers ──────────────────────────────────────────────────────────
-
-
-def get_active_context() -> dict:
-    """
-    Return the currently active context dict.
-
-    Shape:
-      {"type": "personal", "email": str}          # personal expenses
-      {"type": "group", "group_id": int, "group_name": str}  # group expenses
-    """
-    return st.session_state.get("active_context", {"type": "personal", "email": ""})
-
-
-def set_active_context(ctx: dict):
-    st.session_state["active_context"] = ctx
-
-
-def is_personal_context() -> bool:
-    return get_active_context().get("type") == "personal"
-
-
-def get_context_group_id() -> Optional[int]:
-    ctx = get_active_context()
-    return ctx.get("group_id") if ctx.get("type") == "group" else None
-
 
 # ── Group CRUD ───────────────────────────────────────────────────────────────
 

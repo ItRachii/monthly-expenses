@@ -7,7 +7,6 @@ from db.models import Expense
 from utils.auth import get_user_names
 from utils.calculations import CATEGORIES, PEOPLE, SPLIT_OPTIONS, compute_owes
 from utils.groups import (
-    get_active_context,
     get_group_members,
     get_user_groups,
     is_group_member,
@@ -19,23 +18,10 @@ current_email = getattr(st.user, "email", "")
 
 # ── Context Selector ──────────────────────────────────────────────────────────
 user_groups = get_user_groups(current_email) if current_email else []
-
-# Build options: Personal + all groups the user belongs to
 context_options = ["Personal"] + [g["name"] for g in user_groups]
 group_by_name = {g["name"]: g for g in user_groups}
 
-# Default to the current active context so sidebar switcher is still respected
-active_ctx = get_active_context()
-if active_ctx["type"] == "group":
-    default_name = active_ctx.get("group_name", "Personal")
-    if default_name not in context_options:
-        default_name = "Personal"
-else:
-    default_name = "Personal"
-
-default_idx = context_options.index(default_name)
-
-selected = st.selectbox("Add expense to:", context_options, index=default_idx)
+selected = st.selectbox("Add expense to:", context_options)
 
 st.divider()
 
