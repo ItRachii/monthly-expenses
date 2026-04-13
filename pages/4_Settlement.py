@@ -8,37 +8,41 @@ from db.models import Expense, Settlement
 from utils.auth import get_user_names
 from utils.calculations import PEOPLE, add_owe_columns, compute_net_balance
 from utils.groups import (
-    get_active_context,
-    is_personal_context,
-    get_context_group_id,
     get_group_members,
+    get_user_groups,
     is_group_member,
 )
 
-# ── Resolve current context ───────────────────────────────────────────────────
-ctx = get_active_context()
+st.title("Settlement")
+
 current_email = getattr(st.user, "email", "")
 
-if ctx["type"] == "personal":
-    st.title("Settlement — Personal")
+# ── Context Selector ──────────────────────────────────────────────────────────
+user_groups = get_user_groups(current_email) if current_email else []
+context_options = ["Personal"] + [g["name"] for g in user_groups]
+group_by_name = {g["name"]: g for g in user_groups}
+
+selected = st.selectbox("Settle expenses for:", context_options)
+
+st.divider()
+
+# ── Resolve context from selection ───────────────────────────────────────────
+if selected == "Personal":
     is_personal = True
     group_id = None
-    user_names = get_user_names()
     member_email_to_name = {}
+    user_names = get_user_names()
     payer_options = PEOPLE
     payer_fmt = lambda x: user_names.get(x, x)
-
 else:
-    group_id = ctx["group_id"]
-    group_name = ctx.get("group_name", "Group")
+    group_info = group_by_name[selected]
+    group_id = group_info["id"]
 
     if not current_email or not is_group_member(group_id, current_email):
-        st.error("⛔ You are not a member of this group.")
+        st.error("You are not a member of this group.")
         st.stop()
 
-    st.title(f"Settlement — {group_name}")
     is_personal = False
-
     group_members = get_group_members(group_id)
     member_email_to_name = {m["email"]: m["display_name"] for m in group_members}
     member_emails = [m["email"] for m in group_members]
@@ -195,7 +199,6 @@ else:
         if rec["note"]:
             st.info(f"Note: {rec['note']}")
     else:
-        # Per-member net balance
         st.write(f"**Total spent this month:** ₹{total:.2f}")
         if n_members:
             equal_share = round(total / n_members, 2)
@@ -205,12 +208,11 @@ else:
             for member in group_members:
                 em = member["email"]
                 paid = month_df.loc[month_df["payer"] == em, "amount"].sum()
-                # Responsibility: expenses fully assigned to them + their equal share
                 resp = (
                     month_df.loc[month_df["split"] == em, "amount"].sum()
                     + month_df.loc[month_df["split"] == "equal", "amount"].sum() / n_members
                 )
-                net = round(paid - resp, 2)   # positive = others owe them, negative = they owe others
+                net = round(paid - resp, 2)
                 net_balances.append({
                     "Member": member["display_name"],
                     "Paid (₹)": paid,

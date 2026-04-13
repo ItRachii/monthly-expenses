@@ -24,7 +24,6 @@ from utils.groups import (
     remove_member,
     delete_group,
     cancel_invite,
-    set_active_context,
 )
 
 current_email = getattr(st.user, "email", "")
@@ -96,20 +95,49 @@ with tab_my:
 
                 # ── Invite section ───────────────────────────────────────
                 st.markdown("**Invite by Email**")
+
+                # Display invite result from previous submission (survives rerun)
+                _inv_key = f"invite_result_{g['id']}"
+                if _inv_key in st.session_state:
+                    _res = st.session_state.pop(_inv_key)
+                    if _res["level"] == "success":
+                        st.success(_res["msg"])
+                    elif _res["level"] == "error":
+                        st.error(_res["msg"])
+                    else:
+                        st.warning(_res["msg"])
+
                 with st.form(f"invite_form_{g['id']}"):
                     invite_email = st.text_input("Email address", placeholder="friend@email.com", key=f"inv_email_{g['id']}")
                     send_btn = st.form_submit_button("Send Invite")
                     if send_btn:
-                        if not invite_email.strip():
-                            st.error("Please enter an email address.")
+                        _email = invite_email.strip()
+                        if not _email:
+                            st.session_state[_inv_key] = {"level": "error", "msg": "Please enter an email address."}
                         else:
-                            result = send_invite(g["id"], invite_email.strip(), invited_by=current_email)
+                            result = send_invite(g["id"], _email, invited_by=current_email)
                             if result == "ok":
-                                st.success(f"Invite sent to **{invite_email.strip()}**.")
+                                from utils.email import send_invite_email
+                                ok, err = send_invite_email(
+                                    to_email=_email,
+                                    group_name=g["name"],
+                                    invited_by=current_email,
+                                )
+                                if ok:
+                                    st.session_state[_inv_key] = {
+                                        "level": "success",
+                                        "msg": f"Invite recorded and email sent to **{_email}**.",
+                                    }
+                                else:
+                                    st.session_state[_inv_key] = {
+                                        "level": "error",
+                                        "msg": f"Invite recorded for **{_email}** but email failed: {err}",
+                                    }
                             elif result == "already_member":
-                                st.warning("That person is already a member of this group.")
+                                st.session_state[_inv_key] = {"level": "warning", "msg": "That person is already a member of this group."}
                             elif result == "already_invited":
-                                st.warning("A pending invite already exists for that email.")
+                                st.session_state[_inv_key] = {"level": "warning", "msg": "A pending invite already exists for that email."}
+                        st.rerun()
 
                 # ── Pending invites for this group (admin only) ──────────
                 if is_admin:
@@ -126,11 +154,6 @@ with tab_my:
                                 st.rerun()
 
                 st.markdown("---")
-
-                # ── Switch context button ────────────────────────────────
-                if st.button(f"Switch to {g['name']}", key=f"switch_{g['id']}", type="primary"):
-                    set_active_context({"type": "group", "group_id": g["id"], "group_name": g["name"]})
-                    st.success(f"Switched to **{g['name']}** context. Navigate to any expense page.")
 
                 # ── Danger zone ──────────────────────────────────────────
                 with st.expander("⚠️ Danger Zone", expanded=False):
@@ -176,6 +199,4 @@ with tab_create:
                     creator_email=current_email,
                 )
                 st.success(f"Group **{group_name.strip()}** created! You are the admin.")
-                # Auto-switch to the new group
-                set_active_context({"type": "group", "group_id": new_id, "group_name": group_name.strip()})
                 st.rerun()

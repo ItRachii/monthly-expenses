@@ -5,7 +5,6 @@ from utils.auth import (
     show_login_page,
     register_user_if_needed,
     display_user_profile,
-    display_context_switcher,
     display_logout_button,
 )
 
@@ -23,7 +22,7 @@ def home_page():
     st.markdown(
         """
         Track your **personal** expenses or collaborate in **groups** with others.
-        Use the sidebar context switcher to toggle between Personal and a Group.
+        Use the selector at the top of each page to switch between Personal and a Group.
 
         | Page | Description |
         |------|-------------|
@@ -60,11 +59,7 @@ if is_logged_in:
 if is_logged_in:
     display_user_profile()
 
-# 3. Context switcher (below profile)
-if is_logged_in:
-    display_context_switcher()
-
-# 4. Sidebar Navigation (Middle)
+# 3. Sidebar Navigation (Middle)
 home = st.Page(home_page, title="Home", icon="🏠")
 add_exp = st.Page("pages/1_Add_Expense.py", title="Add Expense", icon="➕")
 log_page = st.Page("pages/2_Expense_Log.py", title="Expense Log", icon="📋")
@@ -75,9 +70,9 @@ groups = st.Page("pages/6_Groups.py", title="Groups", icon="👥")
 
 pg = st.navigation([home, add_exp, log_page, summary, settlement, groups, profile])
 
-# 5. Sidebar Logout rendering (Bottom)
+# 4. Sidebar Logout rendering (Bottom)
 if is_logged_in:
     display_logout_button()
 
-# 6. Run Selected Page
+# 5. Run Selected Page
 pg.run()
