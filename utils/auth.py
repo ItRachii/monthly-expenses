@@ -28,42 +28,55 @@ def show_login_page() -> None:
     st.markdown(
         """
         <div style="display:flex; justify-content:center; margin-bottom:2rem;">
-          <svg width="180" height="260" viewBox="0 0 180 260" fill="none"
+          <svg width="200" height="310" viewBox="0 0 200 310" fill="none"
                xmlns="http://www.w3.org/2000/svg">
-            <!-- Head -->
-            <ellipse cx="90" cy="66" rx="38" ry="43" fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
-            <!-- Hair — top arc + side wisps -->
-            <path d="M54 60 Q52 26 90 16 Q128 26 126 60"
-                  fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
-            <path d="M54 53 Q49 32 62 21" fill="none" stroke="#FAFAFA" stroke-width="2"/>
-            <path d="M126 53 Q131 32 118 21" fill="none" stroke="#FAFAFA" stroke-width="2"/>
-            <!-- Eyes -->
-            <circle cx="75" cy="63" r="4" fill="#FAFAFA"/>
-            <circle cx="105" cy="63" r="4" fill="#FAFAFA"/>
-            <!-- Nose -->
-            <path d="M90 72 Q88 80 90 83 Q92 80 90 72"
-                  fill="none" stroke="#FAFAFA" stroke-width="1.8"/>
-            <!-- Neck -->
-            <path d="M80 108 L78 124" stroke="#FAFAFA" stroke-width="2.2"/>
-            <path d="M100 108 L102 124" stroke="#FAFAFA" stroke-width="2.2"/>
-            <!-- Blazer — left shoulder/side -->
-            <path d="M78 124 Q48 138 28 220"
-                  fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
-            <!-- Blazer — right shoulder/side -->
-            <path d="M102 124 Q132 138 152 220"
-                  fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
-            <!-- Blazer — hem -->
-            <path d="M28 220 Q90 228 152 220"
-                  fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
-            <!-- Left lapel -->
-            <path d="M78 124 L70 152 L90 144"
-                  fill="none" stroke="#FAFAFA" stroke-width="2"/>
-            <!-- Right lapel -->
-            <path d="M102 124 L110 152 L90 144"
-                  fill="none" stroke="#FAFAFA" stroke-width="2"/>
-            <!-- Shirt collar -->
-            <path d="M82 124 L90 136 L98 124"
-                  fill="none" stroke="#FAFAFA" stroke-width="1.8"/>
+
+            <!-- ── Head (clean circle) ── -->
+            <circle cx="100" cy="80" r="47" stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+
+            <!-- ── Hair: 3 short natural wisps using cubic bezier ──
+                 Each wisp starts on the head surface and curves upward naturally. -->
+            <!-- Left wisp: emerges ~10-o-clock, curves up-left -->
+            <path d="M69 46 C63 34 68 23 77 26"
+                  stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+            <!-- Centre wisp: emerges from crown, curves slightly right -->
+            <path d="M100 33 C98 20 106 13 115 17"
+                  stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+            <!-- Right wisp: emerges ~2-o-clock, curves up-right -->
+            <path d="M131 46 C138 34 133 23 124 26"
+                  stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+
+            <!-- ── Eyes (filled dots) ── -->
+            <circle cx="84" cy="76" r="5.5" fill="#FAFAFA"/>
+            <circle cx="116" cy="76" r="5.5" fill="#FAFAFA"/>
+
+            <!-- ── Nose (small filled diamond) ── -->
+            <path d="M100 90 L97 99 L100 103 L103 99 Z" fill="#FAFAFA"/>
+
+            <!-- ── Neck ── -->
+            <line x1="91" y1="125" x2="89" y2="146" stroke="#FAFAFA" stroke-width="2.5"/>
+            <line x1="109" y1="125" x2="111" y2="146" stroke="#FAFAFA" stroke-width="2.5"/>
+
+            <!-- ── Blazer body ──
+                 Shoulders sit close to neck width, then curve gently outward to hem.
+                 Bottom width ~110 px each side from centre = natural jacket silhouette. -->
+            <path d="M89 146 Q56 161 42 295"
+                  stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+            <path d="M111 146 Q144 161 158 295"
+                  stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+            <path d="M42 295 Q100 303 158 295"
+                  stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+
+            <!-- ── Lapels ── -->
+            <path d="M89 146 L78 178 L100 168"
+                  stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+            <path d="M111 146 L122 178 L100 168"
+                  stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+
+            <!-- ── Inner shirt collar V ── -->
+            <path d="M92 146 L100 160 L108 146"
+                  stroke="#FAFAFA" stroke-width="2" fill="none"/>
+
           </svg>
         </div>
         """,
