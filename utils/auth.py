@@ -13,85 +13,139 @@ import streamlit as st
 
 
 def show_login_page() -> None:
-    """Render a branded login screen and stop the script."""
+    """Render the LEDGER split-screen login page."""
 
+    # ── Global styles ──────────────────────────────────────────────────────────
     st.markdown(
         """
         <style>
-        .block-container { max-width: 480px; padding-top: 4rem; }
+        [data-testid="stHeader"], footer { display: none !important; }
+
+        /* Remove default content padding so columns fill width */
+        .block-container {
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+
+        /* Left panel: branding */
+        .login-left {
+            padding: 0 3rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 88vh;
+        }
+        .ledger-title {
+            font-size: 4.8rem;
+            font-weight: 900;
+            color: #FAFAFA;
+            letter-spacing: 0.12em;
+            line-height: 1;
+            margin: 0 0 0.75rem;
+        }
+        .ledger-sub {
+            font-size: 1rem;
+            color: #8B9DB8;
+            margin: 0 0 2.5rem;
+            letter-spacing: 0.02em;
+        }
+
+        /* Right panel: illustration */
+        .login-right {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 88vh;
+            border-left: 1px solid rgba(255,255,255,0.08);
+        }
+
+        /* Slim down the sign-in button */
+        div[data-testid="stButton"] > button {
+            border-radius: 8px !important;
+            padding: 0.55rem 1.6rem !important;
+            font-size: 0.95rem !important;
+            font-weight: 600 !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # ── Line-art character illustration ───────────────────────────────────────
-    st.markdown(
-        """
-        <div style="display:flex; justify-content:center; margin-bottom:2rem;">
-          <svg width="200" height="310" viewBox="0 0 200 310" fill="none"
-               xmlns="http://www.w3.org/2000/svg">
+    col_left, col_right = st.columns(2, gap="small")
 
-            <!-- ── Head (clean circle) ── -->
-            <circle cx="100" cy="80" r="47" stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+    # ── Left half: app name + sign-in ─────────────────────────────────────────
+    with col_left:
+        st.markdown(
+            """
+            <div class="login-left">
+              <div class="ledger-title">LEDGER</div>
+              <div class="ledger-sub">Track every expense, own every dollar.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        _, btn_col, _ = st.columns([0.08, 0.6, 0.32])
+        with btn_col:
+            st.button(
+                "🔐  Sign in with Google",
+                on_click=st.login,
+                use_container_width=True,
+                type="primary",
+                key="google_login_btn",
+            )
 
-            <!-- ── Hair: 3 short natural wisps using cubic bezier ──
-                 Each wisp starts on the head surface and curves upward naturally. -->
-            <!-- Left wisp: emerges ~10-o-clock, curves up-left -->
-            <path d="M69 46 C63 34 68 23 77 26"
-                  stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
-            <!-- Centre wisp: emerges from crown, curves slightly right -->
-            <path d="M100 33 C98 20 106 13 115 17"
-                  stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
-            <!-- Right wisp: emerges ~2-o-clock, curves up-right -->
-            <path d="M131 46 C138 34 133 23 124 26"
-                  stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+    # ── Right half: line-art character ────────────────────────────────────────
+    with col_right:
+        st.markdown(
+            """
+            <div class="login-right">
+              <svg width="280" height="420" viewBox="0 0 200 310" fill="none"
+                   xmlns="http://www.w3.org/2000/svg">
 
-            <!-- ── Eyes (filled dots) ── -->
-            <circle cx="84" cy="76" r="5.5" fill="#FAFAFA"/>
-            <circle cx="116" cy="76" r="5.5" fill="#FAFAFA"/>
+                <!-- Head -->
+                <circle cx="100" cy="80" r="47" stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
 
-            <!-- ── Nose (small filled diamond) ── -->
-            <path d="M100 90 L97 99 L100 103 L103 99 Z" fill="#FAFAFA"/>
+                <!-- Hair: 3 natural cubic-bezier wisps -->
+                <path d="M69 46 C63 34 68 23 77 26"
+                      stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+                <path d="M100 33 C98 20 106 13 115 17"
+                      stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+                <path d="M131 46 C138 34 133 23 124 26"
+                      stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
 
-            <!-- ── Neck ── -->
-            <line x1="91" y1="125" x2="89" y2="146" stroke="#FAFAFA" stroke-width="2.5"/>
-            <line x1="109" y1="125" x2="111" y2="146" stroke="#FAFAFA" stroke-width="2.5"/>
+                <!-- Eyes -->
+                <circle cx="84" cy="76" r="5.5" fill="#FAFAFA"/>
+                <circle cx="116" cy="76" r="5.5" fill="#FAFAFA"/>
 
-            <!-- ── Blazer body ──
-                 Shoulders sit close to neck width, then curve gently outward to hem.
-                 Bottom width ~110 px each side from centre = natural jacket silhouette. -->
-            <path d="M89 146 Q56 161 42 295"
-                  stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
-            <path d="M111 146 Q144 161 158 295"
-                  stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
-            <path d="M42 295 Q100 303 158 295"
-                  stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+                <!-- Nose (small filled diamond) -->
+                <path d="M100 90 L97 99 L100 103 L103 99 Z" fill="#FAFAFA"/>
 
-            <!-- ── Lapels ── -->
-            <path d="M89 146 L78 178 L100 168"
-                  stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
-            <path d="M111 146 L122 178 L100 168"
-                  stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+                <!-- Neck -->
+                <line x1="91" y1="125" x2="89" y2="146" stroke="#FAFAFA" stroke-width="2.5"/>
+                <line x1="109" y1="125" x2="111" y2="146" stroke="#FAFAFA" stroke-width="2.5"/>
 
-            <!-- ── Inner shirt collar V ── -->
-            <path d="M92 146 L100 160 L108 146"
-                  stroke="#FAFAFA" stroke-width="2" fill="none"/>
+                <!-- Blazer body -->
+                <path d="M89 146 Q56 161 42 295"
+                      stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+                <path d="M111 146 Q144 161 158 295"
+                      stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+                <path d="M42 295 Q100 303 158 295"
+                      stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
 
-          </svg>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+                <!-- Lapels -->
+                <path d="M89 146 L78 178 L100 168"
+                      stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+                <path d="M111 146 L122 178 L100 168"
+                      stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
 
-    # ── Google sign-in button ──────────────────────────────────────────────────
-    col_l, col_c, col_r = st.columns([1, 2, 1])
-    with col_c:
-        st.button(
-            "🔐  Sign in with Google",
-            on_click=st.login,
-            use_container_width=True,
-            type="primary",
-            key="google_login_btn",
+                <!-- Shirt collar V -->
+                <path d="M92 146 L100 160 L108 146"
+                      stroke="#FAFAFA" stroke-width="2" fill="none"/>
+
+              </svg>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
     st.stop()
