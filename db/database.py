@@ -63,6 +63,7 @@ def migrate_db():
     _add_column_if_missing("settlements", "group_id", "INTEGER")
     # groups: add description if missing (old schema had name, invite_code, created_by, created_at)
     _add_column_if_missing("groups", "description", "VARCHAR")
+    _add_column_if_missing("groups", "active", "INTEGER DEFAULT 1")
     # group_members: add role if missing (old schema had id, group_id, email, display_name, joined_at)
     _add_column_if_missing("group_members", "role", "VARCHAR")
 

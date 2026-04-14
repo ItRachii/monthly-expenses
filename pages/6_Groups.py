@@ -34,6 +34,9 @@ if not current_email:
 
 st.title("👥 Groups")
 
+if "group_creation_msg" in st.session_state:
+    st.success(st.session_state.pop("group_creation_msg"))
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Pending Invites Banner
 # ─────────────────────────────────────────────────────────────────────────────
@@ -198,5 +201,6 @@ with tab_create:
                     description=group_desc.strip(),
                     creator_email=current_email,
                 )
-                st.success(f"Group **{group_name.strip()}** created! You are the admin.")
+                
+                st.session_state["group_creation_msg"] = f"Group **{group_name.strip()}** created! You are the admin."
                 st.rerun()

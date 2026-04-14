@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from db.database import Base
@@ -17,7 +18,7 @@ class Expense(Base):
     # Context: either personal (owner_email set, group_id null)
     #          or group  (group_id set, owner_email null)
     owner_email = Column(String, nullable=True)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
+    group_id = Column(String, ForeignKey("groups.id"), nullable=True)
 
 
 class Settlement(Base):
@@ -32,7 +33,7 @@ class Settlement(Base):
 
     # Context
     owner_email = Column(String, nullable=True)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
+    group_id = Column(String, ForeignKey("groups.id"), nullable=True)
 
 
 class AppUser(Base):
@@ -47,12 +48,13 @@ class AppUser(Base):
 class Group(Base):
     __tablename__ = "groups"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)      # added via migration
     invite_code = Column(String, nullable=True)      # legacy NOT NULL column — always populated on insert
     created_by = Column(String, ForeignKey("app_users.email"), nullable=False)
     created_at = Column(DateTime, nullable=False)
+    active = Column(Integer, nullable=False, default=1)
 
     members = relationship("GroupMember", back_populates="group", cascade="all, delete-orphan")
     invites = relationship("GroupInvite", back_populates="group", cascade="all, delete-orphan")
@@ -68,7 +70,7 @@ class GroupMember(Base):
     __tablename__ = "group_members"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    group_id = Column(String, ForeignKey("groups.id"), nullable=False)
     email = Column(String, ForeignKey("app_users.email"), nullable=False)  # member's email
     display_name = Column(String, nullable=True)                            # optional cached name
     role = Column(String, nullable=True, default="member")                  # "admin" or "member"
@@ -81,7 +83,7 @@ class GroupInvite(Base):
     __tablename__ = "group_invites"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    group_id = Column(String, ForeignKey("groups.id"), nullable=False)
     invited_email = Column(String, nullable=False)
     invited_by = Column(String, ForeignKey("app_users.email"), nullable=False)
     status = Column(String, nullable=False, default="pending")   # "pending", "accepted", "declined"

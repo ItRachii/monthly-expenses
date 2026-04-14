@@ -24,7 +24,7 @@ def _get_display_name(session, email: str) -> str:
     return email.split("@")[0]  # safe fallback so NOT NULL is never violated
 
 
-def create_group(name: str, description: str, creator_email: str) -> int:
+def create_group(name: str, description: str, creator_email: str) -> str:
     """Create a group and add creator as admin. Returns new group id."""
     import secrets
     from db.database import get_session
@@ -39,6 +39,7 @@ def create_group(name: str, description: str, creator_email: str) -> int:
             invite_code=secrets.token_hex(8),   # satisfies legacy NOT NULL column
             created_by=creator_email,
             created_at=now,
+            active=1,
         )
         session.add(group)
         session.flush()  # get group.id
@@ -66,7 +67,7 @@ def get_user_groups(user_email: str) -> list[dict]:
         rows = (
             session.query(Group, GroupMember)
             .join(GroupMember, Group.id == GroupMember.group_id)
-            .filter(GroupMember.email == user_email)
+            .filter(GroupMember.email == user_email, Group.active == 1)
             .order_by(Group.created_at.desc())
             .all()
         )
@@ -85,14 +86,14 @@ def get_user_groups(user_email: str) -> list[dict]:
         session.close()
 
 
-def get_group(group_id: int) -> Optional[dict]:
+def get_group(group_id: str) -> Optional[dict]:
     """Fetch a single group by id."""
     from db.database import get_session
     from db.models import Group
 
     session = get_session()
     try:
-        g = session.query(Group).filter_by(id=group_id).first()
+        g = session.query(Group).filter_by(id=group_id, active=1).first()
         if not g:
             return None
         return {
@@ -106,7 +107,7 @@ def get_group(group_id: int) -> Optional[dict]:
         session.close()
 
 
-def get_group_members(group_id: int) -> list[dict]:
+def get_group_members(group_id: str) -> list[dict]:
     """Return all current members of a group with their display info."""
     from db.database import get_session
     from db.models import GroupMember, AppUser
@@ -137,7 +138,7 @@ def get_group_members(group_id: int) -> list[dict]:
         session.close()
 
 
-def is_group_member(group_id: int, user_email: str) -> bool:
+def is_group_member(group_id: str, user_email: str) -> bool:
     from db.database import get_session
     from db.models import GroupMember
 
@@ -152,7 +153,7 @@ def is_group_member(group_id: int, user_email: str) -> bool:
         session.close()
 
 
-def remove_member(group_id: int, user_email: str):
+def remove_member(group_id: str, user_email: str):
     """Remove a member from a group (admin action or self-leave)."""
     from db.database import get_session
     from db.models import GroupMember
@@ -165,15 +166,17 @@ def remove_member(group_id: int, user_email: str):
         session.close()
 
 
-def delete_group(group_id: int):
-    """Delete a group and all its members/invites (cascade)."""
+def delete_group(group_id: str):
+    """Soft delete a group by setting active=0."""
     from db.database import get_session
     from db.models import Group
 
     session = get_session()
     try:
-        session.query(Group).filter_by(id=group_id).delete()
-        session.commit()
+        group = session.query(Group).filter_by(id=group_id).first()
+        if group:
+            group.active = 0
+            session.commit()
     finally:
         session.close()
 
@@ -181,7 +184,7 @@ def delete_group(group_id: int):
 # ── Invites ───────────────────────────────────────────────────────────────────
 
 
-def send_invite(group_id: int, invited_email: str, invited_by: str) -> str:
+def send_invite(group_id: str, invited_email: str, invited_by: str) -> str:
     """
     Create an invite record.  Returns 'ok', 'already_member', or 'already_invited'.
     """
@@ -282,7 +285,7 @@ def respond_to_invite(invite_id: int, accept: bool, user_email: str):
         session.close()
 
 
-def get_group_invites(group_id: int) -> list[dict]:
+def get_group_invites(group_id: str) -> list[dict]:
     """Return all invites (any status) for a group (for admin view)."""
     from db.database import get_session
     from db.models import GroupInvite
