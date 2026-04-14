@@ -45,6 +45,29 @@ def home_page():
         """
     )
 
+    current_email = getattr(st.user, "email", "")
+    if current_email:
+        from utils.groups import get_pending_invites_for_user, respond_to_invite
+        pending = get_pending_invites_for_user(current_email)
+        if pending:
+            st.divider()
+            st.subheader(f"📬 You have {len(pending)} pending group invite{'s' if len(pending) > 1 else ''}!")
+            for inv in pending:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([4, 1, 1])
+                    c1.markdown(
+                        f"**{inv['group_name']}**"
+                        + (f" — {inv['group_description']}" if inv['group_description'] else "")
+                        + f"\n\n_Invited by {inv['invited_by']}_"
+                    )
+                    if c2.button("✅ Accept", key=f"home_accept_{inv['invite_id']}"):
+                        respond_to_invite(inv["invite_id"], accept=True, user_email=current_email)
+                        st.success(f"Joined **{inv['group_name']}**!")
+                        st.rerun()
+                    if c3.button("❌ Decline", key=f"home_decline_{inv['invite_id']}"):
+                        respond_to_invite(inv["invite_id"], accept=False, user_email=current_email)
+                        st.info("Invite declined.")
+                        st.rerun()
 
 # 1. Auth Guard
 is_logged_in = getattr(st.user, "is_logged_in", None)
