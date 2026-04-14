@@ -13,147 +13,72 @@ import streamlit as st
 
 
 def show_login_page() -> None:
-    """Render the mibu-branded login screen and stop the script."""
+    """Render a branded login screen and stop the script."""
 
-    # ── Styling ────────────────────────────────────────────────────────────────
     st.markdown(
         """
         <style>
-        /* White background override */
-        .stApp,
-        [data-testid="stAppViewContainer"],
-        [data-testid="stHeader"],
-        section[data-testid="stSidebar"] { background-color: #ffffff !important; }
-
-        /* Center and constrain content */
-        .block-container {
-            max-width: 480px !important;
-            padding-top: 1.5rem !important;
-            margin: 0 auto !important;
-        }
-
-        /* Dark rounded Sign In button */
-        div[data-testid="stButton"] > button {
-            background-color: #111111 !important;
-            color: #ffffff !important;
-            border: none !important;
-            border-radius: 50px !important;
-            padding: 0.65rem 2rem !important;
-            font-size: 1rem !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.01em !important;
-        }
-        div[data-testid="stButton"] > button:hover {
-            background-color: #333333 !important;
-            border: none !important;
-        }
-
-        footer, header { display: none !important; }
+        .block-container { max-width: 480px; padding-top: 4rem; }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # ── Main layout HTML ───────────────────────────────────────────────────────
+    # ── Line-art character illustration ───────────────────────────────────────
     st.markdown(
         """
-        <div style="text-align:center; background:#ffffff; padding:0.5rem 0 0;">
-
-          <!-- Floating pills + illustration -->
-          <div style="position:relative; width:320px; height:330px; margin:0 auto 0.5rem;">
-
-            <!-- balance — top centre -->
-            <span style="position:absolute; top:0; left:50%; transform:translateX(-50%);
-                         border:1.8px solid #1a1a1a; border-radius:50px;
-                         padding:7px 20px; font-size:14px; color:#1a1a1a;
-                         background:#fff; white-space:nowrap;">balance</span>
-
-            <!-- income — upper left -->
-            <span style="position:absolute; top:66px; left:2px;
-                         border:1.8px solid #1a1a1a; border-radius:50px;
-                         padding:7px 20px; font-size:14px; color:#1a1a1a; background:#fff;">income</span>
-
-            <!-- expenses — upper right -->
-            <span style="position:absolute; top:66px; right:0;
-                         border:1.8px solid #1a1a1a; border-radius:50px;
-                         padding:7px 20px; font-size:14px; color:#1a1a1a; background:#fff;">expenses</span>
-
-            <!-- fun — mid left -->
-            <span style="position:absolute; top:144px; left:0;
-                         border:1.8px solid #1a1a1a; border-radius:50px;
-                         padding:7px 20px; font-size:14px; color:#1a1a1a; background:#fff;">fun</span>
-
-            <!-- food — mid right -->
-            <span style="position:absolute; top:144px; right:4px;
-                         border:1.8px solid #1a1a1a; border-radius:50px;
-                         padding:7px 20px; font-size:14px; color:#1a1a1a; background:#fff;">food</span>
-
-            <!-- retire — lower left -->
-            <span style="position:absolute; top:222px; left:2px;
-                         border:1.8px solid #1a1a1a; border-radius:50px;
-                         padding:7px 20px; font-size:14px; color:#1a1a1a; background:#fff;">retire</span>
-
-            <!-- travel — lower right -->
-            <span style="position:absolute; top:222px; right:0;
-                         border:1.8px solid #1a1a1a; border-radius:50px;
-                         padding:7px 20px; font-size:14px; color:#1a1a1a; background:#fff;">travel</span>
-
-            <!-- Line-art character illustration -->
-            <div style="position:absolute; top:16px; left:50%; transform:translateX(-50%);">
-              <svg width="140" height="260" viewBox="0 0 140 260" fill="none"
-                   xmlns="http://www.w3.org/2000/svg">
-                <!-- Head -->
-                <ellipse cx="70" cy="56" rx="32" ry="36" fill="white" stroke="#1a1a1a" stroke-width="2.5"/>
-                <!-- Hair -->
-                <path d="M39 50 Q37 20 70 13 Q103 20 101 50"
-                      fill="none" stroke="#1a1a1a" stroke-width="2.5"/>
-                <path d="M39 44 Q35 26 46 17" fill="none" stroke="#1a1a1a" stroke-width="2"/>
-                <path d="M101 44 Q105 26 94 17" fill="none" stroke="#1a1a1a" stroke-width="2"/>
-                <!-- Eyes -->
-                <circle cx="57" cy="53" r="3.5" fill="#1a1a1a"/>
-                <circle cx="83" cy="53" r="3.5" fill="#1a1a1a"/>
-                <!-- Nose -->
-                <path d="M70 61 Q68 68 70 70 Q72 68 70 61"
-                      fill="none" stroke="#1a1a1a" stroke-width="1.6"/>
-                <!-- Neck -->
-                <path d="M61 91 L59 107" stroke="#1a1a1a" stroke-width="2.2"/>
-                <path d="M79 91 L81 107" stroke="#1a1a1a" stroke-width="2.2"/>
-                <!-- Blazer — left side -->
-                <path d="M59 107 Q33 120 17 195" fill="none" stroke="#1a1a1a" stroke-width="2.5"/>
-                <!-- Blazer — right side -->
-                <path d="M81 107 Q107 120 123 195" fill="none" stroke="#1a1a1a" stroke-width="2.5"/>
-                <!-- Blazer — hem -->
-                <path d="M17 195 Q70 202 123 195" fill="none" stroke="#1a1a1a" stroke-width="2.5"/>
-                <!-- Left lapel -->
-                <path d="M59 107 L53 132 L70 125" fill="none" stroke="#1a1a1a" stroke-width="2"/>
-                <!-- Right lapel -->
-                <path d="M81 107 L87 132 L70 125" fill="none" stroke="#1a1a1a" stroke-width="2"/>
-                <!-- Shirt collar -->
-                <path d="M62 107 L70 117 L78 107" fill="none" stroke="#1a1a1a" stroke-width="1.6"/>
-              </svg>
-            </div>
-          </div>
-
-          <!-- mibu branding -->
-          <div style="font-size:4.2rem; font-weight:900; color:#111111;
-                      letter-spacing:-3px; line-height:1;
-                      font-family:'Arial Black','Arial Bold',Gadget,sans-serif;">mibu</div>
-          <p style="font-size:1rem; color:#666666; margin:0.4rem 0 1.6rem;
-                    letter-spacing:0.03em;">your minimal budgeting app</p>
+        <div style="display:flex; justify-content:center; margin-bottom:2rem;">
+          <svg width="180" height="260" viewBox="0 0 180 260" fill="none"
+               xmlns="http://www.w3.org/2000/svg">
+            <!-- Head -->
+            <ellipse cx="90" cy="66" rx="38" ry="43" fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
+            <!-- Hair — top arc + side wisps -->
+            <path d="M54 60 Q52 26 90 16 Q128 26 126 60"
+                  fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
+            <path d="M54 53 Q49 32 62 21" fill="none" stroke="#FAFAFA" stroke-width="2"/>
+            <path d="M126 53 Q131 32 118 21" fill="none" stroke="#FAFAFA" stroke-width="2"/>
+            <!-- Eyes -->
+            <circle cx="75" cy="63" r="4" fill="#FAFAFA"/>
+            <circle cx="105" cy="63" r="4" fill="#FAFAFA"/>
+            <!-- Nose -->
+            <path d="M90 72 Q88 80 90 83 Q92 80 90 72"
+                  fill="none" stroke="#FAFAFA" stroke-width="1.8"/>
+            <!-- Neck -->
+            <path d="M80 108 L78 124" stroke="#FAFAFA" stroke-width="2.2"/>
+            <path d="M100 108 L102 124" stroke="#FAFAFA" stroke-width="2.2"/>
+            <!-- Blazer — left shoulder/side -->
+            <path d="M78 124 Q48 138 28 220"
+                  fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
+            <!-- Blazer — right shoulder/side -->
+            <path d="M102 124 Q132 138 152 220"
+                  fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
+            <!-- Blazer — hem -->
+            <path d="M28 220 Q90 228 152 220"
+                  fill="none" stroke="#FAFAFA" stroke-width="2.5"/>
+            <!-- Left lapel -->
+            <path d="M78 124 L70 152 L90 144"
+                  fill="none" stroke="#FAFAFA" stroke-width="2"/>
+            <!-- Right lapel -->
+            <path d="M102 124 L110 152 L90 144"
+                  fill="none" stroke="#FAFAFA" stroke-width="2"/>
+            <!-- Shirt collar -->
+            <path d="M82 124 L90 136 L98 124"
+                  fill="none" stroke="#FAFAFA" stroke-width="1.8"/>
+          </svg>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # ── Sign In button ─────────────────────────────────────────────────────────
+    # ── Google sign-in button ──────────────────────────────────────────────────
     col_l, col_c, col_r = st.columns([1, 2, 1])
     with col_c:
         st.button(
-            "Sign In",
+            "🔐  Sign in with Google",
             on_click=st.login,
             use_container_width=True,
             type="primary",
-            key="signin_btn",
+            key="google_login_btn",
         )
 
     st.stop()
