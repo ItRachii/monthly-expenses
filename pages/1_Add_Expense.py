@@ -37,6 +37,7 @@ if selected == "Personal":
     split_options = SPLIT_OPTIONS
     payer_fmt = lambda x: user_names.get(x, x)
     split_fmt = lambda x: user_names.get(x, x)
+    current_role = st.session_state.app_user.get("system_role", "Person A") if "app_user" in st.session_state else "Person A"
 
 else:
     group_info = group_by_name[selected]
@@ -70,8 +71,12 @@ with st.form("add_expense_form", clear_on_submit=True):
 
     with col2:
         amount = st.number_input("Amount (₹)", min_value=1.0, step=1.0, format="%.2f")
-        payer = st.selectbox("Who paid?", payer_options, format_func=payer_fmt)
-        split = st.selectbox("Split", split_options, format_func=split_fmt)
+        if not is_personal:
+            payer = st.selectbox("Who paid?", payer_options, format_func=payer_fmt)
+            split = st.selectbox("Split", split_options, format_func=split_fmt)
+        else:
+            payer = current_role
+            split = current_role
 
     submitted = st.form_submit_button("Add Expense", type="primary", use_container_width=True)
 
@@ -97,13 +102,10 @@ if submitted:
             session.close()
 
         if is_personal:
-            a_owes, b_owes = compute_owes(amount, split)
             st.success(f"Expense saved: **{item.strip()}** — ₹{amount:.2f}")
-            c1, c2, c3, c4 = st.columns(4)
+            c1, c2 = st.columns(2)
             c1.metric("Total Amount", f"₹{amount:.2f}")
-            c2.metric("Paid by", user_names.get(payer, payer))
-            c3.metric(f"{user_names.get('Person A', 'Person A')} Owe", f"₹{a_owes:.2f}")
-            c4.metric(f"{user_names.get('Person B', 'Person B')} Owe", f"₹{b_owes:.2f}")
+            c2.metric("Paid by", "You")
         else:
             n_members = len(group_members)
             if split == "equal":
