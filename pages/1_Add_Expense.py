@@ -2,8 +2,8 @@ import datetime
 
 import streamlit as st
 
-from db.database import get_session
-from db.models import Expense
+from backend.database import get_session
+from backend.models import Expense
 from utils.auth import get_user_names
 from utils.calculations import CATEGORIES, PEOPLE, SPLIT_OPTIONS, compute_owes
 from utils.groups import (
@@ -118,3 +118,4 @@ if submitted:
                 c1.metric("Total Amount", f"₹{amount:.2f}")
                 c2.metric("Paid by", payer_name)
                 c3.metric("Responsible", split_name)
+

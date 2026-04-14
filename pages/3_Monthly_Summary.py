@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from db.database import get_session, init_db
-from db.models import Expense
+from backend.database import get_session, init_db
+from backend.models import Expense
 from utils.auth import get_user_names
 from utils.calculations import add_owe_columns, compute_net_balance
 from utils.groups import (
@@ -205,3 +205,4 @@ else:
         width='stretch',
         hide_index=True,
     )
+

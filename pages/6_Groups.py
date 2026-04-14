@@ -204,3 +204,4 @@ with tab_create:
                 
                 st.session_state["group_creation_msg"] = f"Group **{group_name.strip()}** created! You are the admin."
                 st.rerun()
+

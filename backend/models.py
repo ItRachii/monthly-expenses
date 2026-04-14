@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
-from db.database import Base
+from backend.database import Base
 
 
 class Expense(Base):
@@ -91,3 +91,4 @@ class GroupInvite(Base):
     responded_at = Column(DateTime, nullable=True)
 
     group = relationship("Group", back_populates="invites")
+

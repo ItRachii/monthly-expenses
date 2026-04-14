@@ -97,3 +97,4 @@ def monthly_trend_chart(df: pd.DataFrame):
     )
     fig.update_layout(xaxis_title="Month", yaxis_title="Total (₹)")
     return fig
+

@@ -124,3 +124,4 @@ def send_invite_email(to_email: str, group_name: str, invited_by: str) -> tuple:
         return True, None
     except Exception as e:
         return False, f"Port {cfg['port']} error: {first_error} | Port 465 error: {e}"
+

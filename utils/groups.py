@@ -17,7 +17,7 @@ from typing import Optional
 
 def _get_display_name(session, email: str) -> str:
     """Fetch the display name for an email from app_users, falling back to the email prefix."""
-    from db.models import AppUser
+    from backend.models import AppUser
     user = session.query(AppUser).filter_by(email=email).first()
     if user:
         return user.username.strip() if (user.username and user.username.strip()) else user.first_name
@@ -27,8 +27,8 @@ def _get_display_name(session, email: str) -> str:
 def create_group(name: str, description: str, creator_email: str) -> str:
     """Create a group and add creator as admin. Returns new group id."""
     import secrets
-    from db.database import get_session
-    from db.models import Group, GroupMember
+    from backend.database import get_session
+    from backend.models import Group, GroupMember
 
     session = get_session()
     try:
@@ -59,8 +59,8 @@ def create_group(name: str, description: str, creator_email: str) -> str:
 
 def get_user_groups(user_email: str) -> list[dict]:
     """Return all groups the user is a member of."""
-    from db.database import get_session
-    from db.models import Group, GroupMember
+    from backend.database import get_session
+    from backend.models import Group, GroupMember
 
     session = get_session()
     try:
@@ -88,8 +88,8 @@ def get_user_groups(user_email: str) -> list[dict]:
 
 def get_group(group_id: str) -> Optional[dict]:
     """Fetch a single group by id."""
-    from db.database import get_session
-    from db.models import Group
+    from backend.database import get_session
+    from backend.models import Group
 
     session = get_session()
     try:
@@ -109,8 +109,8 @@ def get_group(group_id: str) -> Optional[dict]:
 
 def get_group_members(group_id: str) -> list[dict]:
     """Return all current members of a group with their display info."""
-    from db.database import get_session
-    from db.models import GroupMember, AppUser
+    from backend.database import get_session
+    from backend.models import GroupMember, AppUser
 
     session = get_session()
     try:
@@ -139,8 +139,8 @@ def get_group_members(group_id: str) -> list[dict]:
 
 
 def is_group_member(group_id: str, user_email: str) -> bool:
-    from db.database import get_session
-    from db.models import GroupMember
+    from backend.database import get_session
+    from backend.models import GroupMember
 
     session = get_session()
     try:
@@ -155,8 +155,8 @@ def is_group_member(group_id: str, user_email: str) -> bool:
 
 def remove_member(group_id: str, user_email: str):
     """Remove a member from a group (admin action or self-leave)."""
-    from db.database import get_session
-    from db.models import GroupMember
+    from backend.database import get_session
+    from backend.models import GroupMember
 
     session = get_session()
     try:
@@ -168,8 +168,8 @@ def remove_member(group_id: str, user_email: str):
 
 def delete_group(group_id: str):
     """Soft delete a group by setting active=0."""
-    from db.database import get_session
-    from db.models import Group
+    from backend.database import get_session
+    from backend.models import Group
 
     session = get_session()
     try:
@@ -188,8 +188,8 @@ def send_invite(group_id: str, invited_email: str, invited_by: str) -> str:
     """
     Create an invite record.  Returns 'ok', 'already_member', or 'already_invited'.
     """
-    from db.database import get_session
-    from db.models import GroupInvite, GroupMember
+    from backend.database import get_session
+    from backend.models import GroupInvite, GroupMember
 
     email = invited_email.strip().lower()
     session = get_session()
@@ -228,8 +228,8 @@ def send_invite(group_id: str, invited_email: str, invited_by: str) -> str:
 
 def get_pending_invites_for_user(user_email: str) -> list[dict]:
     """Return pending invites for this user (matched by email)."""
-    from db.database import get_session
-    from db.models import GroupInvite, Group
+    from backend.database import get_session
+    from backend.models import GroupInvite, Group
 
     session = get_session()
     try:
@@ -259,8 +259,8 @@ def get_pending_invites_for_user(user_email: str) -> list[dict]:
 
 def respond_to_invite(invite_id: int, accept: bool, user_email: str):
     """Accept or decline an invite."""
-    from db.database import get_session
-    from db.models import GroupInvite, GroupMember
+    from backend.database import get_session
+    from backend.models import GroupInvite, GroupMember
 
     session = get_session()
     try:
@@ -287,8 +287,8 @@ def respond_to_invite(invite_id: int, accept: bool, user_email: str):
 
 def get_group_invites(group_id: str) -> list[dict]:
     """Return all invites (any status) for a group (for admin view)."""
-    from db.database import get_session
-    from db.models import GroupInvite
+    from backend.database import get_session
+    from backend.models import GroupInvite
 
     session = get_session()
     try:
@@ -310,8 +310,8 @@ def get_group_invites(group_id: str) -> list[dict]:
 
 def cancel_invite(invite_id: int):
     """Cancel (delete) a pending invite."""
-    from db.database import get_session
-    from db.models import GroupInvite
+    from backend.database import get_session
+    from backend.models import GroupInvite
 
     session = get_session()
     try:
@@ -319,3 +319,4 @@ def cancel_invite(invite_id: int):
         session.commit()
     finally:
         session.close()
+

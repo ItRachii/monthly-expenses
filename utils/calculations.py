@@ -89,3 +89,4 @@ def compute_net_balance(df: pd.DataFrame) -> tuple:
         description = f"Person A owes Person B ₹{abs(balance):.2f}"
 
     return balance, description
+

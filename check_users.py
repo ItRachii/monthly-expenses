@@ -5,8 +5,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-from db.database import engine, get_session
-from db.models import AppUser
+from backend.database import engine, get_session
+from backend.models import AppUser
 
 def main():
     print("Listing AppUser records...")
@@ -20,3 +20,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

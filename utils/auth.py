@@ -107,8 +107,8 @@ def register_user_if_needed() -> None:
     if not is_logged_in:
         return
         
-    from db.database import get_session
-    from db.models import AppUser
+    from backend.database import get_session
+    from backend.models import AppUser
     
     email = getattr(st.user, "email", "")
     fname = getattr(st.user, "name", "User").split()[0]
@@ -192,8 +192,8 @@ def get_user_names() -> dict:
     Returns a mapping of system roles to current user display names.
     E.g. {"Person A": "Rachit", "Person B": "John", "50-50": "50-50"}
     """
-    from db.database import get_session
-    from db.models import AppUser
+    from backend.database import get_session
+    from backend.models import AppUser
     
     mapping = {"Person A": "Person A", "Person B": "Person B", "50-50": "50-50"}
     session = get_session()
@@ -205,3 +205,4 @@ def get_user_names() -> dict:
     finally:
         session.close()
     return mapping
+

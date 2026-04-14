@@ -1,6 +1,6 @@
 import streamlit as st
-from db.database import get_session
-from db.models import AppUser
+from backend.database import get_session
+from backend.models import AppUser
 
 
 st.title("User Profile")
@@ -46,3 +46,4 @@ if "app_user" in st.session_state:
                 session.close()
 else:
     st.error("User profile not found. Please try logging in again.")
+

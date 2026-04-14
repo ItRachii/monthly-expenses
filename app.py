@@ -1,6 +1,6 @@
 import streamlit as st
-from db.database import init_db, engine, get_session
-from db.models import Expense
+from backend.database import init_db, engine, get_session
+from backend.models import Expense
 from utils.auth import (
     show_login_page,
     register_user_if_needed,
@@ -76,3 +76,4 @@ if is_logged_in:
 
 # 5. Run Selected Page
 pg.run()
+

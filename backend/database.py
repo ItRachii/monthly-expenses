@@ -69,6 +69,7 @@ def migrate_db():
 
 
 def init_db():
-    from db.models import Expense, Settlement, AppUser, Group, GroupMember, GroupInvite  # noqa: F401
+    from backend.models import Expense, Settlement, AppUser, Group, GroupMember, GroupInvite  # noqa: F401
     Base.metadata.create_all(bind=engine)
     migrate_db()
+
