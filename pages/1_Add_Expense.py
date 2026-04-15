@@ -4,13 +4,8 @@ import streamlit as st
 
 from backend.database import get_session
 from backend.models import Expense
-from utils.auth import get_user_names
-from utils.calculations import CATEGORIES, PEOPLE, SPLIT_OPTIONS, compute_owes
-from utils.groups import (
-    get_group_members,
-    get_user_groups,
-    is_group_member,
-)
+from utils.calculations import CATEGORIES
+from utils.groups import get_group_members, get_user_groups, is_group_member
 
 st.title("Add Expense")
 
@@ -25,40 +20,26 @@ selected = st.selectbox("Add expense to:", context_options)
 
 st.divider()
 
-# ── Resolve context from selection ───────────────────────────────────────────
+# ── Resolve context ───────────────────────────────────────────────────────────
 if selected == "Personal":
     is_personal = True
     group_id = None
     group_members = []
     member_email_to_name = {}
-    user_names = get_user_names()
-
-    payer_options = PEOPLE
-    split_options = SPLIT_OPTIONS
-    payer_fmt = lambda x: user_names.get(x, x)
-    split_fmt = lambda x: user_names.get(x, x)
-    current_role = st.session_state.app_user.get("system_role", "Person A") if "app_user" in st.session_state else "Person A"
-
+    member_emails = []
 else:
     group_info = group_by_name[selected]
     group_id = group_info["id"]
 
-    # Gate: only members may add expenses
     if not current_email or not is_group_member(group_id, current_email):
         st.error("You are not a member of this group.")
         st.stop()
 
     is_personal = False
+    # Always fetched fresh — new members appear immediately without needing a reload
     group_members = get_group_members(group_id)
     member_email_to_name = {m["email"]: m["display_name"] for m in group_members}
     member_emails = [m["email"] for m in group_members]
-    user_names = {}
-
-    payer_options = member_emails
-    # "equal" = split equally among all members; or assign full cost to one member
-    split_options = ["equal"] + member_emails
-    payer_fmt = lambda x: member_email_to_name.get(x, x)
-    split_fmt = lambda x: "Equal Split" if x == "equal" else member_email_to_name.get(x, x)
 
 # ── Form ──────────────────────────────────────────────────────────────────────
 with st.form("add_expense_form", clear_on_submit=True):
@@ -72,17 +53,25 @@ with st.form("add_expense_form", clear_on_submit=True):
     with col2:
         amount = st.number_input("Amount (₹)", min_value=1.0, step=1.0, format="%.2f")
         if not is_personal:
-            payer = st.selectbox("Who paid?", payer_options, format_func=payer_fmt)
-            split = st.selectbox("Split", split_options, format_func=split_fmt)
-        else:
-            payer = current_role
-            split = current_role
+            payer = st.selectbox(
+                "Who paid?",
+                member_emails,
+                format_func=lambda x: member_email_to_name.get(x, x),
+            )
+            split_options = ["50-50"] + member_emails
+            split = st.selectbox(
+                "Split",
+                split_options,
+                format_func=lambda x: "Equal split among all" if x == "50-50" else member_email_to_name.get(x, x),
+            )
 
     submitted = st.form_submit_button("Add Expense", type="primary", use_container_width=True)
 
 if submitted:
     if not item.strip():
         st.error("Please enter an item description.")
+    elif not is_personal and not member_emails:
+        st.error("This group has no members.")
     else:
         session = get_session()
         try:
@@ -91,8 +80,8 @@ if submitted:
                 category=category,
                 item=item.strip(),
                 amount=amount,
-                payer=payer,
-                split=split,
+                payer=current_email if is_personal else payer,
+                split="personal" if is_personal else split,
                 owner_email=current_email if is_personal else None,
                 group_id=group_id,
             )
@@ -103,21 +92,17 @@ if submitted:
 
         if is_personal:
             st.success(f"Expense saved: **{item.strip()}** — ₹{amount:.2f}")
-            c1, c2 = st.columns(2)
-            c1.metric("Total Amount", f"₹{amount:.2f}")
-            c2.metric("Paid by", "You")
         else:
             n_members = len(group_members)
-            if split == "equal":
-                each_owes = round(amount / n_members, 2) if n_members else 0
+            payer_name = member_email_to_name.get(payer, payer)
+            if split == "50-50":
+                each = round(amount / n_members, 2) if n_members else 0
                 st.success(f"Expense saved: **{item.strip()}** — ₹{amount:.2f}")
-                st.info(f"Each of the {n_members} members owes ₹{each_owes:.2f}")
+                st.info(f"Split equally among {n_members} members — ₹{each:.2f} each")
             else:
-                payer_name = member_email_to_name.get(payer, payer)
                 split_name = member_email_to_name.get(split, split)
                 st.success(f"Expense saved: **{item.strip()}** — ₹{amount:.2f}")
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Total Amount", f"₹{amount:.2f}")
                 c2.metric("Paid by", payer_name)
                 c3.metric("Responsible", split_name)
-
