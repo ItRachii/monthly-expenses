@@ -13,7 +13,6 @@ if "app_user" in st.session_state:
     with st.form("profile_form"):
         st.write(f"**Email:** {user['email']}")
         st.write(f"**First Name:** {user['first_name']}")
-        st.write(f"**System Role:** {user['system_role']}")
 
         current_username = user.get("username", "") or ""
 

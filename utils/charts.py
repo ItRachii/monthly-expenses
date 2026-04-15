@@ -1,8 +1,5 @@
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-
-from utils.calculations import add_owe_columns
 
 PALETTE = px.colors.qualitative.Set3
 
@@ -44,42 +41,6 @@ def category_bar_chart(df: pd.DataFrame):
     fig.update_layout(showlegend=False, yaxis_title="")
     return fig
 
-
-def per_person_bar_chart(df: pd.DataFrame, user_names: dict = None):
-    """Grouped bar: what each person paid vs. what their share is."""
-    if user_names is None:
-        user_names = {"Person A": "Person A", "Person B": "Person B"}
-        
-    df = add_owe_columns(df)
-
-    person_a_paid = df.loc[df["payer"] == "Person A", "amount"].sum()
-    person_b_paid = df.loc[df["payer"] == "Person B", "amount"].sum()
-    person_a_share = df["person_a_owes"].sum()
-    person_b_share = df["person_b_owes"].sum()
-
-    a_name = user_names.get("Person A", "Person A")
-    b_name = user_names.get("Person B", "Person B")
-
-    fig = go.Figure(data=[
-        go.Bar(
-            name="Paid",
-            x=[a_name, b_name],
-            y=[person_a_paid, person_b_paid],
-            marker_color=["#4C72B0", "#DD8452"],
-        ),
-        go.Bar(
-            name="Share Owed",
-            x=[a_name, b_name],
-            y=[person_a_share, person_b_share],
-            marker_color=["rgba(76, 114, 176, 0.5)", "rgba(221, 132, 82, 0.5)"],
-        ),
-    ])
-    fig.update_layout(
-        barmode="group",
-        title="Paid vs. Share per Person",
-        yaxis_title="Amount (₹)",
-    )
-    return fig
 
 
 def monthly_trend_chart(df: pd.DataFrame):

@@ -76,12 +76,10 @@ def register_user_if_needed() -> None:
         try:
             user = session.query(AppUser).filter_by(email=email).first()
             if not user:
-                user_count = session.query(AppUser).count()
-                role = "Person A" if user_count == 0 else "Person B"
                 new_user = AppUser(
                     email=email,
                     first_name=fname,
-                    system_role=role
+                    system_role="member"
                 )
                 session.add(new_user)
                 session.commit()
@@ -144,23 +142,4 @@ def display_logout_button() -> None:
         st.markdown("<hr style='margin-top: 20px; margin-bottom: 20px;'>", unsafe_allow_html=True)
         st.button("Sign out", on_click=st.logout, use_container_width=True)
 
-@st.cache_data(ttl=60)
-def get_user_names() -> dict:
-    """
-    Returns a mapping of system roles to current user display names.
-    E.g. {"Person A": "Rachit", "Person B": "John", "50-50": "50-50"}
-    """
-    from backend.database import get_session
-    from backend.models import AppUser
-    
-    mapping = {"Person A": "Person A", "Person B": "Person B", "50-50": "50-50"}
-    session = get_session()
-    try:
-        users = session.query(AppUser).all()
-        for u in users:
-            display = u.username.strip() if (u.username and u.username.strip()) else u.first_name
-            mapping[u.system_role] = display
-    finally:
-        session.close()
-    return mapping
 
