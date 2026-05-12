@@ -8,10 +8,12 @@ from utils.auth import (
     display_logout_button,
 )
 
+_is_logged_in_initial = getattr(st.user, "is_logged_in", False)
 st.set_page_config(
     page_title="Monthly Expense Tracker",
     page_icon="💸",
     layout="wide",
+    initial_sidebar_state="expanded" if _is_logged_in_initial else "collapsed",
 )
 
 init_db()

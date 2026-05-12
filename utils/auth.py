@@ -21,6 +21,19 @@ def show_login_page() -> None:
         <style>
         [data-testid="stHeader"], footer { display: none !important; }
 
+        /* Hide sidebar completely on the login page */
+        [data-testid="stSidebar"],
+        [data-testid="stSidebarNav"],
+        [data-testid="stSidebarNavItems"],
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="collapsedControl"],
+        [data-testid="stSidebarHeader"],
+        section[data-testid="stSidebar"] { display: none !important; }
+
+        /* Ensure main content fills the screen now that sidebar is hidden */
+        [data-testid="stAppViewContainer"] > .main,
+        [data-testid="stMain"] { margin-left: 0 !important; }
+
         /* Remove default content padding so columns fill width */
         .block-container {
             max-width: 100% !important;
@@ -96,56 +109,28 @@ def show_login_page() -> None:
 
     # ── Right half: line-art character ────────────────────────────────────────
     with col_right:
-        st.markdown(
+        st.html(
             """
             <div class="login-right">
-              <svg width="280" height="420" viewBox="0 0 200 310" fill="none"
-                   xmlns="http://www.w3.org/2000/svg">
-
-                <!-- Head -->
+              <svg width="280" height="420" viewBox="0 0 200 310" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="100" cy="80" r="47" stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
-
-                <!-- Hair: 3 natural cubic-bezier wisps -->
-                <path d="M69 46 C63 34 68 23 77 26"
-                      stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
-                <path d="M100 33 C98 20 106 13 115 17"
-                      stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
-                <path d="M131 46 C138 34 133 23 124 26"
-                      stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
-
-                <!-- Eyes -->
+                <path d="M69 46 C63 34 68 23 77 26" stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+                <path d="M100 33 C98 20 106 13 115 17" stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+                <path d="M131 46 C138 34 133 23 124 26" stroke="#FAFAFA" stroke-width="2.8" fill="none" stroke-linecap="round"/>
                 <circle cx="84" cy="76" r="5.5" fill="#FAFAFA"/>
                 <circle cx="116" cy="76" r="5.5" fill="#FAFAFA"/>
-
-                <!-- Nose (small filled diamond) -->
                 <path d="M100 90 L97 99 L100 103 L103 99 Z" fill="#FAFAFA"/>
-
-                <!-- Neck -->
                 <line x1="91" y1="125" x2="89" y2="146" stroke="#FAFAFA" stroke-width="2.5"/>
                 <line x1="109" y1="125" x2="111" y2="146" stroke="#FAFAFA" stroke-width="2.5"/>
-
-                <!-- Blazer body -->
-                <path d="M89 146 Q56 161 42 295"
-                      stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
-                <path d="M111 146 Q144 161 158 295"
-                      stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
-                <path d="M42 295 Q100 303 158 295"
-                      stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
-
-                <!-- Lapels -->
-                <path d="M89 146 L78 178 L100 168"
-                      stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
-                <path d="M111 146 L122 178 L100 168"
-                      stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
-
-                <!-- Shirt collar V -->
-                <path d="M92 146 L100 160 L108 146"
-                      stroke="#FAFAFA" stroke-width="2" fill="none"/>
-
+                <path d="M89 146 Q56 161 42 295" stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+                <path d="M111 146 Q144 161 158 295" stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+                <path d="M42 295 Q100 303 158 295" stroke="#FAFAFA" stroke-width="2.8" fill="none"/>
+                <path d="M89 146 L78 178 L100 168" stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+                <path d="M111 146 L122 178 L100 168" stroke="#FAFAFA" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+                <path d="M92 146 L100 160 L108 146" stroke="#FAFAFA" stroke-width="2" fill="none"/>
               </svg>
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     st.stop()
