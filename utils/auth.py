@@ -21,6 +21,19 @@ def show_login_page() -> None:
         <style>
         [data-testid="stHeader"], footer { display: none !important; }
 
+        /* Hide sidebar completely on the login page */
+        [data-testid="stSidebar"],
+        [data-testid="stSidebarNav"],
+        [data-testid="stSidebarNavItems"],
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="collapsedControl"],
+        [data-testid="stSidebarHeader"],
+        section[data-testid="stSidebar"] { display: none !important; }
+
+        /* Ensure main content fills the screen now that sidebar is hidden */
+        [data-testid="stAppViewContainer"] > .main,
+        [data-testid="stMain"] { margin-left: 0 !important; }
+
         /* Remove default content padding so columns fill width */
         .block-container {
             max-width: 100% !important;
