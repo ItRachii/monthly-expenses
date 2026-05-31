@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+@layer base {
+  html,
+  body {
+    @apply bg-background text-ink;
+  }
+  h1 {
+    @apply text-2xl font-bold;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-white/10 bg-surface p-5;
+  }
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-primary text-white hover:bg-primary/90;
+  }
+  .btn-secondary {
+    @apply btn border border-white/15 bg-white/5 text-ink hover:bg-white/10;
+  }
+  .btn-danger {
+    @apply btn border border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20;
+  }
+  .input,
+  .select,
+  .textarea {
+    @apply w-full rounded-lg border border-white/10 bg-background px-3 py-2 text-sm text-ink outline-none transition focus:border-primary;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted;
+  }
+  .metric-card {
+    @apply rounded-xl border border-white/10 bg-surface px-4 py-3;
+  }
+  .metric-label {
+    @apply text-xs text-muted;
+  }
+  .metric-value {
+    @apply mt-1 text-xl font-bold text-ink;
+  }
+  .metric-delta {
+    @apply mt-0.5 text-xs text-muted;
+  }
+  .section-title {
+    @apply text-lg font-semibold text-ink;
+  }
+  .data-table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+  .data-table th {
+    @apply border-b border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+  .data-table td {
+    @apply border-b border-white/5 px-3 py-2 text-ink/90;
+  }
+  .pill {
+    @apply rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs;
+  }
+  .alert {
+    @apply rounded-lg border px-4 py-3 text-sm;
+  }
+  .alert-success {
+    @apply alert border-green-500/30 bg-green-500/10 text-green-300;
+  }
+  .alert-warning {
+    @apply alert border-amber-500/30 bg-amber-500/10 text-amber-200;
+  }
+  .alert-error {
+    @apply alert border-red-500/30 bg-red-500/10 text-red-300;
+  }
+  .alert-info {
+    @apply alert border-primary/30 bg-primary/10 text-primary;
+  }
+}
