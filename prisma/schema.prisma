@@ -1,0 +1,97 @@
+// Prisma schema mapped onto the EXISTING Postgres tables created by the
+// Streamlit/SQLAlchemy app (see legacy-streamlit/backend/models.py).
+// Model fields are camelCase in code and @map to the real snake_case columns,
+// so your existing data is read and written unchanged.
+//
+// After setting DATABASE_URL, verify the mapping against the live DB with:
+//   npx prisma db pull        # introspect, then reconcile any differences
+//   npx prisma generate       # regenerate the client
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Expense {
+  id         Int      @id @default(autoincrement())
+  date       DateTime @db.Date
+  category   String
+  item       String
+  amount     Float
+  payer      String
+  split      String
+  ownerEmail String?  @map("owner_email")
+  groupId    String?  @map("group_id")
+  group      Group?   @relation(fields: [groupId], references: [id])
+
+  @@map("expenses")
+}
+
+model Settlement {
+  id         Int      @id @default(autoincrement())
+  month      String
+  settledAt  DateTime @map("settled_at")
+  settledBy  String   @map("settled_by")
+  amount     Float
+  note       String?
+  ownerEmail String?  @map("owner_email")
+  groupId    String?  @map("group_id")
+  group      Group?   @relation(fields: [groupId], references: [id])
+
+  @@map("settlements")
+}
+
+model AppUser {
+  email      String  @id
+  firstName  String  @map("first_name")
+  username   String?
+  systemRole String  @map("system_role")
+
+  @@map("app_users")
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  inviteCode  String?  @map("invite_code")
+  createdBy   String   @map("created_by")
+  createdAt   DateTime @map("created_at")
+  active      Int      @default(1)
+
+  members     GroupMember[]
+  invites     GroupInvite[]
+  expenses    Expense[]
+  settlements Settlement[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id          Int      @id @default(autoincrement())
+  groupId     String   @map("group_id")
+  email       String
+  displayName String?  @map("display_name")
+  role        String?
+  joinedAt    DateTime @map("joined_at")
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("group_members")
+}
+
+model GroupInvite {
+  id           Int       @id @default(autoincrement())
+  groupId      String    @map("group_id")
+  invitedEmail String    @map("invited_email")
+  invitedBy    String    @map("invited_by")
+  status       String    @default("pending")
+  createdAt    DateTime  @map("created_at")
+  respondedAt  DateTime? @map("responded_at")
+  group        Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("group_invites")
+}

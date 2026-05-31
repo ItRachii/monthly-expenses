@@ -1,0 +1,189 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { addExpenseAction } from "@/lib/actions/expenses";
+import { todayISO } from "@/lib/format";
+
+interface Opt {
+  value: string;
+  label: string;
+}
+
+export function AddExpenseForm({
+  ctx,
+  isPersonal,
+  categories,
+  payerOptions,
+  splitOptions,
+  currentRole,
+  memberCount,
+}: {
+  ctx: string;
+  isPersonal: boolean;
+  categories: string[];
+  payerOptions: Opt[];
+  splitOptions: Opt[];
+  currentRole: string | null;
+  memberCount: number;
+}) {
+  const [date, setDate] = useState(todayISO());
+  const [category, setCategory] = useState(categories[0]);
+  const [item, setItem] = useState("");
+  const [amount, setAmount] = useState("");
+  const [payer, setPayer] = useState(payerOptions[0]?.value ?? "");
+  const [split, setSplit] = useState(splitOptions[0]?.value ?? "");
+  const [message, setMessage] = useState<
+    { ok: boolean; text: string; info?: string } | null
+  >(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const amt = parseFloat(amount);
+    if (!item.trim()) {
+      setMessage({ ok: false, text: "Please enter an item description." });
+      return;
+    }
+    if (isNaN(amt) || amt <= 0) {
+      setMessage({ ok: false, text: "Amount must be greater than zero." });
+      return;
+    }
+
+    const chosenPayer = isPersonal ? currentRole ?? "" : payer;
+    const chosenSplit = isPersonal ? currentRole ?? "" : split;
+
+    startTransition(async () => {
+      const res = await addExpenseAction({
+        ctx,
+        date,
+        category,
+        item,
+        amount: amt,
+        payer: chosenPayer,
+        split: chosenSplit,
+      });
+      if (res.ok) {
+        let info: string | undefined;
+        if (!isPersonal && split === "equal" && memberCount > 0) {
+          info = `Each of the ${memberCount} members owes ₹${(amt / memberCount).toFixed(2)}`;
+        }
+        setMessage({
+          ok: true,
+          text: `Expense saved: ${item.trim()} — ₹${amt.toFixed(2)}`,
+          info,
+        });
+        setItem("");
+        setAmount("");
+        router.refresh();
+      } else {
+        setMessage({ ok: false, text: res.error ?? "Something went wrong." });
+      }
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="card space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-4">
+          <div>
+            <label className="label">Date</label>
+            <input
+              type="date"
+              className="input"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label">Category</label>
+            <select
+              className="select"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Item / Description</label>
+            <input
+              className="input"
+              value={item}
+              onChange={(e) => setItem(e.target.value)}
+              placeholder="e.g. Weekly groceries"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="label">Amount (₹)</label>
+            <input
+              type="number"
+              min="1"
+              step="0.01"
+              className="input"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+
+          {!isPersonal ? (
+            <>
+              <div>
+                <label className="label">Who paid?</label>
+                <select
+                  className="select"
+                  value={payer}
+                  onChange={(e) => setPayer(e.target.value)}
+                >
+                  {payerOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Split</label>
+                <select
+                  className="select"
+                  value={split}
+                  onChange={(e) => setSplit(e.target.value)}
+                >
+                  {splitOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-muted">
+              Personal expenses are recorded under your own profile.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {message ? (
+        <div className={message.ok ? "alert-success" : "alert-error"}>
+          <div>{message.text}</div>
+          {message.info ? <div className="mt-1">{message.info}</div> : null}
+        </div>
+      ) : null}
+
+      <button type="submit" className="btn-primary w-full" disabled={pending}>
+        {pending ? "Saving…" : "Add Expense"}
+      </button>
+    </form>
+  );
+}

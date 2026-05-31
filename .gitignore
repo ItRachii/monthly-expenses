@@ -1,36 +1,53 @@
-# Python
+# Dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# Next.js
+/.next/
+/out/
+next-env.d.ts
+
+# Production
+/build
+/dist
+
+# Environment
+.env
+.env*.local
+.env.local
+.env.development.local
+.env.production.local
+
+# Prisma
+/prisma/*.db
+
+# Vercel
+.vercel
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Legacy Streamlit app (Python) ─────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 .Python
 *.egg-info/
-dist/
-build/
-.eggs/
-
-# Virtual environments
 .venv/
 venv/
 env/
 ENV/
-
-# Database (local dev data)
-*.db
 *.sqlite3
-
-# Streamlit secrets — NEVER commit
-.streamlit/secrets.toml
-
-# IDE / editors
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS junk
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
+legacy-streamlit/.streamlit/secrets.toml
+legacy-streamlit/**/*.db
