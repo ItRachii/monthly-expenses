@@ -15,8 +15,7 @@ export const CATEGORIES = [
   "Other",
 ] as const;
 
-export const SPLIT_OPTIONS = ["50-50", "Person A", "Person B"] as const;
-export const PEOPLE = ["Person A", "Person B"] as const;
+export const SPLIT_EQUAL = "equal";
 
 // Color palette mirrored from the Streamlit charts.
 export const CHART_COLORS = [

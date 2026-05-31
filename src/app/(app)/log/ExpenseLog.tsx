@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
-import { computeOwes } from "@/lib/calculations";
+import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 import { deleteExpenseAction } from "@/lib/actions/expenses";
 import { Metric } from "@/components/Metric";
@@ -15,14 +15,12 @@ interface Opt {
 
 export function ExpenseLog({
   rows,
-  isPersonal,
   nameMap,
   categories,
   payerOptions,
   splitOptions,
 }: {
   rows: ExpenseDTO[];
-  isPersonal: boolean;
   nameMap: Record<string, string>;
   categories: string[];
   payerOptions: Opt[];
@@ -54,18 +52,12 @@ export function ExpenseLog({
   );
 
   const payerLabel = (v: string) => nameMap[v] ?? v;
-  const splitLabel = (v: string) => (v === "equal" ? "Equal Split" : nameMap[v] ?? v);
+  const splitLabel = (v: string) => (v === SPLIT_EQUAL ? "Equal Split" : nameMap[v] ?? v);
 
   const totalSpent = filtered.reduce((s, r) => s + r.amount, 0);
-  const aShare = filtered.reduce((s, r) => s + computeOwes(r.amount, r.split)[0], 0);
-  const bShare = filtered.reduce((s, r) => s + computeOwes(r.amount, r.split)[1], 0);
-  const personA = nameMap["Person A"] ?? "Person A";
-  const personB = nameMap["Person B"] ?? "Person B";
 
   function exportCsv() {
-    const header = isPersonal
-      ? ["Date", "Category", "Item", "Amount", "Payer", "Split", `${personA} Share`, `${personB} Share`]
-      : ["Date", "Category", "Item", "Amount", "Payer", "Split"];
+    const header = ["Date", "Category", "Item", "Amount", "Payer", "Split"];
     const lines = filtered.map((r) => {
       const base = [
         r.date,
@@ -75,10 +67,6 @@ export function ExpenseLog({
         payerLabel(r.payer),
         splitLabel(r.split),
       ];
-      if (isPersonal) {
-        const [a, b] = computeOwes(r.amount, r.split);
-        base.push(a.toFixed(2), b.toFixed(2));
-      }
       return base.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
     });
     const csv = [header.join(","), ...lines].join("\n");
@@ -148,15 +136,9 @@ export function ExpenseLog({
       </div>
 
       {/* Summary */}
-      <div className={`grid gap-3 ${isPersonal ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2"}`}>
+      <div className="grid gap-3 sm:grid-cols-2">
         <Metric label="Expenses" value={String(filtered.length)} />
         <Metric label="Total Spent" value={formatINR(totalSpent)} />
-        {isPersonal ? (
-          <>
-            <Metric label={`${personA}'s Share`} value={formatINR(aShare)} />
-            <Metric label={`${personB}'s Share`} value={formatINR(bShare)} />
-          </>
-        ) : null}
       </div>
 
       {/* Table */}
@@ -170,49 +152,34 @@ export function ExpenseLog({
               <th className="text-right">Amount (₹)</th>
               <th>Payer</th>
               <th>Split</th>
-              {isPersonal ? (
-                <>
-                  <th className="text-right">{personA} (₹)</th>
-                  <th className="text-right">{personB} (₹)</th>
-                </>
-              ) : null}
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => {
-              const [a, b] = computeOwes(r.amount, r.split);
-              return (
-                <tr key={r.id}>
-                  <td>{r.date}</td>
-                  <td>{r.category}</td>
-                  <td>{r.item}</td>
-                  <td className="text-right">{r.amount.toFixed(2)}</td>
-                  <td>{payerLabel(r.payer)}</td>
-                  <td>{splitLabel(r.split)}</td>
-                  {isPersonal ? (
-                    <>
-                      <td className="text-right">{a.toFixed(2)}</td>
-                      <td className="text-right">{b.toFixed(2)}</td>
-                    </>
-                  ) : null}
-                  <td className="text-right">
-                    <button
-                      className="text-red-400 hover:text-red-300 disabled:opacity-50"
-                      onClick={() => remove(r.id)}
-                      disabled={pending}
-                      aria-label="Delete expense"
-                      title="Delete"
-                    >
-                      🗑
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+            {filtered.map((r) => (
+              <tr key={r.id}>
+                <td>{r.date}</td>
+                <td>{r.category}</td>
+                <td>{r.item}</td>
+                <td className="text-right">{r.amount.toFixed(2)}</td>
+                <td>{payerLabel(r.payer)}</td>
+                <td>{splitLabel(r.split)}</td>
+                <td className="text-right">
+                  <button
+                    className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                    onClick={() => remove(r.id)}
+                    disabled={pending}
+                    aria-label="Delete expense"
+                    title="Delete"
+                  >
+                    🗑
+                  </button>
+                </td>
+              </tr>
+            ))}
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={isPersonal ? 9 : 7} className="text-center text-muted">
+                <td colSpan={7} className="text-center text-muted">
                   No expenses match the current filters.
                 </td>
               </tr>

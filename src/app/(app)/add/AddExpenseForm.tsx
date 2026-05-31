@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
+import { SPLIT_EQUAL } from "@/lib/constants";
 import { todayISO } from "@/lib/format";
 
 interface Opt {
@@ -16,7 +17,8 @@ export function AddExpenseForm({
   categories,
   payerOptions,
   splitOptions,
-  currentRole,
+  defaultPayer,
+  defaultSplit,
   memberCount,
 }: {
   ctx: string;
@@ -24,15 +26,18 @@ export function AddExpenseForm({
   categories: string[];
   payerOptions: Opt[];
   splitOptions: Opt[];
-  currentRole: string | null;
+  defaultPayer: string;
+  defaultSplit: string;
   memberCount: number;
 }) {
   const [date, setDate] = useState(todayISO());
   const [category, setCategory] = useState(categories[0]);
   const [item, setItem] = useState("");
   const [amount, setAmount] = useState("");
-  const [payer, setPayer] = useState(payerOptions[0]?.value ?? "");
-  const [split, setSplit] = useState(splitOptions[0]?.value ?? "");
+  // Initial state equals the default option's value so the submitted value
+  // always matches what is shown — no silent divergence.
+  const [payer, setPayer] = useState(defaultPayer);
+  const [split, setSplit] = useState(defaultSplit);
   const [message, setMessage] = useState<
     { ok: boolean; text: string; info?: string } | null
   >(null);
@@ -51,22 +56,21 @@ export function AddExpenseForm({
       return;
     }
 
-    const chosenPayer = isPersonal ? currentRole ?? "" : payer;
-    const chosenSplit = isPersonal ? currentRole ?? "" : split;
-
     startTransition(async () => {
+      // For personal/solo the server forces payer=user email & split="equal";
+      // for groups we send the selected values (validated server-side).
       const res = await addExpenseAction({
         ctx,
         date,
         category,
         item,
         amount: amt,
-        payer: chosenPayer,
-        split: chosenSplit,
+        payer,
+        split,
       });
       if (res.ok) {
         let info: string | undefined;
-        if (!isPersonal && split === "equal" && memberCount > 0) {
+        if (!isPersonal && split === SPLIT_EQUAL && memberCount > 0) {
           info = `Each of the ${memberCount} members owes ₹${(amt / memberCount).toFixed(2)}`;
         }
         setMessage({
