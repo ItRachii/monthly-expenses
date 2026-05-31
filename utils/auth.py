@@ -111,7 +111,7 @@ def show_login_page() -> None:
         with btn_col:
             st.button(
                 "🔐  Sign in with Google",
-                on_click=st.login,
+                on_click=lambda: st.login("google"),
                 use_container_width=True,
                 type="primary",
                 key="google_login_btn",
