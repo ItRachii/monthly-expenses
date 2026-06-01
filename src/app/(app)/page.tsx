@@ -11,8 +11,8 @@ const pages = [
 ];
 
 const splits = [
-  ["50-50", "Each person is responsible for half the amount"],
-  ["Person X", "That person is responsible for the full amount"],
+  ["Equal Split", "The amount is shared equally among all group members"],
+  ["A specific person", "That member is responsible for the full amount"],
 ];
 
 export default async function HomePage() {

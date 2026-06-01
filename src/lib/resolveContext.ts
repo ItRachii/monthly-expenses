@@ -38,7 +38,7 @@ export async function resolveContext(
       context: { kind: "personal", email },
       options,
       nameMap: { [email]: displayName },
-      members: [{ email, displayName, role: null }],
+      members: [],
       error,
     };
   }

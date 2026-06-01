@@ -7,12 +7,10 @@ import { saveProfileAction } from "@/lib/actions/profile";
 export function ProfileForm({
   email,
   firstName,
-  systemRole,
   username,
 }: {
   email: string;
   firstName: string;
-  systemRole: string;
   username: string | null;
 }) {
   const [value, setValue] = useState(username ?? "");
@@ -41,9 +39,6 @@ export function ProfileForm({
         </div>
         <div>
           <span className="text-muted">First Name:</span> {firstName}
-        </div>
-        <div>
-          <span className="text-muted">System Role:</span> {systemRole}
         </div>
       </div>
 
