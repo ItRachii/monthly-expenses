@@ -2,14 +2,13 @@
 
 import { useMemo, useState } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
-import { computeOwes, computeNetBalance } from "@/lib/calculations";
+import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 import { Metric } from "@/components/Metric";
 import {
   CategoryBar,
   CategoryPie,
   MonthlyTrend,
-  PerPersonBar,
 } from "@/components/charts/Charts";
 
 interface Member {
@@ -64,31 +63,11 @@ export function Summary({
   const categoryData = byCategory(monthRows);
   const trendData = byMonth(rows);
 
-  const tabs = isPersonal
-    ? ["Category (Pie)", "Category (Bar)", "Per Person", "Monthly Trend"]
-    : ["Category (Pie)", "Category (Bar)", "Monthly Trend"];
-
-  const personA = nameMap["Person A"] ?? "Person A";
-  const personB = nameMap["Person B"] ?? "Person B";
-
-  // Personal aggregates
-  const aPaid = monthRows.filter((r) => r.payer === "Person A").reduce((s, r) => s + r.amount, 0);
-  const bPaid = monthRows.filter((r) => r.payer === "Person B").reduce((s, r) => s + r.amount, 0);
-  const aShare = monthRows.reduce((s, r) => s + computeOwes(r.amount, r.split)[0], 0);
-  const bShare = monthRows.reduce((s, r) => s + computeOwes(r.amount, r.split)[1], 0);
-  const { balance, description } = computeNetBalance(monthRows);
-  const balanceDesc = description
-    .replace("Person A", personA)
-    .replace("Person B", personB);
+  const tabs = ["Category (Pie)", "Category (Bar)", "Monthly Trend"];
 
   const nMembers = members.length;
-  const perPersonData = [
-    { name: personA, paid: aPaid, share: aShare },
-    { name: personB, paid: bPaid, share: bShare },
-  ];
-
   const payerLabel = (v: string) => nameMap[v] ?? v;
-  const splitLabel = (v: string) => (v === "equal" ? "Equal Split" : nameMap[v] ?? v);
+  const splitLabel = (v: string) => (v === SPLIT_EQUAL ? "Equal Split" : nameMap[v] ?? v);
 
   return (
     <div className="space-y-6">
@@ -104,16 +83,10 @@ export function Summary({
       <h2 className="section-title">Overview — {selectedMonth}</h2>
 
       {isPersonal ? (
-        <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric label="Total Spent" value={formatINR(total)} />
-            <Metric label={`${personA} Paid`} value={formatINR(aPaid)} delta={`share ${formatINR(aShare)}`} />
-            <Metric label={`${personB} Paid`} value={formatINR(bPaid)} delta={`share ${formatINR(bShare)}`} />
-          </div>
-          <div className={Math.abs(balance) < 0.01 ? "alert-success" : "alert-warning"}>
-            <strong>{balanceDesc}</strong>
-          </div>
-        </>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Metric label="Total Spent" value={formatINR(total)} />
+          <Metric label="Expenses" value={String(monthRows.length)} />
+        </div>
       ) : (
         <>
           <Metric label="Total Spent" value={formatINR(total)} />
@@ -122,7 +95,7 @@ export function Summary({
               const paid = monthRows.filter((r) => r.payer === m.email).reduce((s, r) => s + r.amount, 0);
               const resp =
                 monthRows.filter((r) => r.split === m.email).reduce((s, r) => s + r.amount, 0) +
-                (nMembers ? monthRows.filter((r) => r.split === "equal").reduce((s, r) => s + r.amount, 0) / nMembers : 0);
+                (nMembers ? monthRows.filter((r) => r.split === SPLIT_EQUAL).reduce((s, r) => s + r.amount, 0) / nMembers : 0);
               return (
                 <Metric
                   key={m.email}
@@ -155,7 +128,6 @@ export function Summary({
         <div className="card">
           {tabs[tab] === "Category (Pie)" && <CategoryPie data={categoryData} />}
           {tabs[tab] === "Category (Bar)" && <CategoryBar data={categoryData} />}
-          {tabs[tab] === "Per Person" && <PerPersonBar data={perPersonData} />}
           {tabs[tab] === "Monthly Trend" && <MonthlyTrend data={trendData} />}
         </div>
       </div>
@@ -173,34 +145,19 @@ export function Summary({
                 <th className="text-right">Amount (₹)</th>
                 <th>Payer</th>
                 <th>Split</th>
-                {isPersonal ? (
-                  <>
-                    <th className="text-right">{personA} (₹)</th>
-                    <th className="text-right">{personB} (₹)</th>
-                  </>
-                ) : null}
               </tr>
             </thead>
             <tbody>
-              {monthRows.map((r) => {
-                const [a, b] = computeOwes(r.amount, r.split);
-                return (
-                  <tr key={r.id}>
-                    <td>{r.date}</td>
-                    <td>{r.category}</td>
-                    <td>{r.item}</td>
-                    <td className="text-right">{r.amount.toFixed(2)}</td>
-                    <td>{payerLabel(r.payer)}</td>
-                    <td>{splitLabel(r.split)}</td>
-                    {isPersonal ? (
-                      <>
-                        <td className="text-right">{a.toFixed(2)}</td>
-                        <td className="text-right">{b.toFixed(2)}</td>
-                      </>
-                    ) : null}
-                  </tr>
-                );
-              })}
+              {monthRows.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.date}</td>
+                  <td>{r.category}</td>
+                  <td>{r.item}</td>
+                  <td className="text-right">{r.amount.toFixed(2)}</td>
+                  <td>{payerLabel(r.payer)}</td>
+                  <td>{splitLabel(r.split)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
 import type { SettlementDTO } from "@/lib/settlements";
-import { computeNetBalance } from "@/lib/calculations";
+import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 import { Metric } from "@/components/Metric";
 import { settleAction } from "@/lib/actions/settlements";
@@ -55,15 +55,8 @@ export function Settlement({
   const total = monthRows.reduce((s, r) => s + r.amount, 0);
   const nMembers = members.length;
 
-  const { balance, description } = computeNetBalance(monthRows);
-  const balanceDesc = description.replace("Person A", nameOf("Person A")).replace("Person B", nameOf("Person B"));
-
-  // Settle form state
-  const defaultSettledBy = isPersonal
-    ? balance > 0
-      ? "Person B"
-      : "Person A"
-    : payerOptions[0]?.value ?? "";
+  // Settle form state (group only; personal/solo has nothing to settle).
+  const defaultSettledBy = payerOptions[0]?.value ?? "";
   const [settledBy, setSettledBy] = useState(defaultSettledBy);
   const [note, setNote] = useState("");
   const [groupAmount, setGroupAmount] = useState(
@@ -73,7 +66,7 @@ export function Settlement({
   function settle(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const amount = isPersonal ? Math.abs(balance) : parseFloat(groupAmount);
+    const amount = parseFloat(groupAmount);
     startTransition(async () => {
       const res = await settleAction({
         ctx,
@@ -121,46 +114,15 @@ export function Settlement({
           {settledRec.note ? <div className="alert-info">Note: {settledRec.note}</div> : null}
         </div>
       ) : isPersonal ? (
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <Metric label="Total Spent" value={formatINR(total)} />
-            <Metric label="Net Balance" value={formatINR(Math.abs(balance))} />
-            <Metric label="Status" value="Unsettled" />
+            <Metric label="Expenses" value={String(monthRows.length)} />
           </div>
-
-          {Math.abs(balance) < 0.01 ? (
-            <div className="alert-success">No balance to settle — you&apos;re even for this month!</div>
-          ) : (
-            <>
-              <div className="alert-warning"><strong>{balanceDesc}</strong></div>
-              <form onSubmit={settle} className="card space-y-4">
-                <h3 className="section-title">Mark as Settled</h3>
-                <div>
-                  <label className="label">Who is making the payment?</label>
-                  <div className="flex gap-2">
-                    {payerOptions.map((o) => (
-                      <button
-                        type="button"
-                        key={o.value}
-                        onClick={() => setSettledBy(o.value)}
-                        className={`btn ${settledBy === o.value ? "btn-primary" : "btn-secondary"}`}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="label">Note (optional)</label>
-                  <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Bank transfer" />
-                </div>
-                {error ? <div className="alert-error">{error}</div> : null}
-                <button type="submit" className="btn-primary" disabled={pending}>
-                  {pending ? "Saving…" : "Confirm Settlement"}
-                </button>
-              </form>
-            </>
-          )}
+          <div className="alert-info">
+            Personal expenses are yours alone — there&apos;s nothing to settle here.
+            Settlements apply to <strong>group</strong> expenses.
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
@@ -186,7 +148,7 @@ export function Settlement({
                       const paid = monthRows.filter((r) => r.payer === m.email).reduce((s, r) => s + r.amount, 0);
                       const resp =
                         monthRows.filter((r) => r.split === m.email).reduce((s, r) => s + r.amount, 0) +
-                        monthRows.filter((r) => r.split === "equal").reduce((s, r) => s + r.amount, 0) / nMembers;
+                        monthRows.filter((r) => r.split === SPLIT_EQUAL).reduce((s, r) => s + r.amount, 0) / nMembers;
                       const net = paid - resp;
                       const status =
                         net > 0.01 ? `Gets back ${formatINR(net)}` : net < -0.01 ? `Owes ${formatINR(Math.abs(net))}` : "Settled";

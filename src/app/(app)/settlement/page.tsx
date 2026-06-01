@@ -3,7 +3,6 @@ import { resolveContext } from "@/lib/resolveContext";
 import { getExpenses } from "@/lib/expenses";
 import { getSettlements } from "@/lib/settlements";
 import { ContextSelector } from "@/components/ContextSelector";
-import { PEOPLE } from "@/lib/constants";
 import { Settlement } from "./Settlement";
 
 export default async function SettlementPage({
@@ -18,9 +17,7 @@ export default async function SettlementPage({
   const rows = r.error ? [] : await getExpenses(r.context, "asc");
   const settlements = r.error ? [] : await getSettlements(r.context);
 
-  const payerOptions = r.isPersonal
-    ? PEOPLE.map((p) => ({ value: p, label: r.nameMap[p] ?? p }))
-    : r.members.map((m) => ({ value: m.email, label: m.displayName }));
+  const payerOptions = r.members.map((m) => ({ value: m.email, label: m.displayName }));
 
   return (
     <div className="space-y-6">

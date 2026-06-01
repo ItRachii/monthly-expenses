@@ -19,7 +19,6 @@ export default async function ProfilePage() {
       <ProfileForm
         email={user.appUser.email}
         firstName={user.appUser.firstName}
-        systemRole={user.appUser.systemRole}
         username={user.appUser.username}
       />
     </div>

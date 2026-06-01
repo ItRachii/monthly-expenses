@@ -62,27 +62,6 @@ export function CategoryBar({ data }: { data: { category: string; amount: number
   );
 }
 
-export function PerPersonBar({
-  data,
-}: {
-  data: { name: string; paid: number; share: number }[];
-}) {
-  return (
-    <div className="h-80 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
-          <XAxis dataKey="name" tick={axisTick} />
-          <YAxis tick={axisTick} />
-          <Tooltip contentStyle={tooltipStyle} formatter={money} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar dataKey="paid" name="Paid" fill="#4C72B0" />
-          <Bar dataKey="share" name="Share Owed" fill="#DD8452" />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 export function MonthlyTrend({ data }: { data: { month: string; amount: number }[] }) {
   return (
     <div className="h-80 w-full">

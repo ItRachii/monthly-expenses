@@ -22,8 +22,13 @@ export function ContextSelector({
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("ctx", e.target.value);
-    router.push(`${pathname}?${params.toString()}`);
+    const value = e.target.value;
+    // Personal is the default, so it carries no ?ctx (keeps URLs clean and
+    // matches the sidebar nav). Stay on the current page either way.
+    if (value === "personal") params.delete("ctx");
+    else params.set("ctx", value);
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
   return (

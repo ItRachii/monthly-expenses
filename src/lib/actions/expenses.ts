@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createExpense, deleteExpense } from "@/lib/expenses";
-import { isGroupMember } from "@/lib/groups";
+import { isGroupMember, getGroupMembers } from "@/lib/groups";
+import { SPLIT_EQUAL } from "@/lib/constants";
 
 export interface ActionResult {
   ok: boolean;
@@ -32,12 +33,27 @@ export async function addExpenseAction(input: {
 
   let ownerEmail: string | null = null;
   let groupId: string | null = null;
+  // Resolve payer/split server-side so stale form values can never be persisted.
+  let payer = input.payer;
+  let split = input.split;
+
   if (input.ctx === "personal") {
+    // Personal/solo: the only person is the signed-in user.
     ownerEmail = email;
+    payer = email;
+    split = SPLIT_EQUAL;
   } else {
     if (!(await isGroupMember(input.ctx, email)))
       return { ok: false, error: "You are not a member of this group." };
     groupId = input.ctx;
+
+    // Validate: payer must be a member email; split must be "equal" or a member
+    // email. On anything invalid, fall back to a safe default.
+    const memberEmails = new Set(
+      (await getGroupMembers(input.ctx)).map((m) => m.email),
+    );
+    if (!memberEmails.has(payer)) payer = email;
+    if (split !== SPLIT_EQUAL && !memberEmails.has(split)) split = SPLIT_EQUAL;
   }
 
   await createExpense({
@@ -45,8 +61,8 @@ export async function addExpenseAction(input: {
     category: input.category,
     item: input.item.trim(),
     amount: input.amount,
-    payer: input.payer,
-    split: input.split,
+    payer,
+    split,
     ownerEmail,
     groupId,
   });

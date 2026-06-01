@@ -1,5 +1,5 @@
 import { getUserGroups, getGroupMembers, type MemberDTO } from "./groups";
-import { getUserNames } from "./users";
+import { getAppUser, displayNameFor } from "./users";
 import type { Context } from "./context";
 
 export interface ResolvedContext {
@@ -7,15 +7,15 @@ export interface ResolvedContext {
   isPersonal: boolean;
   context: Context;
   options: { value: string; label: string }[];
-  /** role -> name (personal) or email -> name (group) */
+  /** email -> display name. Personal is solo, so this is just the user. */
   nameMap: Record<string, string>;
   members: MemberDTO[];
   error?: string;
 }
 
 /**
- * Resolves the Personal/Group selector used by the expense pages. Mirrors the
- * context-selector block repeated across the Streamlit pages.
+ * Resolves the Personal/Group selector used by the expense pages. Personal mode
+ * is the logged-in user's own (solo) ledger; groups handle multi-person splits.
  */
 export async function resolveContext(
   email: string,
@@ -29,28 +29,27 @@ export async function resolveContext(
 
   const wanted = ctxParam && ctxParam !== "personal" ? ctxParam : "personal";
 
-  if (wanted === "personal") {
+  async function personal(error?: string): Promise<ResolvedContext> {
+    const appUser = await getAppUser(email);
+    const displayName = displayNameFor(appUser, email);
     return {
       ctxValue: "personal",
       isPersonal: true,
       context: { kind: "personal", email },
       options,
-      nameMap: await getUserNames(),
+      nameMap: { [email]: displayName },
       members: [],
+      error,
     };
+  }
+
+  if (wanted === "personal") {
+    return personal();
   }
 
   const group = groups.find((g) => g.id === wanted);
   if (!group) {
-    return {
-      ctxValue: "personal",
-      isPersonal: true,
-      context: { kind: "personal", email },
-      options,
-      nameMap: await getUserNames(),
-      members: [],
-      error: "You are not a member of this group.",
-    };
+    return personal("You are not a member of this group.");
   }
 
   const members = await getGroupMembers(wanted);
