@@ -132,12 +132,15 @@ export function AddExpenseForm({
     <div>
       <label className="label">Amount (₹)</label>
       <input
-        type="number"
-        min="1"
-        step="0.01"
+        type="text"
+        inputMode="decimal"
         className="input"
         value={amount}
-        onChange={(e) => setAmount(e.target.value)}
+        onChange={(e) => {
+          const v = e.target.value;
+          // Allow only digits and a single decimal point — no arrow-key/wheel stepping.
+          if (v === "" || /^\d*\.?\d*$/.test(v)) setAmount(v);
+        }}
         placeholder="0.00"
       />
     </div>
