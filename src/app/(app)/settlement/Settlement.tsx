@@ -180,12 +180,14 @@ export function Settlement({
                   <div>
                     <label className="label">Settlement Amount (₹)</label>
                     <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       className="input"
                       value={groupAmount}
-                      onChange={(e) => setGroupAmount(e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "" || /^\d*\.?\d*$/.test(v)) setGroupAmount(v);
+                      }}
                     />
                   </div>
                   <div>
