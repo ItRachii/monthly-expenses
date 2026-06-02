@@ -5,6 +5,9 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createExpense, deleteExpense } from "@/lib/expenses";
 import { isGroupMember, getGroupMembers } from "@/lib/groups";
+import { notifyGroup } from "@/lib/notifications";
+import { displayNameFor } from "@/lib/users";
+import { formatINR } from "@/lib/format";
 import { SPLIT_EQUAL } from "@/lib/constants";
 
 export interface ActionResult {
@@ -13,7 +16,14 @@ export interface ActionResult {
 }
 
 function revalidateExpenseViews() {
-  for (const p of ["/", "/add", "/log", "/summary", "/settlement"]) revalidatePath(p);
+  for (const p of ["/", "/add", "/log", "/summary", "/settlement", "/notifications"])
+    revalidatePath(p);
+}
+
+/** Display name for the signed-in actor, used in notification messages. */
+async function actorName(email: string): Promise<string> {
+  const u = await prisma.appUser.findUnique({ where: { email } });
+  return displayNameFor(u, email);
 }
 
 export async function addExpenseAction(input: {
@@ -66,6 +76,22 @@ export async function addExpenseAction(input: {
     ownerEmail,
     groupId,
   });
+
+  // Notify other group members. Best-effort: never fail the write on this.
+  if (groupId) {
+    try {
+      const who = await actorName(email);
+      await notifyGroup({
+        groupId,
+        actorEmail: email,
+        type: "expense_added",
+        message: `${who} added "${input.item.trim()}" (${formatINR(input.amount)})`,
+      });
+    } catch {
+      // ignore notification errors
+    }
+  }
+
   revalidateExpenseViews();
   return { ok: true };
 }
@@ -86,6 +112,22 @@ export async function deleteExpenseAction(id: number): Promise<ActionResult> {
   }
 
   await deleteExpense(id);
+
+  // Notify other group members about the deletion. Best-effort.
+  if (exp.groupId) {
+    try {
+      const who = await actorName(email);
+      await notifyGroup({
+        groupId: exp.groupId,
+        actorEmail: email,
+        type: "expense_deleted",
+        message: `${who} deleted "${exp.item}" (${formatINR(exp.amount)})`,
+      });
+    } catch {
+      // ignore notification errors
+    }
+  }
+
   revalidateExpenseViews();
   return { ok: true };
 }
