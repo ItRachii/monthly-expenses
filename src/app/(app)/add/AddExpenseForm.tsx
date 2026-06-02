@@ -87,96 +87,114 @@ export function AddExpenseForm({
     });
   }
 
+  const dateField = (
+    <div>
+      <label className="label">Date</label>
+      <input
+        type="date"
+        className="input"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+      />
+    </div>
+  );
+
+  const categoryField = (
+    <div>
+      <label className="label">Category</label>
+      <select
+        className="select"
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+      >
+        {categories.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  const itemField = (
+    <div>
+      <label className="label">Item / Description</label>
+      <input
+        className="input"
+        value={item}
+        onChange={(e) => setItem(e.target.value)}
+        placeholder="e.g. Weekly groceries"
+      />
+    </div>
+  );
+
+  const amountField = (
+    <div>
+      <label className="label">Amount (₹)</label>
+      <input
+        type="number"
+        min="1"
+        step="0.01"
+        className="input no-spinner"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        placeholder="0.00"
+      />
+    </div>
+  );
+
   return (
     <form onSubmit={submit} className="card space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-4">
-          <div>
-            <label className="label">Date</label>
-            <input
-              type="date"
-              className="input"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="label">Category</label>
-            <select
-              className="select"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">Item / Description</label>
-            <input
-              className="input"
-              value={item}
-              onChange={(e) => setItem(e.target.value)}
-              placeholder="e.g. Weekly groceries"
-            />
-          </div>
+      {isPersonal ? (
+        // Personal: flat 2x2 grid — Date, Category, Item, Amount.
+        <div className="grid gap-4 sm:grid-cols-2">
+          {dateField}
+          {categoryField}
+          {itemField}
+          {amountField}
         </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="label">Amount (₹)</label>
-            <input
-              type="number"
-              min="1"
-              step="0.01"
-              className="input"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-            />
+      ) : (
+        // Group: details on the left, amount + payer/split on the right.
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-4">
+            {dateField}
+            {categoryField}
+            {itemField}
           </div>
 
-          {!isPersonal ? (
-            <>
-              <div>
-                <label className="label">Who paid?</label>
-                <select
-                  className="select"
-                  value={payer}
-                  onChange={(e) => setPayer(e.target.value)}
-                >
-                  {payerOptions.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Split</label>
-                <select
-                  className="select"
-                  value={split}
-                  onChange={(e) => setSplit(e.target.value)}
-                >
-                  {splitOptions.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          ) : (
-            <p className="text-xs text-muted">
-              Personal expenses are recorded under your own profile.
-            </p>
-          )}
+          <div className="space-y-4">
+            {amountField}
+            <div>
+              <label className="label">Who paid?</label>
+              <select
+                className="select"
+                value={payer}
+                onChange={(e) => setPayer(e.target.value)}
+              >
+                {payerOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Split</label>
+              <select
+                className="select"
+                value={split}
+                onChange={(e) => setSplit(e.target.value)}
+              >
+                {splitOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {message ? (
         <div className={message.ok ? "alert-success" : "alert-error"}>
