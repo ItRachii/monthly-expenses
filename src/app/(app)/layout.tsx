@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/session";
+import { getUnreadCount } from "@/lib/notifications";
 import { Sidebar } from "@/components/Sidebar";
 
 // Every page in this group depends on the signed-in user, so never prerender.
@@ -15,10 +16,11 @@ export default async function AppLayout({
     user.appUser?.firstName ||
     user.name ||
     user.email;
+  const unreadCount = await getUnreadCount(user.email);
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <Sidebar name={displayName} image={user.image} />
+      <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} />
       <main className="flex-1 overflow-x-hidden p-5 md:p-8">
         <div className="mx-auto max-w-5xl space-y-6">{children}</div>
       </main>

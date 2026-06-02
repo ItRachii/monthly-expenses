@@ -5,9 +5,11 @@ import { doSignOut } from "@/lib/actions/auth";
 export function Sidebar({
   name,
   image,
+  unreadCount,
 }: {
   name: string;
   image: string | null;
+  unreadCount: number;
 }) {
   return (
     <aside className="flex w-full shrink-0 flex-col gap-6 border-b border-white/10 bg-surface/40 p-4 md:h-screen md:w-64 md:border-b-0 md:border-r">
@@ -25,7 +27,7 @@ export function Sidebar({
         <span className="truncate text-sm font-semibold">{name}</span>
       </div>
 
-      <NavLinks />
+      <NavLinks unreadCount={unreadCount} />
 
       <form action={doSignOut} className="mt-auto">
         <button type="submit" className="btn-secondary w-full">

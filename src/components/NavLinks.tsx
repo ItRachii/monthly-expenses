@@ -9,6 +9,7 @@ const items = [
   { href: "/log", label: "Expense Log", icon: "📋" },
   { href: "/summary", label: "Monthly Summary", icon: "📊" },
   { href: "/settlement", label: "Settlement", icon: "💰" },
+  { href: "/notifications", label: "Notifications", icon: "🔔" },
   { href: "/groups", label: "Groups", icon: "👥" },
   { href: "/profile", label: "Profile", icon: "👤" },
 ];
@@ -17,7 +18,7 @@ const items = [
 // Profile pages are context-agnostic, so we don't carry ?ctx into them.
 const contextAware = new Set(["/", "/add", "/log", "/summary", "/settlement"]);
 
-export function NavLinks() {
+export function NavLinks({ unreadCount = 0 }: { unreadCount?: number }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const ctx = searchParams.get("ctx");
@@ -31,6 +32,7 @@ export function NavLinks() {
           ctx && ctx !== "personal" && contextAware.has(it.href)
             ? `${it.href}?ctx=${encodeURIComponent(ctx)}`
             : it.href;
+        const showBadge = it.href === "/notifications" && unreadCount > 0;
         return (
           <Link
             key={it.href}
@@ -42,7 +44,12 @@ export function NavLinks() {
             }`}
           >
             <span aria-hidden>{it.icon}</span>
-            {it.label}
+            <span className="flex-1">{it.label}</span>
+            {showBadge ? (
+              <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-white">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            ) : null}
           </Link>
         );
       })}

@@ -64,10 +64,11 @@ model Group {
   createdAt   DateTime @map("created_at")
   active      Int      @default(1)
 
-  members     GroupMember[]
-  invites     GroupInvite[]
-  expenses    Expense[]
-  settlements Settlement[]
+  members       GroupMember[]
+  invites       GroupInvite[]
+  expenses      Expense[]
+  settlements   Settlement[]
+  notifications Notification[]
 
   @@map("groups")
 }
@@ -95,4 +96,19 @@ model GroupInvite {
   group        Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@map("group_invites")
+}
+
+model Notification {
+  id             Int      @id @default(autoincrement())
+  recipientEmail String   @map("recipient_email")
+  groupId        String   @map("group_id")
+  actorEmail     String   @map("actor_email")
+  type           String
+  message        String
+  isRead         Boolean  @default(false) @map("is_read")
+  createdAt      DateTime @default(now()) @map("created_at")
+  group          Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([recipientEmail, isRead, createdAt(sort: Desc)], map: "notifications_recipient_idx")
+  @@map("notifications")
 }
