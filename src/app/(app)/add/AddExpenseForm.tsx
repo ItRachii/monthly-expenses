@@ -135,7 +135,7 @@ export function AddExpenseForm({
         type="number"
         min="1"
         step="0.01"
-        className="input no-spinner"
+        className="input"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
         placeholder="0.00"
