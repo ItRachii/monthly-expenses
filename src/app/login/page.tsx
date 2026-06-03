@@ -141,6 +141,14 @@ export default async function LoginPage() {
               <span className="h-2 w-2 rounded-full bg-white/25" />
             </div>
           </div>
+
+          {/* Real artwork: when public/login-hero.png exists it covers the panel;
+              until then this paints nothing and the CSS composition shows. */}
+          <div
+            aria-hidden
+            style={{ backgroundImage: "url('/login-hero.png')" }}
+            className="absolute inset-0 z-20 bg-cover bg-center"
+          />
         </section>
       </div>
     </main>
