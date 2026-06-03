@@ -65,7 +65,6 @@ export function Summary({
 
   const tabs = ["Category (Pie)", "Category (Bar)", "Monthly Trend"];
 
-  const nMembers = members.length;
   const payerLabel = (v: string) => nameMap[v] ?? v;
   const splitLabel = (v: string) => (v === SPLIT_EQUAL ? "Equal Split" : nameMap[v] ?? v);
 
@@ -88,25 +87,35 @@ export function Summary({
           <Metric label="Expenses" value={String(monthRows.length)} />
         </div>
       ) : (
-        <>
-          <Metric label="Total Spent" value={formatINR(total)} />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {members.map((m) => {
-              const paid = monthRows.filter((r) => r.payer === m.email).reduce((s, r) => s + r.amount, 0);
-              const resp =
-                monthRows.filter((r) => r.split === m.email).reduce((s, r) => s + r.amount, 0) +
-                (nMembers ? monthRows.filter((r) => r.split === SPLIT_EQUAL).reduce((s, r) => s + r.amount, 0) / nMembers : 0);
-              return (
-                <Metric
-                  key={m.email}
-                  label={m.displayName}
-                  value={`Paid ${formatINR(paid)}`}
-                  delta={`owes ${formatINR(resp)}`}
-                />
-              );
-            })}
-          </div>
-        </>
+        <div className="card overflow-x-auto p-0">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="text-right">Total Spent</th>
+                {members.map((m) => (
+                  <th key={m.email} className="text-right">
+                    {m.displayName}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="text-right font-semibold">{formatINR(total)}</td>
+                {members.map((m) => {
+                  const paid = monthRows
+                    .filter((r) => r.payer === m.email)
+                    .reduce((s, r) => s + r.amount, 0);
+                  return (
+                    <td key={m.email} className="text-right">
+                      {formatINR(paid)}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Charts */}
