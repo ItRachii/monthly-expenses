@@ -17,6 +17,39 @@ interface Opt {
   value: string;
   label: string;
 }
+interface Transfer {
+  from: string;
+  to: string;
+  amount: number;
+}
+
+// Reduce per-member net balances to a minimal set of "X owes Y" transfers.
+// For a two-person group this collapses to a single line.
+function simplifyDebts(
+  balances: { displayName: string; net: number }[],
+): Transfer[] {
+  const creditors = balances
+    .filter((b) => b.net > 0.01)
+    .map((b) => ({ name: b.displayName, amount: b.net }))
+    .sort((a, b) => b.amount - a.amount);
+  const debtors = balances
+    .filter((b) => b.net < -0.01)
+    .map((b) => ({ name: b.displayName, amount: -b.net }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const transfers: Transfer[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < debtors.length && j < creditors.length) {
+    const pay = Math.min(debtors[i].amount, creditors[j].amount);
+    transfers.push({ from: debtors[i].name, to: creditors[j].name, amount: pay });
+    debtors[i].amount -= pay;
+    creditors[j].amount -= pay;
+    if (debtors[i].amount <= 0.01) i++;
+    if (creditors[j].amount <= 0.01) j++;
+  }
+  return transfers;
+}
 
 export function Settlement({
   ctx,
@@ -54,6 +87,24 @@ export function Settlement({
   const monthRows = rows.filter((r) => r.date.slice(0, 7) === selectedMonth);
   const total = monthRows.reduce((s, r) => s + r.amount, 0);
   const nMembers = members.length;
+
+  // Per-member balance for the selected month: paid (fronted), owes (share of
+  // the bill = items split to them + their cut of equal-split items), net.
+  const equalPool = monthRows
+    .filter((r) => r.split === SPLIT_EQUAL)
+    .reduce((s, r) => s + r.amount, 0);
+  const equalShare = nMembers ? equalPool / nMembers : 0;
+  const balances = members.map((m) => {
+    const paid = monthRows
+      .filter((r) => r.payer === m.email)
+      .reduce((s, r) => s + r.amount, 0);
+    const owes =
+      monthRows
+        .filter((r) => r.split === m.email)
+        .reduce((s, r) => s + r.amount, 0) + equalShare;
+    return { email: m.email, displayName: m.displayName, paid, owes, net: paid - owes };
+  });
+  const transfers = simplifyDebts(balances);
 
   // Settle form state (group only; personal/solo has nothing to settle).
   const defaultSettledBy = payerOptions[0]?.value ?? "";
@@ -144,20 +195,19 @@ export function Settlement({
                     </tr>
                   </thead>
                   <tbody>
-                    {members.map((m) => {
-                      const paid = monthRows.filter((r) => r.payer === m.email).reduce((s, r) => s + r.amount, 0);
-                      const resp =
-                        monthRows.filter((r) => r.split === m.email).reduce((s, r) => s + r.amount, 0) +
-                        monthRows.filter((r) => r.split === SPLIT_EQUAL).reduce((s, r) => s + r.amount, 0) / nMembers;
-                      const net = paid - resp;
+                    {balances.map((b) => {
                       const status =
-                        net > 0.01 ? `Gets back ${formatINR(net)}` : net < -0.01 ? `Owes ${formatINR(Math.abs(net))}` : "Settled";
+                        b.net > 0.01
+                          ? `Gets back ${formatINR(b.net)}`
+                          : b.net < -0.01
+                          ? `Owes ${formatINR(Math.abs(b.net))}`
+                          : "Settled";
                       return (
-                        <tr key={m.email}>
-                          <td>{m.displayName}</td>
-                          <td className="text-right">{paid.toFixed(2)}</td>
-                          <td className="text-right">{resp.toFixed(2)}</td>
-                          <td className="text-right">{net.toFixed(2)}</td>
+                        <tr key={b.email}>
+                          <td>{b.displayName}</td>
+                          <td className="text-right">{b.paid.toFixed(2)}</td>
+                          <td className="text-right">{b.owes.toFixed(2)}</td>
+                          <td className="text-right">{b.net.toFixed(2)}</td>
                           <td>{status}</td>
                         </tr>
                       );
@@ -165,6 +215,22 @@ export function Settlement({
                   </tbody>
                 </table>
               </div>
+
+              {/* Bottom line: who owes whom, in plain English. */}
+              {transfers.length > 0 ? (
+                <div className="card space-y-1">
+                  {transfers.map((t, idx) => (
+                    <p key={idx} className="text-sm">
+                      <strong>{t.from}</strong> owes <strong>{t.to}</strong>{" "}
+                      <strong>{formatINR(t.amount)}</strong>
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <div className="alert-success">
+                  Everyone is settled up for {selectedMonth}.
+                </div>
+              )}
 
               {total > 0.01 ? (
                 <form onSubmit={settle} className="card space-y-4">
