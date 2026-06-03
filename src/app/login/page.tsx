@@ -51,7 +51,7 @@ export default async function LoginPage() {
         <div className="absolute -right-40 bottom-0 h-96 w-96 rounded-full bg-emerald-500/15 blur-3xl" />
       </div>
 
-      <div className="relative grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-surface shadow-2xl md:grid-cols-2">
+      <div className="relative grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-surface shadow-2xl md:h-[600px] md:grid-cols-2">
         {/* LEFT — sign in */}
         <section className="flex flex-col justify-center gap-8 px-8 py-14 sm:px-12">
           <Logo />
@@ -147,7 +147,7 @@ export default async function LoginPage() {
           <div
             aria-hidden
             style={{ backgroundImage: "url('/login-hero.png')" }}
-            className="absolute inset-0 z-20 bg-cover bg-center"
+            className="absolute inset-0 z-20 bg-cover bg-[center_35%]"
           />
         </section>
       </div>
