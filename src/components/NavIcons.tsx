@@ -154,6 +154,26 @@ function GroupsIcon() {
   );
 }
 
+function NotificationsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+      <defs>
+        <linearGradient id="navBell" gradientUnits="userSpaceOnUse" x1="6" y1="5" x2="18" y2="18">
+          <stop offset="0%" stopColor="#2F80ED" />
+          <stop offset="100%" stopColor="#17D4C6" />
+        </linearGradient>
+      </defs>
+      <circle cx="12" cy="3.4" r="1.4" fill="url(#navBell)" />
+      <path
+        d="M12 4.6 C 8.7 4.6, 8 7.4, 8 10.5 C 8 13.5, 7.3 15, 6.4 16 L 17.6 16 C 16.7 15, 16 13.5, 16 10.5 C 16 7.4, 15.3 4.6, 12 4.6 Z"
+        fill="url(#navBell)"
+      />
+      <rect x="5.8" y="15.4" width="12.4" height="2.3" rx="1.15" fill="url(#navBell)" />
+      <path d="M9.9 18 A2.1 2.1 0 0 0 14.1 18 Z" fill="url(#navBell)" />
+    </svg>
+  );
+}
+
 // href -> custom icon. Items absent here fall back to their emoji.
 export const NAV_ICONS: Record<string, FC> = {
   "/": HomeIcon,
@@ -161,5 +181,6 @@ export const NAV_ICONS: Record<string, FC> = {
   "/log": LogIcon,
   "/summary": SummaryIcon,
   "/settlement": SettlementIcon,
+  "/notifications": NotificationsIcon,
   "/groups": GroupsIcon,
 };
