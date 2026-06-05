@@ -90,7 +90,7 @@ export function Summary({
         </div>
       </div>
 
-      <h2 className="section-title">Overview — {selectedMonth}</h2>
+      <h2 className="section-title">Overview</h2>
 
       {isPersonal ? (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -102,9 +102,9 @@ export function Summary({
           <table className="data-table">
             <thead>
               <tr>
-                <th className="text-right">Total Spent</th>
+                <th className="text-center">Total Spent</th>
                 {members.map((m) => (
-                  <th key={m.email} className="text-right">
+                  <th key={m.email} className="text-center">
                     {m.displayName}
                   </th>
                 ))}
@@ -112,13 +112,13 @@ export function Summary({
             </thead>
             <tbody>
               <tr>
-                <td className="text-right font-semibold">{formatINR(total)}</td>
+                <td className="text-center font-semibold">{formatINR(total)}</td>
                 {members.map((m) => {
                   const paid = monthRows
                     .filter((r) => r.payer === m.email)
                     .reduce((s, r) => s + r.amount, 0);
                   return (
-                    <td key={m.email} className="text-right">
+                    <td key={m.email} className="text-center">
                       {formatINR(paid)}
                     </td>
                   );
