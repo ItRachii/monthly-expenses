@@ -97,8 +97,8 @@ export function ExpenseLog({
 
   return (
     <div className="space-y-6">
-      {/* Filters */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Filters — kept on a single horizontal line across all widths. */}
+      <div className="grid grid-cols-4 gap-3">
         <div>
           <label className="label">Month</label>
           <select className="select" value={month} onChange={(e) => setMonth(e.target.value)}>
