@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
@@ -38,11 +38,13 @@ export function Summary({
   isPersonal,
   nameMap,
   members,
+  contextSelector,
 }: {
   rows: ExpenseDTO[];
   isPersonal: boolean;
   nameMap: Record<string, string>;
   members: Member[];
+  contextSelector: ReactNode;
 }) {
   const months = useMemo(() => {
     const set = new Set(rows.map((r) => r.date.slice(0, 7)));
@@ -53,7 +55,12 @@ export function Summary({
   const [tab, setTab] = useState(0);
 
   if (rows.length === 0) {
-    return <div className="alert-info">No expenses recorded yet.</div>;
+    return (
+      <div className="space-y-6">
+        {contextSelector}
+        <div className="alert-info">No expenses recorded yet.</div>
+      </div>
+    );
   }
 
   const selectedMonth = months.includes(month) ? month : months[0];
@@ -70,13 +77,17 @@ export function Summary({
 
   return (
     <div className="space-y-6">
-      <div className="max-w-xs">
-        <label className="label">Select Month</label>
-        <select className="select" value={selectedMonth} onChange={(e) => setMonth(e.target.value)}>
-          {months.map((m) => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
+      {/* Context + month selectors on one horizontal line. */}
+      <div className="grid grid-cols-2 items-end gap-3">
+        {contextSelector}
+        <div>
+          <label className="label">Select Month</label>
+          <select className="select" value={selectedMonth} onChange={(e) => setMonth(e.target.value)}>
+            {months.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <h2 className="section-title">Overview — {selectedMonth}</h2>

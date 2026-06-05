@@ -37,6 +37,7 @@ export default async function LogPage({
             label="View expenses for:"
             options={r.options}
             current={r.ctxValue}
+            className="w-full"
           />
         }
       />

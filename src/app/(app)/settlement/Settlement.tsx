@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
 import type { SettlementDTO } from "@/lib/settlements";
@@ -59,6 +59,7 @@ export function Settlement({
   nameMap,
   members,
   payerOptions,
+  contextSelector,
 }: {
   ctx: string;
   rows: ExpenseDTO[];
@@ -67,6 +68,7 @@ export function Settlement({
   nameMap: Record<string, string>;
   members: Member[];
   payerOptions: Opt[];
+  contextSelector: ReactNode;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -136,20 +138,29 @@ export function Settlement({
   }
 
   if (rows.length === 0) {
-    return <div className="alert-info">No expenses recorded yet.</div>;
+    return (
+      <div className="space-y-6">
+        {contextSelector}
+        <div className="alert-info">No expenses recorded yet.</div>
+      </div>
+    );
   }
 
   const settledRec = settlements.find((s) => s.month === selectedMonth);
 
   return (
     <div className="space-y-6">
-      <div className="max-w-xs">
-        <label className="label">Select Month</label>
-        <select className="select" value={selectedMonth} onChange={(e) => setMonth(e.target.value)}>
-          {months.map((m) => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
+      {/* Context + month selectors on one horizontal line. */}
+      <div className="grid grid-cols-2 items-end gap-3">
+        {contextSelector}
+        <div>
+          <label className="label">Select Month</label>
+          <select className="select" value={selectedMonth} onChange={(e) => setMonth(e.target.value)}>
+            {months.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <h2 className="section-title">Balance — {selectedMonth}</h2>

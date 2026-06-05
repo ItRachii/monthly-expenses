@@ -18,13 +18,20 @@ export default async function SummaryPage({
   return (
     <div className="space-y-6">
       <h1>Monthly Summary</h1>
-      <ContextSelector label="View summary for:" options={r.options} current={r.ctxValue} />
       {r.error ? <div className="alert-error">{r.error}</div> : null}
       <Summary
         rows={rows}
         isPersonal={r.isPersonal}
         nameMap={r.nameMap}
         members={r.members.map((m) => ({ email: m.email, displayName: m.displayName }))}
+        contextSelector={
+          <ContextSelector
+            label="View summary for:"
+            options={r.options}
+            current={r.ctxValue}
+            className="w-full"
+          />
+        }
       />
     </div>
   );

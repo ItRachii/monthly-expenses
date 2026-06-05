@@ -22,7 +22,6 @@ export default async function SettlementPage({
   return (
     <div className="space-y-6">
       <h1>Settlement</h1>
-      <ContextSelector label="Settle expenses for:" options={r.options} current={r.ctxValue} />
       {r.error ? <div className="alert-error">{r.error}</div> : null}
       <Settlement
         ctx={r.ctxValue}
@@ -32,6 +31,14 @@ export default async function SettlementPage({
         nameMap={r.nameMap}
         members={r.members.map((m) => ({ email: m.email, displayName: m.displayName }))}
         payerOptions={payerOptions}
+        contextSelector={
+          <ContextSelector
+            label="Settle expenses for:"
+            options={r.options}
+            current={r.ctxValue}
+            className="w-full"
+          />
+        }
       />
     </div>
   );

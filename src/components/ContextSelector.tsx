@@ -11,10 +11,12 @@ export function ContextSelector({
   label,
   options,
   current,
+  className = "max-w-xs",
 }: {
   label: string;
   options: ContextOption[];
   current: string;
+  className?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -32,7 +34,7 @@ export function ContextSelector({
   }
 
   return (
-    <div className="max-w-xs">
+    <div className={className}>
       <label className="label">{label}</label>
       <select className="select" value={current} onChange={onChange}>
         {options.map((o) => (
