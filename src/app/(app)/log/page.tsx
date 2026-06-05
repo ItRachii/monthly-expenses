@@ -25,7 +25,6 @@ export default async function LogPage({
   return (
     <div className="space-y-6">
       <h1>Expense Log</h1>
-      <ContextSelector label="View expenses for:" options={r.options} current={r.ctxValue} />
       {r.error ? <div className="alert-error">{r.error}</div> : null}
       <ExpenseLog
         rows={rows}
@@ -33,6 +32,13 @@ export default async function LogPage({
         categories={[...CATEGORIES]}
         payerOptions={payerOptions}
         splitOptions={splitOptions}
+        contextSelector={
+          <ContextSelector
+            label="View expenses for:"
+            options={r.options}
+            current={r.ctxValue}
+          />
+        }
       />
     </div>
   );

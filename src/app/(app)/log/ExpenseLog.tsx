@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { SPLIT_EQUAL } from "@/lib/constants";
@@ -19,12 +19,14 @@ export function ExpenseLog({
   categories,
   payerOptions,
   splitOptions,
+  contextSelector,
 }: {
   rows: ExpenseDTO[];
   nameMap: Record<string, string>;
   categories: string[];
   payerOptions: Opt[];
   splitOptions: Opt[];
+  contextSelector: ReactNode;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -89,16 +91,21 @@ export function ExpenseLog({
 
   if (rows.length === 0) {
     return (
-      <div className="alert-info">
-        No expenses recorded yet. Head to <strong>Add Expense</strong> to get started.
+      <div className="space-y-6">
+        {contextSelector}
+        <div className="alert-info">
+          No expenses recorded yet. Head to <strong>Add Expense</strong> to get started.
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Filters — kept on a single horizontal line across all widths. */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* Filters — context selector + data filters on one horizontal line.
+          items-end keeps the selects aligned if a label wraps. */}
+      <div className="grid grid-cols-5 items-end gap-3">
+        {contextSelector}
         <div>
           <label className="label">Month</label>
           <select className="select" value={month} onChange={(e) => setMonth(e.target.value)}>
