@@ -50,10 +50,15 @@ export function NavLinks({
                 : "text-muted hover:bg-white/5 hover:text-ink"
             } ${collapsed ? "md:justify-center md:px-2" : ""}`}
           >
-            <span aria-hidden className="relative">
+            <span
+              aria-hidden
+              className={`relative leading-none ${
+                collapsed ? "md:text-4xl" : ""
+              }`}
+            >
               {it.icon}
               {showBadge && collapsed ? (
-                <span className="absolute -right-1.5 -top-1.5 hidden h-2 w-2 rounded-full bg-primary md:block" />
+                <span className="absolute -right-1 -top-1 hidden h-2.5 w-2.5 rounded-full bg-primary md:block" />
               ) : null}
             </span>
             <span className={`flex-1 ${collapsed ? "md:hidden" : ""}`}>
