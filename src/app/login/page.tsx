@@ -11,7 +11,7 @@ function Logo() {
         <circle cx="20" cy="20" r="16" stroke="currentColor" strokeWidth="3" />
         <path d="M4 20a16 16 0 0 0 32 0Z" fill="currentColor" />
       </svg>
-      <span className="text-lg font-bold tracking-tight">.Finance</span>
+      <span className="text-lg font-bold tracking-tight">Ledger</span>
     </div>
   );
 }
