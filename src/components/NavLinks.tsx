@@ -12,11 +12,10 @@ const items = [
   { href: "/settlement", label: "Settlement", icon: "💰" },
   { href: "/notifications", label: "Notifications", icon: "🔔" },
   { href: "/groups", label: "Groups", icon: "👥" },
-  { href: "/profile", label: "Profile", icon: "👤" },
 ];
 
-// Tabs that operate on the selected Personal/Group context. The Groups and
-// Profile pages are context-agnostic, so we don't carry ?ctx into them.
+// Tabs that operate on the selected Personal/Group context. The Groups page
+// is context-agnostic, so we don't carry ?ctx into it.
 const contextAware = new Set(["/", "/add", "/log", "/summary", "/settlement"]);
 
 export function NavLinks({

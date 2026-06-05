@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { NavLinks } from "./NavLinks";
 import { doSignOut } from "@/lib/actions/auth";
 
@@ -30,16 +31,27 @@ export function Sidebar({
         }`}
       >
         <div className={`flex items-center gap-3 ${collapsed ? "md:flex-col" : ""}`}>
-          {image ? (
-            <img
-              src={image}
-              alt=""
-              className="h-9 w-9 rounded-full"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <span className="text-2xl">👤</span>
-          )}
+          {/* The avatar is the entry point to the profile page (the old
+              Profile nav item was redundant with it). */}
+          <Link
+            href="/profile"
+            aria-label="Profile"
+            title="Profile"
+            className="shrink-0 rounded-full outline-none transition hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            {image ? (
+              <img
+                src={image}
+                alt=""
+                className="h-9 w-9 rounded-full"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-white/5 text-xl">
+                👤
+              </span>
+            )}
+          </Link>
           <span
             className={`flex-1 truncate text-sm font-semibold ${
               collapsed ? "md:hidden" : ""
