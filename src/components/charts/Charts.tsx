@@ -42,15 +42,50 @@ export function CategoryPie({ data }: { data: { category: string; amount: number
   );
 }
 
+// The bar colors come from per-category <Cell>s, which Recharts does not pass
+// to the default tooltip (it uses the series fill). Render our own so the
+// tooltip text matches the hovered bar's color.
+function CategoryBarTooltip({
+  active,
+  payload,
+  colorOf,
+}: {
+  active?: boolean;
+  payload?: Array<{ value: number; payload: { category: string } }>;
+  colorOf: (category: string) => string;
+}) {
+  if (!active || !payload?.length) return null;
+  const category = payload[0].payload.category;
+  const color = colorOf(category);
+  return (
+    <div style={tooltipStyle} className="px-3 py-2 text-sm">
+      <div className="mb-0.5 flex items-center gap-2 font-semibold" style={{ color }}>
+        <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />
+        {category}
+      </div>
+      <div>amount : {money(payload[0].value)}</div>
+    </div>
+  );
+}
+
 export function CategoryBar({ data }: { data: { category: string; amount: number }[] }) {
   const sorted = [...data].sort((a, b) => a.amount - b.amount);
+  // Same mapping used for the <Cell>s below, keyed by category so the tooltip
+  // resolves the identical color.
+  const colorOf = (category: string) => {
+    const i = sorted.findIndex((d) => d.category === category);
+    return CHART_COLORS[(i < 0 ? 0 : i) % CHART_COLORS.length];
+  };
   return (
     <div className="h-80 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={sorted} layout="vertical" margin={{ left: 20 }}>
           <XAxis type="number" tick={axisTick} />
           <YAxis type="category" dataKey="category" width={90} tick={axisTick} />
-          <Tooltip contentStyle={tooltipStyle} formatter={money} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+          <Tooltip
+            cursor={{ fill: "rgba(255,255,255,0.05)" }}
+            content={<CategoryBarTooltip colorOf={colorOf} />}
+          />
           <Bar dataKey="amount">
             {sorted.map((_, i) => (
               <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
