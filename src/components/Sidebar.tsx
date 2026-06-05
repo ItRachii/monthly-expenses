@@ -30,16 +30,6 @@ export function Sidebar({
         }`}
       >
         <div className={`flex items-center gap-3 ${collapsed ? "md:flex-col" : ""}`}>
-          <button
-            type="button"
-            onClick={() => setCollapsed((v) => !v)}
-            aria-label={collapsed ? "Expand sidebar" : "Minimise sidebar"}
-            aria-expanded={!collapsed}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-white/5 hover:text-ink"
-          >
-            {collapsed ? <ChevronRightIcon /> : <HamburgerIcon />}
-          </button>
-
           {image ? (
             <img
               src={image}
@@ -51,12 +41,25 @@ export function Sidebar({
             <span className="text-2xl">👤</span>
           )}
           <span
-            className={`truncate text-sm font-semibold ${
+            className={`flex-1 truncate text-sm font-semibold ${
               collapsed ? "md:hidden" : ""
             }`}
           >
             {name}
           </span>
+          {/* Open: hamburger sits at the top-right. Collapsed rail: it moves
+              to the top of the column above the avatar. */}
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            aria-label={collapsed ? "Expand sidebar" : "Minimise sidebar"}
+            aria-expanded={!collapsed}
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-white/5 hover:text-ink ${
+              collapsed ? "md:order-first" : ""
+            }`}
+          >
+            {collapsed ? <ChevronRightIcon /> : <HamburgerIcon />}
+          </button>
         </div>
 
         <div className={collapsed ? "hidden w-full md:block" : "w-full"}>
