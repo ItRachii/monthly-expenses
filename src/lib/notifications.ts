@@ -3,6 +3,7 @@ import { getGroupMembers } from "./groups";
 
 export type NotificationType =
   | "expense_added"
+  | "expense_updated"
   | "expense_deleted"
   | "settlement_recorded";
 

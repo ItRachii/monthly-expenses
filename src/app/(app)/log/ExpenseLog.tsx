@@ -2,10 +2,10 @@
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { ExpenseDTO } from "@/lib/expenses";
+import type { ExpenseDTO, ExpenseChangeDTO } from "@/lib/expenses";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
-import { deleteExpenseAction } from "@/lib/actions/expenses";
+import { deleteExpenseAction, updateExpenseAction } from "@/lib/actions/expenses";
 import { Metric } from "@/components/Metric";
 
 interface Opt {
@@ -20,6 +20,8 @@ export function ExpenseLog({
   payerOptions,
   splitOptions,
   contextSelector,
+  isPersonal,
+  recentChanges,
 }: {
   rows: ExpenseDTO[];
   nameMap: Record<string, string>;
@@ -27,6 +29,8 @@ export function ExpenseLog({
   payerOptions: Opt[];
   splitOptions: Opt[];
   contextSelector: ReactNode;
+  isPersonal: boolean;
+  recentChanges: ExpenseChangeDTO[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -35,6 +39,7 @@ export function ExpenseLog({
   const [category, setCategory] = useState("All");
   const [payer, setPayer] = useState("All");
   const [split, setSplit] = useState("All");
+  const [editing, setEditing] = useState<ExpenseDTO | null>(null);
 
   const months = useMemo(() => {
     const set = new Set(rows.map((r) => r.date.slice(0, 7)));
@@ -148,6 +153,27 @@ export function ExpenseLog({
         <Metric label="Total Spent" value={formatINR(totalSpent)} />
       </div>
 
+      {/* Recent updates — captured by the expenses CDC trigger. */}
+      {recentChanges.length > 0 ? (
+        <div className="card space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="section-title text-base">Recent updates</h2>
+            <span className="pill text-muted">live change capture</span>
+          </div>
+          <ul className="space-y-1.5">
+            {recentChanges.map((c) => (
+              <li key={c.id} className="flex items-start gap-2 text-sm">
+                <span aria-hidden>{CHANGE_ICON[c.operation]}</span>
+                <span className="flex-1 text-ink/90">{c.summary}</span>
+                <span className="shrink-0 text-xs text-muted" title={c.changedAt}>
+                  {c.when}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {/* Table */}
       <div className="card overflow-x-auto p-0">
         <table className="data-table">
@@ -172,15 +198,26 @@ export function ExpenseLog({
                 <td>{payerLabel(r.payer)}</td>
                 <td>{splitLabel(r.split)}</td>
                 <td className="text-right">
-                  <button
-                    className="text-red-400 hover:text-red-300 disabled:opacity-50"
-                    onClick={() => remove(r.id)}
-                    disabled={pending}
-                    aria-label="Delete expense"
-                    title="Delete"
-                  >
-                    🗑
-                  </button>
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      className="text-muted hover:text-ink disabled:opacity-50"
+                      onClick={() => setEditing(r)}
+                      disabled={pending}
+                      aria-label="Edit expense"
+                      title="Edit"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                      onClick={() => remove(r.id)}
+                      disabled={pending}
+                      aria-label="Delete expense"
+                      title="Delete"
+                    >
+                      🗑
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -198,6 +235,190 @@ export function ExpenseLog({
       <button className="btn-secondary" onClick={exportCsv} disabled={filtered.length === 0}>
         Export to CSV
       </button>
+
+      {editing ? (
+        <EditExpenseModal
+          expense={editing}
+          categories={categories}
+          payerOptions={payerOptions}
+          splitOptions={splitOptions}
+          isPersonal={isPersonal}
+          onClose={() => setEditing(null)}
+          onSaved={() => router.refresh()}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+const CHANGE_ICON: Record<ExpenseChangeDTO["operation"], string> = {
+  INSERT: "➕",
+  UPDATE: "✏️",
+  DELETE: "🗑",
+};
+
+function EditExpenseModal({
+  expense,
+  categories,
+  payerOptions,
+  splitOptions,
+  isPersonal,
+  onClose,
+  onSaved,
+}: {
+  expense: ExpenseDTO;
+  categories: string[];
+  payerOptions: Opt[];
+  splitOptions: Opt[];
+  isPersonal: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [date, setDate] = useState(expense.date);
+  const [category, setCategory] = useState(expense.category);
+  const [item, setItem] = useState(expense.item);
+  const [amount, setAmount] = useState(String(expense.amount));
+  const [payer, setPayer] = useState(expense.payer);
+  const [split, setSplit] = useState(expense.split);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function save(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const amt = parseFloat(amount);
+    if (!item.trim()) {
+      setError("Please enter an item description.");
+      return;
+    }
+    if (isNaN(amt) || amt <= 0) {
+      setError("Amount must be greater than zero.");
+      return;
+    }
+    startTransition(async () => {
+      const res = await updateExpenseAction(expense.id, {
+        date,
+        category,
+        item,
+        amount: amt,
+        payer,
+        split,
+      });
+      if (res.ok) {
+        onSaved();
+        onClose();
+      } else {
+        setError(res.error ?? "Something went wrong.");
+      }
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={save}
+        className="card max-h-[90vh] w-full max-w-md space-y-4 overflow-y-auto"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="section-title">Edit Expense</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted hover:text-ink"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div>
+          <label className="label">Date</label>
+          <input
+            type="date"
+            className="input"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label">Category</label>
+          <select
+            className="select"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Item / Description</label>
+          <input className="input" value={item} onChange={(e) => setItem(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Amount (₹)</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            className="input"
+            value={amount}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "" || /^\d*\.?\d*$/.test(v)) setAmount(v);
+            }}
+          />
+        </div>
+        {!isPersonal ? (
+          <>
+            <div>
+              <label className="label">Payer</label>
+              <select
+                className="select"
+                value={payer}
+                onChange={(e) => setPayer(e.target.value)}
+              >
+                {payerOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Split</label>
+              <select
+                className="select"
+                value={split}
+                onChange={(e) => setSplit(e.target.value)}
+              >
+                {splitOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        ) : null}
+
+        {error ? <div className="alert-error">{error}</div> : null}
+
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={pending}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-primary" disabled={pending}>
+            {pending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
