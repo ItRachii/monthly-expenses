@@ -1,13 +1,14 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { getPendingInvitesForUser } from "@/lib/groups";
 import { PendingInvites } from "@/components/PendingInvites";
 
 const pages = [
-  ["Add Expense", "Log a new expense — date, category, amount, payer, and split"],
-  ["Expense Log", "View, filter, and delete expenses; export to CSV"],
-  ["Monthly Summary", "Charts and per-person breakdown for any month"],
-  ["Settlement", "See the net balance and mark months as settled"],
-  ["Groups", "Create groups, send invites, manage members"],
+  ["Add Expense", "Log a new expense — date, category, amount, payer, and split", "/add"],
+  ["Expense Log", "View, filter, edit, and delete expenses; export to CSV", "/log"],
+  ["Monthly Summary", "Charts and per-person breakdown for any month", "/summary"],
+  ["Settlement", "See the net balance and mark months as settled", "/settlement"],
+  ["Groups", "Create groups, send invites, manage members", "/groups"],
 ];
 
 const splits = [
@@ -35,11 +36,23 @@ export default async function HomePage() {
       <section className="space-y-3">
         <h2 className="section-title">Pages</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {pages.map(([title, desc]) => (
-            <div key={title} className="card">
-              <div className="font-semibold">{title}</div>
+          {pages.map(([title, desc, href]) => (
+            <Link
+              key={title}
+              href={href}
+              className="card group transition hover:border-white/20 hover:bg-white/5"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">{title}</span>
+                <span
+                  aria-hidden
+                  className="text-muted transition group-hover:translate-x-0.5 group-hover:text-ink"
+                >
+                  →
+                </span>
+              </div>
               <div className="mt-1 text-sm text-muted">{desc}</div>
-            </div>
+            </Link>
           ))}
         </div>
       </section>
