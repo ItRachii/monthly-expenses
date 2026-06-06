@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { ExpenseDTO, ExpenseChangeDTO } from "@/lib/expenses";
+import type { ExpenseDTO } from "@/lib/expenses";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 import { deleteExpenseAction, updateExpenseAction } from "@/lib/actions/expenses";
@@ -21,7 +21,6 @@ export function ExpenseLog({
   splitOptions,
   contextSelector,
   isPersonal,
-  recentChanges,
 }: {
   rows: ExpenseDTO[];
   nameMap: Record<string, string>;
@@ -30,7 +29,6 @@ export function ExpenseLog({
   splitOptions: Opt[];
   contextSelector: ReactNode;
   isPersonal: boolean;
-  recentChanges: ExpenseChangeDTO[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -153,27 +151,6 @@ export function ExpenseLog({
         <Metric label="Total Spent" value={formatINR(totalSpent)} />
       </div>
 
-      {/* Recent updates — captured by the expenses CDC trigger. */}
-      {recentChanges.length > 0 ? (
-        <div className="card space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="section-title text-base">Recent updates</h2>
-            <span className="pill text-muted">live change capture</span>
-          </div>
-          <ul className="space-y-1.5">
-            {recentChanges.map((c) => (
-              <li key={c.id} className="flex items-start gap-2 text-sm">
-                <span aria-hidden>{CHANGE_ICON[c.operation]}</span>
-                <span className="flex-1 text-ink/90">{c.summary}</span>
-                <span className="shrink-0 text-xs text-muted" title={c.changedAt}>
-                  {c.when}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
       {/* Table */}
       <div className="card overflow-x-auto p-0">
         <table className="data-table">
@@ -250,12 +227,6 @@ export function ExpenseLog({
     </div>
   );
 }
-
-const CHANGE_ICON: Record<ExpenseChangeDTO["operation"], string> = {
-  INSERT: "➕",
-  UPDATE: "✏️",
-  DELETE: "🗑",
-};
 
 function EditExpenseModal({
   expense,

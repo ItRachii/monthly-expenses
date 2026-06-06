@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { resolveContext } from "@/lib/resolveContext";
-import { getExpenses, getRecentExpenseChanges } from "@/lib/expenses";
+import { getExpenses } from "@/lib/expenses";
 import { ContextSelector } from "@/components/ContextSelector";
 import { CATEGORIES, SPLIT_EQUAL } from "@/lib/constants";
 import { ExpenseLog } from "./ExpenseLog";
@@ -15,9 +15,6 @@ export default async function LogPage({
   const ctxParam = typeof sp.ctx === "string" ? sp.ctx : undefined;
   const r = await resolveContext(user.email, ctxParam);
   const rows = r.error ? [] : await getExpenses(r.context, "desc");
-  const recentChanges = r.error
-    ? []
-    : await getRecentExpenseChanges(r.context, r.nameMap);
 
   const payerOptions = r.members.map((m) => ({ value: m.email, label: m.displayName }));
   const splitOptions = [
@@ -36,7 +33,6 @@ export default async function LogPage({
         payerOptions={payerOptions}
         splitOptions={splitOptions}
         isPersonal={r.isPersonal}
-        recentChanges={recentChanges}
         contextSelector={
           <ContextSelector
             label="View expenses for:"
