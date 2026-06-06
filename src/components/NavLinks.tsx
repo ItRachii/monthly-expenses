@@ -45,7 +45,7 @@ export function NavLinks({
             key={it.href}
             href={href}
             title={collapsed ? it.label : undefined}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-base transition ${
               active
                 ? "bg-primary/15 font-semibold text-ink"
                 : "text-muted hover:bg-white/5 hover:text-ink"
@@ -54,7 +54,7 @@ export function NavLinks({
             <span
               aria-hidden
               className={`relative leading-none ${
-                collapsed ? "md:text-4xl" : ""
+                collapsed ? "md:text-4xl" : "text-lg"
               }`}
             >
               {Icon ? <Icon /> : it.icon}
