@@ -158,23 +158,21 @@ function NotificationsIcon() {
   return (
     <svg viewBox="0 0 24 24" className={cls} aria-hidden>
       <defs>
-        <linearGradient id="navBell" gradientUnits="userSpaceOnUse" x1="6" y1="5" x2="18" y2="18">
+        <linearGradient id="navBell" gradientUnits="userSpaceOnUse" x1="4" y1="6" x2="20" y2="18">
           <stop offset="0%" stopColor="#2F80ED" />
           <stop offset="100%" stopColor="#17D4C6" />
         </linearGradient>
       </defs>
-      {/* The bell artwork is tall/narrow, so it filled less of the viewBox than
-          the other icons and looked shrunk. Scale it up about its centre to
-          match their footprint. */}
-      <g transform="translate(12 12) scale(1.2) translate(-12 -11.05)">
-        <circle cx="12" cy="3.4" r="1.4" fill="url(#navBell)" />
-        <path
-          d="M12 4.6 C 8.7 4.6, 8 7.4, 8 10.5 C 8 13.5, 7.3 15, 6.4 16 L 17.6 16 C 16.7 15, 16 13.5, 16 10.5 C 16 7.4, 15.3 4.6, 12 4.6 Z"
-          fill="url(#navBell)"
-        />
-        <rect x="5.8" y="15.4" width="12.4" height="2.3" rx="1.15" fill="url(#navBell)" />
-        <path d="M9.9 18 A2.1 2.1 0 0 0 14.1 18 Z" fill="url(#navBell)" />
-      </g>
+      {/* Drawn wide and full so its bounding box is close to square and fills
+          the viewBox like the other icons; a tall, narrow bell looked
+          elongated next to them in the rail. */}
+      <circle cx="12" cy="4" r="1.7" fill="url(#navBell)" />
+      <path
+        d="M12 5.4 C 8 5.4, 6.6 8.5, 6.4 11.5 C 6.25 14, 5.5 16.2, 3.4 17.8 L 20.6 17.8 C 18.5 16.2, 17.75 14, 17.6 11.5 C 17.4 8.5, 16 5.4, 12 5.4 Z"
+        fill="url(#navBell)"
+      />
+      <rect x="2.6" y="17.2" width="18.8" height="2.4" rx="1.2" fill="url(#navBell)" />
+      <path d="M9.4 20 A2.6 2.6 0 0 0 14.6 20 Z" fill="url(#navBell)" />
     </svg>
   );
 }
