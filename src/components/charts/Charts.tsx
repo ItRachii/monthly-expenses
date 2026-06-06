@@ -24,12 +24,53 @@ const tooltipStyle = {
 };
 const money = (v: unknown) => formatINR(Number(v));
 
+const RADIAN = Math.PI / 180;
+
+// Draws each slice's value just outside the donut (paired with a leader line).
+function renderPieValueLabel({
+  cx = 0,
+  cy = 0,
+  midAngle = 0,
+  outerRadius = 0,
+  value = 0,
+}: {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  outerRadius?: number;
+  value?: number;
+}) {
+  const r = outerRadius + 16;
+  const x = cx + r * Math.cos(-midAngle * RADIAN);
+  const y = cy + r * Math.sin(-midAngle * RADIAN);
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#FAFAFA"
+      fontSize={12}
+      textAnchor={x >= cx ? "start" : "end"}
+      dominantBaseline="central"
+    >
+      {formatINR(value)}
+    </text>
+  );
+}
+
 export function CategoryPie({ data }: { data: { category: string; amount: number }[] }) {
   return (
     <div className="h-80 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
-          <Pie data={data} dataKey="amount" nameKey="category" innerRadius={55} outerRadius={110}>
+          <Pie
+            data={data}
+            dataKey="amount"
+            nameKey="category"
+            innerRadius={52}
+            outerRadius={98}
+            label={renderPieValueLabel}
+            labelLine={{ stroke: "rgba(255,255,255,0.25)" }}
+          >
             {data.map((_, i) => (
               <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
             ))}
