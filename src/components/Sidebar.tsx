@@ -1,9 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { NavLinks } from "./NavLinks";
+import { useSidebar } from "./SidebarContext";
 import { doSignOut } from "@/lib/actions/auth";
 
 export function Sidebar({
@@ -15,7 +15,7 @@ export function Sidebar({
   image: string | null;
   unreadCount: number;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, setCollapsed } = useSidebar();
 
   return (
     <aside

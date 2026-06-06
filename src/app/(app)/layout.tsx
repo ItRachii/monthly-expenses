@@ -1,6 +1,8 @@
 import { requireUser } from "@/lib/session";
 import { getUnreadCount } from "@/lib/notifications";
 import { Sidebar } from "@/components/Sidebar";
+import { SidebarProvider } from "@/components/SidebarContext";
+import { AppMain } from "@/components/AppMain";
 
 // Every page in this group depends on the signed-in user, so never prerender.
 export const dynamic = "force-dynamic";
@@ -19,11 +21,11 @@ export default async function AppLayout({
   const unreadCount = await getUnreadCount(user.email);
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
-      <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} />
-      <main className="flex-1 overflow-x-hidden p-5 md:p-8">
-        <div className="mx-auto max-w-5xl space-y-6">{children}</div>
-      </main>
-    </div>
+    <SidebarProvider>
+      <div className="flex min-h-screen flex-col md:flex-row">
+        <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} />
+        <AppMain>{children}</AppMain>
+      </div>
+    </SidebarProvider>
   );
 }
