@@ -47,9 +47,7 @@ export function Sidebar({
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-white/5 text-xl">
-                👤
-              </span>
+              <ProfileAvatar />
             )}
           </Link>
           <span
@@ -95,6 +93,33 @@ export function Sidebar({
         </form>
       </div>
     </aside>
+  );
+}
+
+function ProfileAvatar() {
+  // Fallback when the signed-in user has no Google profile image: a gradient
+  // person-in-circle, sized to fill the same 36px avatar slot as the photo.
+  return (
+    <svg viewBox="0 0 24 24" className="h-9 w-9" aria-hidden>
+      <defs>
+        <linearGradient id="profileBg" gradientUnits="userSpaceOnUse" x1="4" y1="20" x2="20" y2="4">
+          <stop offset="0%" stopColor="#1E5FCF" />
+          <stop offset="100%" stopColor="#1FB8B0" />
+        </linearGradient>
+        <linearGradient id="profilePerson" gradientUnits="userSpaceOnUse" x1="12" y1="6" x2="12" y2="23">
+          <stop offset="0%" stopColor="#6FE0EA" />
+          <stop offset="100%" stopColor="#2E84F5" />
+        </linearGradient>
+        <clipPath id="profileClip">
+          <circle cx="12" cy="12" r="12" />
+        </clipPath>
+      </defs>
+      <circle cx="12" cy="12" r="12" fill="url(#profileBg)" />
+      <g clipPath="url(#profileClip)" fill="url(#profilePerson)">
+        <circle cx="12" cy="9" r="3.1" />
+        <path d="M4.6 23.6 A7.4 8.6 0 0 1 19.4 23.6 Z" />
+      </g>
+    </svg>
   );
 }
 
