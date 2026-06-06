@@ -53,6 +53,7 @@ export function Summary({
 
   const [month, setMonth] = useState(months[0] ?? "");
   const [tab, setTab] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   if (rows.length === 0) {
     return (
@@ -69,6 +70,10 @@ export function Summary({
 
   const categoryData = byCategory(monthRows);
   const trendData = byMonth(rows);
+  // Clicking a pie slice filters the detail table to that category.
+  const detailRows = selectedCategory
+    ? monthRows.filter((r) => r.category === selectedCategory)
+    : monthRows;
 
   const tabs = ["Category (Pie)", "Category (Bar)", "Monthly Trend"];
 
@@ -82,7 +87,14 @@ export function Summary({
         {contextSelector}
         <div>
           <label className="label">Select Month</label>
-          <select className="select" value={selectedMonth} onChange={(e) => setMonth(e.target.value)}>
+          <select
+            className="select"
+            value={selectedMonth}
+            onChange={(e) => {
+              setMonth(e.target.value);
+              setSelectedCategory(null);
+            }}
+          >
             {months.map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
@@ -146,15 +158,41 @@ export function Summary({
           ))}
         </div>
         <div className="card">
-          {tabs[tab] === "Category (Pie)" && <CategoryPie data={categoryData} />}
+          {tabs[tab] === "Category (Pie)" && (
+            <CategoryPie
+              data={categoryData}
+              selected={selectedCategory}
+              onSelect={(c) =>
+                setSelectedCategory((prev) => (prev === c ? null : c))
+              }
+            />
+          )}
           {tabs[tab] === "Category (Bar)" && <CategoryBar data={categoryData} />}
           {tabs[tab] === "Monthly Trend" && <MonthlyTrend data={trendData} />}
         </div>
+        {tabs[tab] === "Category (Pie)" ? (
+          <p className="text-xs text-muted">
+            Click a slice to filter the expense detail below.
+          </p>
+        ) : null}
       </div>
 
       {/* Detail table */}
       <div className="space-y-2">
-        <h2 className="section-title">Expense Detail</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="section-title">
+            Expense Detail{selectedCategory ? ` — ${selectedCategory}` : ""}
+          </h2>
+          {selectedCategory ? (
+            <button
+              type="button"
+              onClick={() => setSelectedCategory(null)}
+              className="text-sm text-muted hover:text-ink"
+            >
+              Clear filter ✕
+            </button>
+          ) : null}
+        </div>
         <div className="card overflow-x-auto p-0">
           <table className="data-table">
             <thead>
@@ -168,7 +206,7 @@ export function Summary({
               </tr>
             </thead>
             <tbody>
-              {monthRows.map((r) => (
+              {detailRows.map((r) => (
                 <tr key={r.id}>
                   <td>{r.date}</td>
                   <td>{r.category}</td>
@@ -178,6 +216,13 @@ export function Summary({
                   <td>{splitLabel(r.split)}</td>
                 </tr>
               ))}
+              {detailRows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center text-muted">
+                    No expenses in this category.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

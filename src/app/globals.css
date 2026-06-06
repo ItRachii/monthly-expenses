@@ -94,3 +94,12 @@
     margin: 0;
   }
 }
+
+/* Recharts: don't draw the focus outline box when a chart segment (e.g. a pie
+   slice) is clicked. */
+.recharts-wrapper :focus,
+.recharts-wrapper :focus-visible,
+.recharts-surface,
+.recharts-sector {
+  outline: none;
+}

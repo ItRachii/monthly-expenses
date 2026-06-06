@@ -57,7 +57,15 @@ function renderPieValueLabel({
   );
 }
 
-export function CategoryPie({ data }: { data: { category: string; amount: number }[] }) {
+export function CategoryPie({
+  data,
+  selected,
+  onSelect,
+}: {
+  data: { category: string; amount: number }[];
+  selected?: string | null;
+  onSelect?: (category: string) => void;
+}) {
   return (
     <div className="h-80 w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -70,9 +78,18 @@ export function CategoryPie({ data }: { data: { category: string; amount: number
             outerRadius={98}
             label={renderPieValueLabel}
             labelLine={{ stroke: "rgba(255,255,255,0.25)" }}
+            onClick={(_, index) => {
+              const cat = data[index]?.category;
+              if (cat) onSelect?.(cat);
+            }}
           >
-            {data.map((_, i) => (
-              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+            {data.map((entry, i) => (
+              <Cell
+                key={i}
+                fill={CHART_COLORS[i % CHART_COLORS.length]}
+                fillOpacity={selected && selected !== entry.category ? 0.3 : 1}
+                cursor={onSelect ? "pointer" : undefined}
+              />
             ))}
           </Pie>
           <Tooltip contentStyle={tooltipStyle} formatter={money} />
