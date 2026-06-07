@@ -81,7 +81,7 @@ function GroupCard({ email, group }: { email: string; group: GroupView }) {
   return (
     <details className="card">
       <summary className="cursor-pointer select-none font-semibold">
-        {group.isAdmin ? "👑" : "👤"} {group.name}
+        {group.name}
         {group.description ? (
           <span className="font-normal text-muted"> — {group.description}</span>
         ) : null}
