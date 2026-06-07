@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createExpense, updateExpense, deleteExpense } from "@/lib/expenses";
-import { isGroupMember, getGroupMembers } from "@/lib/groups";
+import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
 import { formatINR } from "@/lib/format";
@@ -60,7 +60,7 @@ export async function addExpenseAction(input: {
     // Validate: payer must be a member email; split must be "equal" or a member
     // email. On anything invalid, fall back to a safe default.
     const memberEmails = new Set(
-      (await getGroupMembers(input.ctx)).map((m) => m.email),
+      (await getGroupParticipants(input.ctx)).map((m) => m.email),
     );
     if (!memberEmails.has(payer)) payer = email;
     if (split !== SPLIT_EQUAL && !memberEmails.has(split)) split = SPLIT_EQUAL;
@@ -128,7 +128,7 @@ export async function updateExpenseAction(
     if (!(await isGroupMember(exp.groupId, email)))
       return { ok: false, error: "Not authorized." };
     const memberEmails = new Set(
-      (await getGroupMembers(exp.groupId)).map((m) => m.email),
+      (await getGroupParticipants(exp.groupId)).map((m) => m.email),
     );
     if (!memberEmails.has(payer)) payer = exp.payer;
     if (split !== SPLIT_EQUAL && !memberEmails.has(split)) split = SPLIT_EQUAL;

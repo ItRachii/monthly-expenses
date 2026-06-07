@@ -115,6 +115,54 @@ export async function isGroupMember(groupId: string, userEmail: string): Promise
   return m !== null;
 }
 
+// Members + people with a still-pending invite. Used wherever expenses are
+// split: invitees participate in splits/settlements before they accept (their
+// email is the key, so it stays valid once they join). Access control still
+// uses isGroupMember / getGroupMembers — being invited doesn't grant access.
+export async function getGroupParticipants(groupId: string): Promise<MemberDTO[]> {
+  const members = await prisma.groupMember.findMany({ where: { groupId } });
+  const invites = await prisma.groupInvite.findMany({
+    where: { groupId, status: "pending" },
+  });
+  const memberEmails = new Set(members.map((m) => m.email));
+
+  const rows: { email: string; displayName: string; role: string; joinedAt: Date }[] = [
+    ...members.map((m) => ({
+      email: m.email,
+      displayName: m.displayName ?? "",
+      role: m.role ?? "member",
+      joinedAt: m.joinedAt,
+    })),
+    ...invites
+      .filter((inv) => !memberEmails.has(inv.invitedEmail))
+      .map((inv) => ({
+        email: inv.invitedEmail,
+        displayName: "",
+        role: "invited",
+        joinedAt: inv.createdAt,
+      })),
+  ];
+
+  const users = await prisma.appUser.findMany({
+    where: { email: { in: rows.map((r) => r.email) } },
+  });
+  const byEmail = new Map(users.map((u) => [u.email, u]));
+  return rows.map((m) => {
+    const u = byEmail.get(m.email);
+    const display = u
+      ? u.username && u.username.trim()
+        ? u.username.trim()
+        : u.firstName
+      : m.displayName || m.email;
+    return {
+      email: m.email,
+      displayName: display,
+      role: m.role,
+      joinedAt: m.joinedAt.toISOString(),
+    };
+  });
+}
+
 export async function removeMember(groupId: string, userEmail: string): Promise<void> {
   await prisma.groupMember.deleteMany({ where: { groupId, email: userEmail } });
 }

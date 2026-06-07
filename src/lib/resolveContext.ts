@@ -1,4 +1,4 @@
-import { getUserGroups, getGroupMembers, type MemberDTO } from "./groups";
+import { getUserGroups, getGroupParticipants, type MemberDTO } from "./groups";
 import { getAppUser, displayNameFor } from "./users";
 import type { Context } from "./context";
 
@@ -52,7 +52,7 @@ export async function resolveContext(
     return personal("You are not a member of this group.");
   }
 
-  const members = await getGroupMembers(wanted);
+  const members = await getGroupParticipants(wanted);
   const nameMap: Record<string, string> = {};
   for (const m of members) nameMap[m.email] = m.displayName;
 
