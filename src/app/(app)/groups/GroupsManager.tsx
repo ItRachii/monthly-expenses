@@ -10,6 +10,9 @@ import {
   leaveGroupAction,
   removeMemberAction,
 } from "@/lib/actions/groups";
+import { NAV_ICONS } from "@/components/NavIcons";
+
+const GroupsIcon = NAV_ICONS["/groups"];
 
 export interface GroupView {
   id: string;
@@ -29,39 +32,43 @@ export function GroupsManager({
   email: string;
   groups: GroupView[];
 }) {
-  const [tab, setTab] = useState<"my" | "create">("my");
+  const [showCreate, setShowCreate] = useState(false);
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        {(["my", "create"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-lg px-3 py-1.5 text-sm transition ${
-              tab === t ? "bg-primary/20 font-semibold text-ink" : "text-muted hover:bg-white/5"
-            }`}
-          >
-            {t === "my" ? "My Groups" : "Create New Group"}
-          </button>
-        ))}
-      </div>
-
-      {tab === "my" ? (
-        groups.length === 0 ? (
-          <div className="alert-info">
-            You are not part of any group yet. Create one or wait for an invite!
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {groups.map((g) => (
-              <GroupCard key={g.id} email={email} group={g} />
-            ))}
-          </div>
-        )
+      {groups.length === 0 ? (
+        <div className="alert-info">
+          You are not part of any group yet. Tap the + button to create one, or
+          wait for an invite!
+        </div>
       ) : (
-        <CreateGroupForm />
+        <div className="space-y-3">
+          {groups.map((g) => (
+            <GroupCard key={g.id} email={email} group={g} />
+          ))}
+        </div>
       )}
+
+      {/* Floating button to create a group — the Groups icon with a + badge.
+          Sits above the mobile bottom nav (and bottom-right on desktop). */}
+      <button
+        type="button"
+        onClick={() => setShowCreate(true)}
+        aria-label="Create a group"
+        title="Create a group"
+        className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 grid h-14 w-14 place-items-center rounded-full border border-white/15 bg-surface shadow-xl transition hover:bg-white/5 active:scale-95 md:bottom-6 md:right-6"
+      >
+        <span className="relative text-3xl leading-none">
+          {GroupsIcon ? <GroupsIcon /> : "👥"}
+          <span className="absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-primary text-sm font-bold leading-none text-white ring-2 ring-surface">
+            +
+          </span>
+        </span>
+      </button>
+
+      {showCreate ? (
+        <CreateGroupModal onClose={() => setShowCreate(false)} />
+      ) : null}
     </div>
   );
 }
@@ -235,56 +242,79 @@ function InviteForm({ groupId }: { groupId: string }) {
   );
 }
 
-function CreateGroupForm() {
+function CreateGroupModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     startTransition(async () => {
       const res = await createGroupAction(name, description);
       if (res.ok) {
-        setMessage({ ok: true, text: res.message ?? "Group created." });
-        setName("");
-        setDescription("");
         router.refresh();
+        onClose();
       } else {
-        setMessage({ ok: false, text: res.error ?? "Something went wrong." });
+        setError(res.error ?? "Something went wrong.");
       }
     });
   }
 
   return (
-    <form onSubmit={submit} className="card max-w-lg space-y-4">
-      <h2 className="section-title">Create a New Group</h2>
-      <div>
-        <label className="label">Group Name *</label>
-        <input
-          className="input"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Apartment Mates"
-        />
-      </div>
-      <div>
-        <label className="label">Description (optional)</label>
-        <textarea
-          className="textarea"
-          rows={3}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="What is this group for?"
-        />
-      </div>
-      {message ? (
-        <div className={message.ok ? "alert-success" : "alert-error"}>{message.text}</div>
-      ) : null}
-      <button type="submit" className="btn-primary" disabled={pending}>
-        {pending ? "Creating…" : "Create Group"}
-      </button>
-    </form>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
+      onClick={onClose}
+    >
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+        className="card w-full space-y-4 rounded-b-none md:max-w-lg md:rounded-xl"
+        style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="section-title">Create a group</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="text-muted hover:text-ink"
+          >
+            ✕
+          </button>
+        </div>
+        <div>
+          <label className="label">Group Name *</label>
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Apartment Mates"
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="label">Description (optional)</label>
+          <textarea
+            className="textarea"
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What is this group for?"
+          />
+        </div>
+        {error ? <div className="alert-error">{error}</div> : null}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={pending}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-primary" disabled={pending}>
+            {pending ? "Creating…" : "Create Group"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
