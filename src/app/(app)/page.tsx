@@ -59,14 +59,16 @@ export default async function HomePage() {
 
       <section className="space-y-3">
         <h2 className="section-title">Split types</h2>
-        <div className="card space-y-2">
+        <div className="card space-y-3">
           {splits.map(([k, v]) => (
-            <div key={k} className="flex gap-3 text-sm">
-              <span className="pill shrink-0 font-mono">{k}</span>
+            <div key={k} className="flex items-start gap-3 text-sm">
+              <span className="pill min-w-[8rem] shrink-0 text-center font-mono">
+                {k}
+              </span>
               <span className="text-muted">{v}</span>
             </div>
           ))}
-          <p className="pt-2 text-xs text-muted">
+          <p className="pt-1 text-xs text-muted">
             The <strong className="text-ink">Payer</strong> field records who
             physically paid. The <strong className="text-ink">Split</strong> field
             records who owes what. These are tracked independently so the balance is

@@ -21,6 +21,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#0E1117",
+  // Let content extend into the safe-area zones; the app layout pads for them.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
