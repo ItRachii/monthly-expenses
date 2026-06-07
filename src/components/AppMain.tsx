@@ -8,7 +8,7 @@ import { useSidebar } from "./SidebarContext";
 export function AppMain({ children }: { children: ReactNode }) {
   const { collapsed } = useSidebar();
   return (
-    <main className="flex-1 overflow-x-hidden p-5 md:p-8">
+    <main className="flex-1 overflow-x-hidden p-5 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-8 md:pb-8">
       <div
         className={`space-y-6 ${collapsed ? "max-w-none" : "mx-auto max-w-5xl"}`}
       >

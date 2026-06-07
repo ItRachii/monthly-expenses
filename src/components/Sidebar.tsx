@@ -19,7 +19,7 @@ export function Sidebar({
 
   return (
     <aside
-      className={`w-full shrink-0 border-b border-white/10 bg-surface/40 transition-[width] md:border-b-0 md:border-r ${
+      className={`hidden w-full shrink-0 border-b border-white/10 bg-surface/40 transition-[width] md:block md:border-b-0 md:border-r ${
         collapsed ? "md:w-16" : "md:w-64"
       }`}
     >

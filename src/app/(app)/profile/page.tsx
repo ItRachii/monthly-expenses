@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/session";
+import { doSignOut } from "@/lib/actions/auth";
 import { ProfileForm } from "./ProfileForm";
 
 export default async function ProfilePage() {
@@ -21,6 +22,12 @@ export default async function ProfilePage() {
         firstName={user.appUser.firstName}
         username={user.appUser.username}
       />
+
+      <form action={doSignOut} className="border-t border-white/10 pt-4">
+        <button type="submit" className="btn-secondary">
+          Sign out
+        </button>
+      </form>
     </div>
   );
 }

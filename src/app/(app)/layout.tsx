@@ -3,6 +3,8 @@ import { getUnreadCount } from "@/lib/notifications";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/SidebarContext";
 import { AppMain } from "@/components/AppMain";
+import { MobileTopBar } from "@/components/MobileTopBar";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 
 // Every page in this group depends on the signed-in user, so never prerender.
 export const dynamic = "force-dynamic";
@@ -22,11 +24,13 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider>
-      {/* Pad by the device safe-area insets so the app sits clear of notches
-          and the home indicator in standalone (PWA) mode. */}
-      <div className="flex min-h-screen flex-col pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex-row">
+      <div className="flex min-h-screen flex-col md:flex-row">
+        {/* Desktop: left sidebar. Mobile: a top bar (profile + notifications)
+            and a bottom tab bar — these handle their own safe-area insets. */}
         <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} />
+        <MobileTopBar image={user.image} unreadCount={unreadCount} />
         <AppMain>{children}</AppMain>
+        <MobileBottomNav />
       </div>
     </SidebarProvider>
   );
