@@ -1,9 +1,26 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { PWARegister } from "@/components/PWARegister";
 
 export const metadata: Metadata = {
   title: "Ledger — Monthly Expenses",
   description: "Track every expense, own every dollar.",
+  applicationName: "Ledger",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Ledger",
+    statusBarStyle: "black",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    shortcut: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0E1117",
 };
 
 export default function RootLayout({
@@ -13,7 +30,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        {children}
+        <PWARegister />
+      </body>
     </html>
   );
 }
