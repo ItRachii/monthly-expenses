@@ -5,6 +5,7 @@ import {
   getGroupMembers,
   getGroupInvites,
 } from "@/lib/groups";
+import { wireKey } from "@/lib/wire";
 import { PendingInvites } from "@/components/PendingInvites";
 import { GroupsManager, type GroupView } from "./GroupsManager";
 
@@ -29,10 +30,12 @@ export default async function GroupsPage() {
         role: g.role ?? "member",
         isAdmin,
         isCreator: g.createdBy === user.email,
+        // Members ship with opaque, group-scoped keys only — emails stay server-side.
         members: members.map((m) => ({
-          email: m.email,
+          key: wireKey(g.id, m.email),
           displayName: m.displayName,
           role: m.role,
+          isSelf: m.email === user.email,
         })),
         pendingInvites,
       };
@@ -43,7 +46,7 @@ export default async function GroupsPage() {
     <div className="space-y-6">
       <h1>👥 Groups</h1>
       {pending.length > 0 ? <PendingInvites invites={pending} /> : null}
-      <GroupsManager email={user.email} groups={views} />
+      <GroupsManager groups={views} />
     </div>
   );
 }

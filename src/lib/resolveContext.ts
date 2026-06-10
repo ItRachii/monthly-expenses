@@ -1,5 +1,6 @@
 import { getUserGroups, getGroupParticipants, type MemberDTO } from "./groups";
 import { getAppUser, displayNameFor } from "./users";
+import { buildPersonalWire, buildWire, type Wire } from "./wire";
 import type { Context } from "./context";
 
 export interface ResolvedContext {
@@ -7,9 +8,13 @@ export interface ResolvedContext {
   isPersonal: boolean;
   context: Context;
   options: { value: string; label: string }[];
-  /** email -> display name. Personal is solo, so this is just the user. */
-  nameMap: Record<string, string>;
+  /**
+   * Server-side participant list (contains emails). Use it for server logic
+   * only — anything passed to a client component must come from `wire`.
+   */
   members: MemberDTO[];
+  /** Client-safe view: opaque member keys + display names, no emails. */
+  wire: Wire;
   error?: string;
 }
 
@@ -31,14 +36,14 @@ export async function resolveContext(
 
   async function personal(error?: string): Promise<ResolvedContext> {
     const appUser = await getAppUser(email);
-    const displayName = displayNameFor(appUser, email);
+    const displayName = displayNameFor(appUser, "You");
     return {
       ctxValue: "personal",
       isPersonal: true,
       context: { kind: "personal", email },
       options,
-      nameMap: { [email]: displayName },
       members: [],
+      wire: buildPersonalWire(email, displayName),
       error,
     };
   }
@@ -52,16 +57,16 @@ export async function resolveContext(
     return personal("You are not a member of this group.");
   }
 
+  // Participants = members + pending invitees (invitees can appear in splits
+  // before accepting). The wire assigns each an opaque, group-scoped key.
   const members = await getGroupParticipants(wanted);
-  const nameMap: Record<string, string> = {};
-  for (const m of members) nameMap[m.email] = m.displayName;
 
   return {
     ctxValue: wanted,
     isPersonal: false,
     context: { kind: "group", groupId: wanted },
     options,
-    nameMap,
     members,
+    wire: buildWire(wanted, members, email),
   };
 }

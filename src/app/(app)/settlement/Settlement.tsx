@@ -10,7 +10,8 @@ import { Metric } from "@/components/Metric";
 import { settleAction } from "@/lib/actions/settlements";
 
 interface Member {
-  email: string;
+  /** Opaque member key — matches the masked payer/split values in rows. */
+  key: string;
   displayName: string;
 }
 interface Opt {
@@ -98,13 +99,13 @@ export function Settlement({
   const equalShare = nMembers ? equalPool / nMembers : 0;
   const balances = members.map((m) => {
     const paid = monthRows
-      .filter((r) => r.payer === m.email)
+      .filter((r) => r.payer === m.key)
       .reduce((s, r) => s + r.amount, 0);
     const owes =
       monthRows
-        .filter((r) => r.split === m.email)
+        .filter((r) => r.split === m.key)
         .reduce((s, r) => s + r.amount, 0) + equalShare;
-    return { email: m.email, displayName: m.displayName, paid, owes, net: paid - owes };
+    return { key: m.key, displayName: m.displayName, paid, owes, net: paid - owes };
   });
   const transfers = simplifyDebts(balances);
 
@@ -214,7 +215,7 @@ export function Settlement({
                           ? `Owes ${formatINR(Math.abs(b.net))}`
                           : "Settled";
                       return (
-                        <tr key={b.email}>
+                        <tr key={b.key}>
                           <td>{b.displayName}</td>
                           <td className="text-right">{b.paid.toFixed(2)}</td>
                           <td className="text-right">{b.owes.toFixed(2)}</td>

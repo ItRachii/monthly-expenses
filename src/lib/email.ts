@@ -1,7 +1,9 @@
 import nodemailer from "nodemailer";
+import { escapeHtml } from "./pii";
 
 // Ported from legacy-streamlit/utils/email.py — Gmail SMTP with a 587 STARTTLS
-// attempt and a 465 SSL fallback. Reads SMTP_* env vars.
+// attempt and a 465 SSL fallback. Reads SMTP_* env vars. TLS is mandatory on
+// both paths so credentials and recipient PII never travel in plaintext.
 
 interface SmtpConfig {
   host: string;
@@ -34,12 +36,17 @@ export async function sendInviteEmail(
     return { ok: false, error: "SMTP credentials are not configured." };
   }
 
+  // Group names and inviter labels are user input — escape them so a crafted
+  // group name can't inject HTML into mail sent to arbitrary addresses.
+  const safeInviter = escapeHtml(invitedBy);
+  const safeGroup = escapeHtml(groupName);
+
   const html = `
     <html>
       <body style="font-family: Arial, sans-serif; color: #333;">
         <p>Hi,</p>
-        <p><strong>${invitedBy}</strong> has invited you to join the group
-        <strong>"${groupName}"</strong> on <em>Monthly Expense Tracker</em>.</p>
+        <p><strong>${safeInviter}</strong> has invited you to join the group
+        <strong>"${safeGroup}"</strong> on <em>Monthly Expense Tracker</em>.</p>
         <p>Sign in to the app to accept or decline the invite.</p>
         <hr style="border:none; border-top:1px solid #eee;">
         <p style="color:#888; font-size:12px;">— Monthly Expense Tracker</p>
@@ -49,16 +56,19 @@ export async function sendInviteEmail(
   const message = {
     from: cfg.from,
     to: toEmail,
-    subject: `You've been invited to join '${groupName}'`,
+    subject: `You've been invited to join '${groupName.replace(/[\r\n]+/g, " ")}'`,
     html,
   };
 
-  // Attempt 1: configured port (587 STARTTLS by default)
+  // Attempt 1: configured port (587 STARTTLS by default). requireTLS makes
+  // nodemailer fail instead of silently sending plaintext when STARTTLS is
+  // unavailable.
   try {
     const transport = nodemailer.createTransport({
       host: cfg.host,
       port: cfg.port,
       secure: cfg.port === 465,
+      requireTLS: true,
       auth: { user: cfg.username, pass: cfg.password },
       connectionTimeout: 15000,
     });

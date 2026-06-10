@@ -14,18 +14,18 @@ export default async function AddPage({
   const ctxParam = typeof sp.ctx === "string" ? sp.ctx : undefined;
   const r = await resolveContext(user.email, ctxParam);
 
-  // Group: payer = members (value=email, label=nickname); split = Equal + members.
-  // Personal is solo, so the form hides these and the server forces the values.
-  const payerOptions = r.members.map((m) => ({ value: m.email, label: m.displayName }));
+  // Group: payer = participants (value=opaque key, label=nickname); split =
+  // Equal + participants. Raw emails stay on the server; the action resolves
+  // keys. Personal is solo, so the form hides these and the server forces them.
+  const payerOptions = r.wire.members.map((m) => ({ value: m.key, label: m.displayName }));
   const splitOptions = [
     { value: SPLIT_EQUAL, label: "Equal Split" },
-    ...r.members.map((m) => ({ value: m.email, label: m.displayName })),
+    ...r.wire.members.map((m) => ({ value: m.key, label: m.displayName })),
   ];
 
   // Default payer is the logged-in user when they are a member, else first member.
-  const defaultPayer = r.members.some((m) => m.email === user.email)
-    ? user.email
-    : payerOptions[0]?.value ?? "";
+  const defaultPayer =
+    r.wire.members.find((m) => m.isSelf)?.key ?? payerOptions[0]?.value ?? "";
 
   return (
     <div className="space-y-6">
@@ -43,7 +43,7 @@ export default async function AddPage({
           splitOptions={splitOptions}
           defaultPayer={defaultPayer}
           defaultSplit={SPLIT_EQUAL}
-          memberCount={r.members.length}
+          memberCount={r.wire.members.length}
         />
       )}
     </div>

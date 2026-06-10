@@ -21,17 +21,11 @@ export interface GroupView {
   role: string;
   isAdmin: boolean;
   isCreator: boolean;
-  members: { email: string; displayName: string; role: string }[];
+  members: { key: string; displayName: string; role: string; isSelf: boolean }[];
   pendingInvites: { id: number; invitedEmail: string }[];
 }
 
-export function GroupsManager({
-  email,
-  groups,
-}: {
-  email: string;
-  groups: GroupView[];
-}) {
+export function GroupsManager({ groups }: { groups: GroupView[] }) {
   const [showCreate, setShowCreate] = useState(false);
 
   return (
@@ -44,7 +38,7 @@ export function GroupsManager({
       ) : (
         <div className="space-y-3">
           {groups.map((g) => (
-            <GroupCard key={g.id} email={email} group={g} />
+            <GroupCard key={g.id} group={g} />
           ))}
         </div>
       )}
@@ -73,7 +67,7 @@ export function GroupsManager({
   );
 }
 
-function GroupCard({ email, group }: { email: string; group: GroupView }) {
+function GroupCard({ group }: { group: GroupView }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -110,18 +104,18 @@ function GroupCard({ email, group }: { email: string; group: GroupView }) {
             </thead>
             <tbody>
               {group.members.map((m) => (
-                <tr key={m.email}>
+                <tr key={m.key}>
                   <td>
                     {m.displayName}
-                    {m.email === email ? <span className="text-muted"> (you)</span> : null}
+                    {m.isSelf ? <span className="text-muted"> (you)</span> : null}
                   </td>
                   <td className="capitalize">{m.role}</td>
                   <td className="text-right">
-                    {group.isAdmin && m.email !== email ? (
+                    {group.isAdmin && !m.isSelf ? (
                       <button
                         className="text-red-400 hover:text-red-300"
                         disabled={pending}
-                        onClick={() => run(() => removeMemberAction(group.id, m.email))}
+                        onClick={() => run(() => removeMemberAction(group.id, m.key))}
                       >
                         Remove
                       </button>

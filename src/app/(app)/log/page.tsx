@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/session";
 import { resolveContext } from "@/lib/resolveContext";
 import { getExpenses } from "@/lib/expenses";
+import { maskExpenses } from "@/lib/wire";
 import { ContextSelector } from "@/components/ContextSelector";
 import { CATEGORIES, SPLIT_EQUAL } from "@/lib/constants";
 import { ExpenseLog } from "./ExpenseLog";
@@ -14,12 +15,13 @@ export default async function LogPage({
   const user = await requireUser();
   const ctxParam = typeof sp.ctx === "string" ? sp.ctx : undefined;
   const r = await resolveContext(user.email, ctxParam);
-  const rows = r.error ? [] : await getExpenses(r.context, "desc");
+  // maskExpenses swaps payer/split emails for opaque keys before the client.
+  const rows = r.error ? [] : maskExpenses(await getExpenses(r.context, "desc"), r.wire);
 
-  const payerOptions = r.members.map((m) => ({ value: m.email, label: m.displayName }));
+  const payerOptions = r.wire.members.map((m) => ({ value: m.key, label: m.displayName }));
   const splitOptions = [
     { value: SPLIT_EQUAL, label: "Equal Split" },
-    ...r.members.map((m) => ({ value: m.email, label: m.displayName })),
+    ...r.wire.members.map((m) => ({ value: m.key, label: m.displayName })),
   ];
 
   return (
@@ -28,7 +30,7 @@ export default async function LogPage({
       {r.error ? <div className="alert-error">{r.error}</div> : null}
       <ExpenseLog
         rows={rows}
-        nameMap={r.nameMap}
+        nameMap={r.wire.nameMap}
         categories={[...CATEGORIES]}
         payerOptions={payerOptions}
         splitOptions={splitOptions}

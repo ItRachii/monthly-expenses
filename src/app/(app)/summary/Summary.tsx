@@ -12,7 +12,8 @@ import {
 } from "@/components/charts/Charts";
 
 interface Member {
-  email: string;
+  /** Opaque member key — matches the masked payer/split values in rows. */
+  key: string;
   displayName: string;
 }
 
@@ -116,7 +117,7 @@ export function Summary({
               <tr>
                 <th className="text-center">Total Spent</th>
                 {members.map((m) => (
-                  <th key={m.email} className="text-center">
+                  <th key={m.key} className="text-center">
                     {m.displayName}
                   </th>
                 ))}
@@ -127,10 +128,10 @@ export function Summary({
                 <td className="text-center font-semibold">{formatINR(total)}</td>
                 {members.map((m) => {
                   const paid = monthRows
-                    .filter((r) => r.payer === m.email)
+                    .filter((r) => r.payer === m.key)
                     .reduce((s, r) => s + r.amount, 0);
                   return (
-                    <td key={m.email} className="text-center">
+                    <td key={m.key} className="text-center">
                       {formatINR(paid)}
                     </td>
                   );

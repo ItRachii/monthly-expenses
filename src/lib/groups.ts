@@ -1,5 +1,7 @@
 import { randomBytes } from "crypto";
 import { prisma } from "./prisma";
+import { displayNameFor } from "./users";
+import { maskEmail } from "./pii";
 
 // Ported from legacy-streamlit/utils/groups.py
 
@@ -24,6 +26,7 @@ export interface PendingInviteDTO {
   groupId: string;
   groupName: string;
   groupDescription: string | null;
+  /** Display label for the inviter (name + masked email), never the raw address. */
   invitedBy: string;
 }
 
@@ -207,13 +210,23 @@ export async function getPendingInvitesForUser(
     where: { invitedEmail: userEmail.toLowerCase(), status: "pending" },
     include: { group: true },
   });
-  return invites.map((inv) => ({
-    inviteId: inv.id,
-    groupId: inv.groupId,
-    groupName: inv.group.name,
-    groupDescription: inv.group.description,
-    invitedBy: inv.invitedBy,
-  }));
+  // Label the inviter by name + masked email — never expose their raw address
+  // to the (possibly not-yet-acquainted) invitee.
+  const inviters = await prisma.appUser.findMany({
+    where: { email: { in: invites.map((i) => i.invitedBy) } },
+  });
+  const byEmail = new Map(inviters.map((u) => [u.email, u]));
+  return invites.map((inv) => {
+    const masked = maskEmail(inv.invitedBy);
+    const name = displayNameFor(byEmail.get(inv.invitedBy) ?? null, masked);
+    return {
+      inviteId: inv.id,
+      groupId: inv.groupId,
+      groupName: inv.group.name,
+      groupDescription: inv.group.description,
+      invitedBy: name === masked ? masked : `${name} (${masked})`,
+    };
+  });
 }
 
 export async function respondToInvite(
@@ -260,6 +273,10 @@ export async function getGroupInvites(groupId: string): Promise<GroupInviteDTO[]
   }));
 }
 
-export async function cancelInvite(inviteId: number): Promise<void> {
-  await prisma.groupInvite.deleteMany({ where: { id: inviteId } });
+/**
+ * Cancels an invite, scoped to the group the caller is authorized for, so an
+ * admin of one group can never cancel another group's invites by guessing ids.
+ */
+export async function cancelInvite(groupId: string, inviteId: number): Promise<void> {
+  await prisma.groupInvite.deleteMany({ where: { id: inviteId, groupId } });
 }

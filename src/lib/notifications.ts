@@ -7,10 +7,11 @@ export type NotificationType =
   | "expense_deleted"
   | "settlement_recorded";
 
+// Deliberately excludes actor_email: the client renders only the message
+// (which uses display names), so the actor's address never leaves the server.
 export interface NotificationDTO {
   id: number;
   groupId: string;
-  actorEmail: string;
   type: string;
   message: string;
   isRead: boolean;
@@ -57,7 +58,6 @@ export async function getNotifications(
   return rows.map((n) => ({
     id: n.id,
     groupId: n.groupId,
-    actorEmail: n.actorEmail,
     type: n.type,
     message: n.message,
     isRead: n.isRead,
