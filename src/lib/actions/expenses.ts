@@ -8,7 +8,7 @@ import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
 import { formatINR } from "@/lib/format";
-import { CATEGORIES, SPLIT_EQUAL } from "@/lib/constants";
+import { SPLIT_EQUAL } from "@/lib/constants";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { emailForKey } from "@/lib/wire";
 import { maskEmail } from "@/lib/pii";
@@ -36,15 +36,18 @@ function validateExpenseInput(input: {
   category: string;
   item: string;
   amount: number;
-}): { item: string } | { error: string } {
+}): { item: string; category: string } | { error: string } {
   const item = cleanText(input.item, 200);
   if (!item) return { error: "Please enter an item description." };
   if (!isValidDateISO(input.date)) return { error: "Please pick a valid date." };
   if (!isValidAmount(input.amount))
     return { error: "Amount must be a positive number." };
-  if (!(CATEGORIES as readonly string[]).includes(input.category))
-    return { error: "Please pick a valid category." };
-  return { item };
+  // Category is cleaned free text, not a whitelist: the dropdown only suggests
+  // the standard set, but legacy rows carry values outside it ("Clothes",
+  // "Rent", "", lowercase variants) that must remain editable. The label is
+  // escaped on render and capped here, so an arbitrary string is harmless.
+  const category = cleanText(input.category, 50);
+  return { item, category };
 }
 
 export async function addExpenseAction(input: {
@@ -62,7 +65,7 @@ export async function addExpenseAction(input: {
 
   const checked = validateExpenseInput(input);
   if ("error" in checked) return { ok: false, error: checked.error };
-  const item = checked.item;
+  const { item, category } = checked;
 
   let ownerEmail: string | null = null;
   let groupId: string | null = null;
@@ -93,7 +96,7 @@ export async function addExpenseAction(input: {
 
   await createExpense({
     date: input.date,
-    category: input.category,
+    category,
     item,
     amount: input.amount,
     payer,
@@ -139,7 +142,7 @@ export async function updateExpenseAction(
 
   const checked = validateExpenseInput(input);
   if ("error" in checked) return { ok: false, error: checked.error };
-  const item = checked.item;
+  const { item, category } = checked;
 
   const exp = await prisma.expense.findUnique({ where: { id } });
   if (!exp) return { ok: false, error: "Expense not found." };
@@ -170,7 +173,7 @@ export async function updateExpenseAction(
   // The Postgres trigger records this update in expense_changes (CDC).
   await updateExpense(id, {
     date: input.date,
-    category: input.category,
+    category,
     item,
     amount: input.amount,
     payer,

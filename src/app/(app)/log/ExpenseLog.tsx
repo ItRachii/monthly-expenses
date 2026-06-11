@@ -219,6 +219,7 @@ export function ExpenseLog({
           categories={categories}
           payerOptions={payerOptions}
           splitOptions={splitOptions}
+          nameMap={nameMap}
           isPersonal={isPersonal}
           onClose={() => setEditing(null)}
           onSaved={() => router.refresh()}
@@ -233,6 +234,7 @@ function EditExpenseModal({
   categories,
   payerOptions,
   splitOptions,
+  nameMap,
   isPersonal,
   onClose,
   onSaved,
@@ -241,6 +243,7 @@ function EditExpenseModal({
   categories: string[];
   payerOptions: Opt[];
   splitOptions: Opt[];
+  nameMap: Record<string, string>;
   isPersonal: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -253,6 +256,32 @@ function EditExpenseModal({
   const [split, setSplit] = useState(expense.split);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Legacy rows can hold a category outside the standard set ("Clothes", "",
+  // lowercase variants) or a payer/split for someone no longer in the group.
+  // Surface those original values as options so the row displays honestly and
+  // round-trips unchanged when the user only edits other fields.
+  const categoryOptions = useMemo(
+    () =>
+      categories.includes(expense.category)
+        ? categories
+        : [expense.category, ...categories],
+    [categories, expense.category],
+  );
+  const effPayerOptions = useMemo(
+    () =>
+      payerOptions.some((o) => o.value === expense.payer)
+        ? payerOptions
+        : [{ value: expense.payer, label: nameMap[expense.payer] ?? expense.payer }, ...payerOptions],
+    [payerOptions, expense.payer, nameMap],
+  );
+  const effSplitOptions = useMemo(
+    () =>
+      expense.split === SPLIT_EQUAL || splitOptions.some((o) => o.value === expense.split)
+        ? splitOptions
+        : [{ value: expense.split, label: nameMap[expense.split] ?? expense.split }, ...splitOptions],
+    [splitOptions, expense.split, nameMap],
+  );
 
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -322,9 +351,9 @@ function EditExpenseModal({
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >
-            {categories.map((c) => (
+            {categoryOptions.map((c) => (
               <option key={c} value={c}>
-                {c}
+                {c === "" ? "(uncategorized)" : c}
               </option>
             ))}
           </select>
@@ -355,7 +384,7 @@ function EditExpenseModal({
                 value={payer}
                 onChange={(e) => setPayer(e.target.value)}
               >
-                {payerOptions.map((o) => (
+                {effPayerOptions.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
@@ -369,7 +398,7 @@ function EditExpenseModal({
                 value={split}
                 onChange={(e) => setSplit(e.target.value)}
               >
-                {splitOptions.map((o) => (
+                {effSplitOptions.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
