@@ -7,6 +7,7 @@ import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 import { deleteExpenseAction, updateExpenseAction } from "@/lib/actions/expenses";
 import { Metric } from "@/components/Metric";
+import { CategorySelect } from "@/components/CategorySelect";
 
 interface Opt {
   value: string;
@@ -257,17 +258,10 @@ function EditExpenseModal({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Legacy rows can hold a category outside the standard set ("Clothes", "",
-  // lowercase variants) or a payer/split for someone no longer in the group.
-  // Surface those original values as options so the row displays honestly and
-  // round-trips unchanged when the user only edits other fields.
-  const categoryOptions = useMemo(
-    () =>
-      categories.includes(expense.category)
-        ? categories
-        : [expense.category, ...categories],
-    [categories, expense.category],
-  );
+  // Legacy rows can hold a payer/split for someone no longer in the group.
+  // Surface that original value as an option so the row displays honestly and
+  // round-trips unchanged when the user only edits other fields. (CategorySelect
+  // handles the same concern for out-of-list categories.)
   const effPayerOptions = useMemo(
     () =>
       payerOptions.some((o) => o.value === expense.payer)
@@ -346,17 +340,7 @@ function EditExpenseModal({
         </div>
         <div>
           <label className="label">Category</label>
-          <select
-            className="select"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            {categoryOptions.map((c) => (
-              <option key={c} value={c}>
-                {c === "" ? "(uncategorized)" : c}
-              </option>
-            ))}
-          </select>
+          <CategorySelect categories={categories} value={category} onChange={setCategory} />
         </div>
         <div>
           <label className="label">Item / Description</label>

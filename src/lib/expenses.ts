@@ -19,6 +19,16 @@ function whereForContext(ctx: Context) {
     : { groupId: ctx.groupId };
 }
 
+/** Distinct, non-empty categories already used in this context's expenses. */
+export async function getUsedCategories(ctx: Context): Promise<string[]> {
+  const rows = await prisma.expense.findMany({
+    where: whereForContext(ctx),
+    select: { category: true },
+    distinct: ["category"],
+  });
+  return rows.map((r) => r.category).filter((c) => c && c.trim());
+}
+
 export async function getExpenses(
   ctx: Context,
   order: "asc" | "desc" = "desc",

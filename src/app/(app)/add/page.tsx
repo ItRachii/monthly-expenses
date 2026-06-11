@@ -1,7 +1,8 @@
 import { requireUser } from "@/lib/session";
 import { resolveContext } from "@/lib/resolveContext";
+import { getUsedCategories } from "@/lib/expenses";
 import { ContextSelector } from "@/components/ContextSelector";
-import { CATEGORIES, SPLIT_EQUAL } from "@/lib/constants";
+import { SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
 import { AddExpenseForm } from "./AddExpenseForm";
 
 export default async function AddPage({
@@ -13,6 +14,8 @@ export default async function AddPage({
   const user = await requireUser();
   const ctxParam = typeof sp.ctx === "string" ? sp.ctx : undefined;
   const r = await resolveContext(user.email, ctxParam);
+  // Standard categories plus any the user already created in this context.
+  const categories = mergeCategories(r.error ? [] : await getUsedCategories(r.context));
 
   // Group: payer = participants (value=opaque key, label=nickname); split =
   // Equal + participants. Raw emails stay on the server; the action resolves
@@ -38,7 +41,7 @@ export default async function AddPage({
         <AddExpenseForm
           ctx={r.ctxValue}
           isPersonal={r.isPersonal}
-          categories={[...CATEGORIES]}
+          categories={categories}
           payerOptions={payerOptions}
           splitOptions={splitOptions}
           defaultPayer={defaultPayer}

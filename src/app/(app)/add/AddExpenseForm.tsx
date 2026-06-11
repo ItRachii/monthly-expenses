@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { todayISO } from "@/lib/format";
+import { CategorySelect } from "@/components/CategorySelect";
 
 interface Opt {
   value: string;
@@ -49,6 +50,10 @@ export function AddExpenseForm({
     const amt = parseFloat(amount);
     if (!item.trim()) {
       setMessage({ ok: false, text: "Please enter an item description." });
+      return;
+    }
+    if (!category.trim()) {
+      setMessage({ ok: false, text: "Please enter a category name." });
       return;
     }
     if (isNaN(amt) || amt <= 0) {
@@ -102,17 +107,7 @@ export function AddExpenseForm({
   const categoryField = (
     <div>
       <label className="label">Category</label>
-      <select
-        className="select"
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-      >
-        {categories.map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
+      <CategorySelect categories={categories} value={category} onChange={setCategory} />
     </div>
   );
 

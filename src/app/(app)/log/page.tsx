@@ -1,9 +1,9 @@
 import { requireUser } from "@/lib/session";
 import { resolveContext } from "@/lib/resolveContext";
-import { getExpenses } from "@/lib/expenses";
+import { getExpenses, getUsedCategories } from "@/lib/expenses";
 import { maskExpenses } from "@/lib/wire";
 import { ContextSelector } from "@/components/ContextSelector";
-import { CATEGORIES, SPLIT_EQUAL } from "@/lib/constants";
+import { SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
 import { ExpenseLog } from "./ExpenseLog";
 
 export default async function LogPage({
@@ -17,6 +17,7 @@ export default async function LogPage({
   const r = await resolveContext(user.email, ctxParam);
   // maskExpenses swaps payer/split emails for opaque keys before the client.
   const rows = r.error ? [] : maskExpenses(await getExpenses(r.context, "desc"), r.wire);
+  const categories = mergeCategories(r.error ? [] : await getUsedCategories(r.context));
 
   const payerOptions = r.wire.members.map((m) => ({ value: m.key, label: m.displayName }));
   const splitOptions = [
@@ -31,7 +32,7 @@ export default async function LogPage({
       <ExpenseLog
         rows={rows}
         nameMap={r.wire.nameMap}
-        categories={[...CATEGORIES]}
+        categories={categories}
         payerOptions={payerOptions}
         splitOptions={splitOptions}
         isPersonal={r.isPersonal}
