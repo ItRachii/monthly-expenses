@@ -1,12 +1,23 @@
-// Minimal service worker: enables install + basic offline resilience.
-const CACHE = "ledger-v1";
+// Service worker: install + offline support.
+//
+// - Static assets (hashed build files, icons, fonts): cache-first.
+// - Page navigations: network-first, falling back to the last cached copy of
+//   that page, then to /offline. This keeps recently visited pages (e.g.
+//   /add) usable with no connection; queued offline expenses are handled by
+//   the in-page queue, not by the service worker.
+// - Privacy: cached pages contain only PII-masked payloads (opaque member
+//   keys + display names). The whole page cache is dropped as soon as a
+//   navigation comes back redirected to /login (i.e. the session ended), so
+//   one account's pages don't linger for the next sign-in on this browser.
+const STATIC_CACHE = "ledger-static-v2";
+const PAGE_CACHE = "ledger-pages-v1";
 const OFFLINE_URL = "/offline";
 const PRECACHE = [OFFLINE_URL, "/icon-192.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
-      .open(CACHE)
+      .open(STATIC_CACHE)
       .then((cache) => cache.addAll(PRECACHE))
       .catch(() => {}),
   );
@@ -14,15 +25,39 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
+  const keep = [STATIC_CACHE, PAGE_CACHE];
   event.waitUntil(
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
+        Promise.all(keys.filter((k) => !keep.includes(k)).map((k) => caches.delete(k))),
       ),
   );
   self.clients.claim();
 });
+
+async function handleNavigation(request) {
+  try {
+    const res = await fetch(request);
+    const path = new URL(request.url).pathname;
+    if (res.redirected && new URL(res.url).pathname === "/login") {
+      // Signed out (or session expired): purge cached personalized pages.
+      await caches.delete(PAGE_CACHE);
+      return res;
+    }
+    if (res.ok && !res.redirected && path !== "/login" && path !== OFFLINE_URL) {
+      const copy = res.clone();
+      caches
+        .open(PAGE_CACHE)
+        .then((cache) => cache.put(request, copy))
+        .catch(() => {});
+    }
+    return res;
+  } catch {
+    const cached = await caches.match(request, { cacheName: PAGE_CACHE });
+    return cached || caches.match(OFFLINE_URL);
+  }
+}
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -31,9 +66,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Page navigations: network-first, fall back to the offline page when offline.
+  // Page navigations: network-first with per-page offline fallback.
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
+    event.respondWith(handleNavigation(request));
     return;
   }
 
@@ -48,7 +83,7 @@ self.addEventListener("fetch", (event) => {
           cached ||
           fetch(request).then((res) => {
             const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
             return res;
           }),
       ),

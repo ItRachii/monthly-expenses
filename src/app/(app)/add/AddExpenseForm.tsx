@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
+import { enqueueExpense } from "@/lib/offlineQueue";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { todayISO } from "@/lib/format";
 import { CategorySelect } from "@/components/CategorySelect";
@@ -21,6 +22,7 @@ export function AddExpenseForm({
   defaultPayer,
   defaultSplit,
   memberCount,
+  offlineOwner,
 }: {
   ctx: string;
   isPersonal: boolean;
@@ -30,6 +32,8 @@ export function AddExpenseForm({
   defaultPayer: string;
   defaultSplit: string;
   memberCount: number;
+  /** Opaque per-user tag scoping the offline queue (no PII). */
+  offlineOwner: string;
 }) {
   const [date, setDate] = useState(todayISO());
   const [category, setCategory] = useState(categories[0]);
@@ -61,18 +65,43 @@ export function AddExpenseForm({
       return;
     }
 
+    const input = { ctx, date, category, item: item.trim(), amount: amt, payer, split };
+
+    // No connection: skip the doomed request and park the expense locally.
+    // OfflineSync replays it through the same server action on reconnect.
+    function saveOffline() {
+      if (enqueueExpense(offlineOwner, input)) {
+        setMessage({
+          ok: true,
+          text: `Saved offline: ${input.item} — ₹${amt.toFixed(2)}`,
+          info: "You're offline — this expense is stored on this device and will sync automatically when you're back online.",
+        });
+        setItem("");
+        setAmount("");
+      } else {
+        setMessage({
+          ok: false,
+          text: "You're offline and local storage is unavailable — this expense could not be saved.",
+        });
+      }
+    }
+
     startTransition(async () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        saveOffline();
+        return;
+      }
       // For personal/solo the server forces payer=user email & split="equal";
       // for groups we send the selected values (validated server-side).
-      const res = await addExpenseAction({
-        ctx,
-        date,
-        category,
-        item,
-        amount: amt,
-        payer,
-        split,
-      });
+      let res: { ok: boolean; error?: string };
+      try {
+        res = await addExpenseAction(input);
+      } catch {
+        // The action never throws for validation — only transport failures
+        // (connection dropped mid-flight) land here.
+        saveOffline();
+        return;
+      }
       if (res.ok) {
         let info: string | undefined;
         if (!isPersonal && split === SPLIT_EQUAL && memberCount > 0) {
@@ -80,7 +109,7 @@ export function AddExpenseForm({
         }
         setMessage({
           ok: true,
-          text: `Expense saved: ${item.trim()} — ₹${amt.toFixed(2)}`,
+          text: `Expense saved: ${input.item} — ₹${amt.toFixed(2)}`,
           info,
         });
         setItem("");

@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/session";
 import { resolveContext } from "@/lib/resolveContext";
 import { getUsedCategories } from "@/lib/expenses";
+import { wireKey } from "@/lib/wire";
 import { ContextSelector } from "@/components/ContextSelector";
 import { SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
 import { AddExpenseForm } from "./AddExpenseForm";
@@ -47,6 +48,7 @@ export default async function AddPage({
           defaultPayer={defaultPayer}
           defaultSplit={SPLIT_EQUAL}
           memberCount={r.wire.members.length}
+          offlineOwner={wireKey("offline-owner", user.email)}
         />
       )}
     </div>

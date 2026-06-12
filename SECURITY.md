@@ -58,6 +58,14 @@ Numeric ids are integer-checked before any DB lookup.
 - Notification messages are built from display names (masked-email fallback),
   so stored messages never contain raw addresses.
 - SMTP failures are logged server-side and never echoed to the browser.
+- **Offline storage on the device**: expenses added while offline are queued in
+  `localStorage` containing only the form payload — context id, date, category,
+  item, amount, and opaque participant keys; never email addresses. Items are
+  scoped to an opaque per-user HMAC tag, so on a shared device one account's
+  queue is never submitted under another's session; queued items are replayed
+  through the normal server action (full validation + authorization). The
+  service worker's page cache likewise holds only PII-masked payloads and is
+  purged when a navigation is redirected to /login (sign-out / expiry).
 - **Known trade-off**: email addresses remain plaintext *columns* because they
   are the join keys of the legacy schema (`payer`, `split`, `owner_email`,
   `group_members.email`, ...). Encrypting them app-side would break lookups and

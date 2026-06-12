@@ -9,8 +9,10 @@ export default function OfflinePage() {
       <div className="text-5xl">📡</div>
       <h1 className="text-2xl font-bold">You&apos;re offline</h1>
       <p className="max-w-sm text-muted">
-        Ledger needs a connection to load your expenses. Reconnect and try
-        again — your data is safe.
+        This page hasn&apos;t been loaded on this device yet. Pages you&apos;ve
+        visited recently — like <strong>Add Expense</strong> — still work
+        offline, and expenses you add there are kept on this device and synced
+        automatically when you reconnect.
       </p>
     </div>
   );

@@ -1,10 +1,12 @@
 import { requireUser } from "@/lib/session";
 import { getUnreadCount } from "@/lib/notifications";
+import { wireKey } from "@/lib/wire";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/SidebarContext";
 import { AppMain } from "@/components/AppMain";
 import { MobileTopBar } from "@/components/MobileTopBar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { OfflineSync } from "@/components/OfflineSync";
 
 // Every page in this group depends on the signed-in user, so never prerender.
 export const dynamic = "force-dynamic";
@@ -31,6 +33,10 @@ export default async function AppLayout({
         <MobileTopBar image={user.image} unreadCount={unreadCount} />
         <AppMain>{children}</AppMain>
         <MobileBottomNav />
+        {/* Replays expenses queued while offline. The tag is an opaque HMAC of
+            the user's email, so queue items carry no PII and never sync into
+            a different account on a shared device. */}
+        <OfflineSync ownerTag={wireKey("offline-owner", user.email)} />
       </div>
     </SidebarProvider>
   );
