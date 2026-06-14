@@ -29,7 +29,32 @@ model Expense {
   groupId    String?  @map("group_id")
   group      Group?   @relation(fields: [groupId], references: [id])
 
+  // Scanned-receipt line items: tagged with their receipt + optional per-item
+  // GST. All nullable, so existing rows and every current query are unaffected.
+  receiptId  String?  @map("receipt_id")
+  receipt    Receipt? @relation(fields: [receiptId], references: [id])
+  gstRate    Float?   @map("gst_rate")
+  gstAmount  Float?   @map("gst_amount")
+
+  @@index([receiptId], map: "expenses_receipt_idx")
   @@map("expenses")
+}
+
+// Header for a scanned receipt — the "main expense" its line items nest under.
+// The receipt itself is not counted in money math; its line-item expense rows
+// are, exactly like manually added expenses.
+model Receipt {
+  id          String    @id
+  merchant    String    @default("")
+  total       Float     @default(0)
+  purchasedOn DateTime? @map("purchased_on") @db.Date
+  ownerEmail  String?   @map("owner_email")
+  groupId     String?   @map("group_id")
+  createdBy   String    @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  expenses    Expense[]
+
+  @@map("receipts")
 }
 
 model Settlement {

@@ -21,13 +21,18 @@ const securityHeaders = [
           key: "Content-Security-Policy",
           value: [
             "default-src 'self'",
-            // Next.js app router injects inline bootstrap scripts.
-            "script-src 'self' 'unsafe-inline'",
+            // Next.js bootstrap scripts (inline) + WASM compile for the
+            // in-browser receipt OCR (Tesseract.js core). jsDelivr serves the
+            // OCR worker/core/model on demand; no other third-party scripts.
+            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
             // Tailwind/recharts set inline styles.
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob: https://lh3.googleusercontent.com",
             "font-src 'self' data:",
-            "connect-src 'self'",
+            // 'self' for the app; jsDelivr for the OCR core/model downloads.
+            "connect-src 'self' https://cdn.jsdelivr.net",
+            // Tesseract runs recognition in a blob-URL web worker.
+            "worker-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",

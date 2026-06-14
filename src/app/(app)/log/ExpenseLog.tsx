@@ -171,7 +171,20 @@ export function ExpenseLog({
               <tr key={r.id}>
                 <td>{r.date}</td>
                 <td>{r.category}</td>
-                <td>{r.item}</td>
+                <td>
+                  {r.item}
+                  {r.receiptMerchant ? (
+                    <span
+                      className="ml-1 rounded bg-white/5 px-1.5 py-0.5 text-xs text-muted"
+                      title={`From scanned receipt: ${r.receiptMerchant}`}
+                    >
+                      🧾 {r.receiptMerchant}
+                    </span>
+                  ) : null}
+                  {r.gstRate ? (
+                    <span className="ml-1 text-xs text-muted">GST {r.gstRate}%</span>
+                  ) : null}
+                </td>
                 <td className="text-right">{r.amount.toFixed(2)}</td>
                 <td>{payerLabel(r.payer)}</td>
                 <td>{splitLabel(r.split)}</td>
