@@ -11,6 +11,11 @@ export interface ExpenseDTO {
   amount: number;
   payer: string;
   split: string;
+  // Receipt-scan metadata (null for manually added expenses).
+  receiptId: string | null;
+  receiptMerchant: string | null;
+  gstRate: number | null;
+  gstAmount: number | null;
 }
 
 function whereForContext(ctx: Context) {
@@ -36,6 +41,7 @@ export async function getExpenses(
   const rows = await prisma.expense.findMany({
     where: whereForContext(ctx),
     orderBy: [{ date: order }, { id: order }],
+    include: { receipt: { select: { merchant: true } } },
   });
   return rows.map((r) => ({
     id: r.id,
@@ -45,6 +51,10 @@ export async function getExpenses(
     amount: r.amount,
     payer: r.payer,
     split: r.split,
+    receiptId: r.receiptId,
+    receiptMerchant: r.receipt?.merchant ?? null,
+    gstRate: r.gstRate,
+    gstAmount: r.gstAmount,
   }));
 }
 

@@ -5,6 +5,7 @@ import { wireKey } from "@/lib/wire";
 import { ContextSelector } from "@/components/ContextSelector";
 import { SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
 import { AddExpenseForm } from "./AddExpenseForm";
+import { ReceiptScanner } from "./ReceiptScanner";
 
 export default async function AddPage({
   searchParams,
@@ -39,17 +40,27 @@ export default async function AddPage({
       {r.error ? (
         <div className="alert-error">{r.error}</div>
       ) : (
-        <AddExpenseForm
-          ctx={r.ctxValue}
-          isPersonal={r.isPersonal}
-          categories={categories}
-          payerOptions={payerOptions}
-          splitOptions={splitOptions}
-          defaultPayer={defaultPayer}
-          defaultSplit={SPLIT_EQUAL}
-          memberCount={r.wire.members.length}
-          offlineOwner={wireKey("offline-owner", user.email)}
-        />
+        <>
+          <ReceiptScanner
+            ctx={r.ctxValue}
+            isPersonal={r.isPersonal}
+            categories={categories}
+            payerOptions={payerOptions}
+            splitOptions={splitOptions}
+            defaultPayer={defaultPayer}
+          />
+          <AddExpenseForm
+            ctx={r.ctxValue}
+            isPersonal={r.isPersonal}
+            categories={categories}
+            payerOptions={payerOptions}
+            splitOptions={splitOptions}
+            defaultPayer={defaultPayer}
+            defaultSplit={SPLIT_EQUAL}
+            memberCount={r.wire.members.length}
+            offlineOwner={wireKey("offline-owner", user.email)}
+          />
+        </>
       )}
     </div>
   );
