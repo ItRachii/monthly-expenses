@@ -54,8 +54,16 @@ async function handleNavigation(request) {
     }
     return res;
   } catch {
-    const cached = await caches.match(request, { cacheName: PAGE_CACHE });
-    return cached || caches.match(OFFLINE_URL);
+    // Offline. Ignore the Next.js `Vary: rsc, next-router-…` header (and any
+    // query string) when looking up the cached page — otherwise an online-
+    // cached/warmed page never matches the offline navigation request, and
+    // every offline navigation falls through to the generic offline page.
+    const cached = await caches.match(request, {
+      cacheName: PAGE_CACHE,
+      ignoreVary: true,
+      ignoreSearch: true,
+    });
+    return cached || caches.match(OFFLINE_URL, { ignoreVary: true });
   }
 }
 
