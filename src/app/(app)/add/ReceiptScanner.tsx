@@ -27,6 +27,9 @@ type Phase = "pick" | "reading" | "review";
 
 const numeric = (v: string) => v === "" || /^\d*\.?\d*$/.test(v);
 
+// Identity for de-duping picks across the camera and gallery inputs.
+const fileKey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`;
+
 function Thumb({ file }: { file: File }) {
   const [url, setUrl] = useState<string>();
   useEffect(() => {
@@ -78,6 +81,19 @@ export function ReceiptScanner({
     setItems([]);
     setProgress(null);
     setError(null);
+  }
+
+  // Append picked images (camera or gallery) to the selection, skipping
+  // duplicates. Resetting the input value lets the same file be re-picked.
+  function addFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const incoming = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (incoming.length === 0) return;
+    setError(null);
+    setFiles((prev) => {
+      const seen = new Set(prev.map(fileKey));
+      return [...prev, ...incoming.filter((f) => !seen.has(fileKey(f)))];
+    });
   }
 
   async function extract() {
@@ -205,18 +221,50 @@ export function ReceiptScanner({
 
       {phase === "pick" ? (
         <div className="space-y-3">
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            capture="environment"
-            className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary/20 file:px-3 file:py-2 file:text-ink"
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-          />
+          <div className="flex flex-wrap gap-2">
+            {/* No `capture` → the gallery/photo picker. */}
+            <label className="btn-secondary flex-1 cursor-pointer text-center">
+              🖼️ Choose from gallery
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                aria-label="Choose receipt images from gallery"
+                onChange={addFiles}
+              />
+            </label>
+            {/* `capture` → opens the camera on mobile (ignored on desktop). */}
+            <label className="btn-secondary flex-1 cursor-pointer text-center">
+              📷 Take photo
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                capture="environment"
+                className="sr-only"
+                aria-label="Take a receipt photo with the camera"
+                onChange={addFiles}
+              />
+            </label>
+          </div>
+          <p className="text-xs text-muted">
+            Add one or more receipt images from your gallery or camera.
+          </p>
           {files.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {files.map((f, i) => (
-                <Thumb key={`${f.name}-${i}`} file={f} />
+                <div key={`${fileKey(f)}-${i}`} className="relative">
+                  <Thumb file={f} />
+                  <button
+                    type="button"
+                    aria-label={`Remove image ${i + 1}`}
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/75 text-xs text-white"
+                    onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  >
+                    ✕
+                  </button>
+                </div>
               ))}
             </div>
           ) : null}
