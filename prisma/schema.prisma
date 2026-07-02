@@ -62,6 +62,8 @@ model Settlement {
   month      String
   settledAt  DateTime @map("settled_at")
   settledBy  String   @map("settled_by")
+  /** Who received the payment. Null on rows recorded before partial payments. */
+  settledTo  String?  @map("settled_to")
   amount     Float
   note       String?
   ownerEmail String?  @map("owner_email")

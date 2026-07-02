@@ -114,7 +114,11 @@ export function maskExpenses(rows: ExpenseDTO[], wire: Wire): ExpenseDTO[] {
   }));
 }
 
-/** Replaces settledBy emails with wire keys before rows go to the client. */
+/** Replaces settledBy/settledTo emails with wire keys before rows go to the client. */
 export function maskSettlements(rows: SettlementDTO[], wire: Wire): SettlementDTO[] {
-  return rows.map((r) => ({ ...r, settledBy: wire.toKey(r.settledBy) }));
+  return rows.map((r) => ({
+    ...r,
+    settledBy: wire.toKey(r.settledBy),
+    settledTo: r.settledTo ? wire.toKey(r.settledTo) : null,
+  }));
 }
