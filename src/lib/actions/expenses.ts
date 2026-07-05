@@ -19,8 +19,9 @@ export interface ActionResult {
 }
 
 function revalidateExpenseViews() {
-  for (const p of ["/", "/add", "/log", "/summary", "/settlement", "/notifications"])
-    revalidatePath(p);
+  // Expenses surface on the home dashboard and every /g/[ctx] tab, so
+  // refresh the whole app shell rather than enumerating routes.
+  revalidatePath("/", "layout");
 }
 
 /** Display name for the signed-in actor, used in notification messages. */

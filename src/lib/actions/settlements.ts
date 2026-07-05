@@ -107,7 +107,6 @@ export async function settleAction(input: {
     }
   }
 
-  revalidatePath("/settlement");
-  revalidatePath("/notifications");
+  revalidatePath("/", "layout");
   return { ok: true };
 }

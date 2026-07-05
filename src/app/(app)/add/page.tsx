@@ -1,12 +1,15 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { resolveContext } from "@/lib/resolveContext";
+import { getUserGroups } from "@/lib/groups";
 import { getUsedCategories } from "@/lib/expenses";
 import { wireKey } from "@/lib/wire";
-import { ContextSelector } from "@/components/ContextSelector";
 import { SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
 import { AddExpenseForm } from "./AddExpenseForm";
 import { ReceiptScanner } from "./ReceiptScanner";
 
+// Two-step Splitwise-style flow: first pick WHERE the expense goes (Personal
+// or a group), then fill the form scoped to that choice.
 export default async function AddPage({
   searchParams,
 }: {
@@ -15,27 +18,76 @@ export default async function AddPage({
   const sp = await searchParams;
   const user = await requireUser();
   const ctxParam = typeof sp.ctx === "string" ? sp.ctx : undefined;
+
+  // Step 1 — no destination chosen yet: show the chooser.
+  if (!ctxParam) {
+    const groups = await getUserGroups(user.email);
+    return (
+      <div className="space-y-6">
+        <h1>Add Expense</h1>
+        <p className="text-sm text-muted">Where should this expense go?</p>
+        <div className="space-y-2">
+          <Link
+            href="/add?ctx=personal"
+            className="card flex items-center gap-3 transition hover:border-white/20 hover:bg-white/5"
+          >
+            <span aria-hidden className="text-xl">👤</span>
+            <span>
+              <span className="block font-semibold">Personal</span>
+              <span className="block text-xs text-muted">Just your own ledger</span>
+            </span>
+          </Link>
+          {groups.map((g) => (
+            <Link
+              key={g.id}
+              href={`/add?ctx=${encodeURIComponent(g.id)}`}
+              className="card flex items-center gap-3 transition hover:border-white/20 hover:bg-white/5"
+            >
+              <span aria-hidden className="text-xl">👥</span>
+              <span>
+                <span className="block font-semibold">{g.name}</span>
+                <span className="block text-xs text-muted">
+                  Split with the group
+                </span>
+              </span>
+            </Link>
+          ))}
+        </div>
+        <p className="text-xs text-muted">
+          Need a new group?{" "}
+          <Link href="/groups" className="underline">
+            Create one here
+          </Link>
+          .
+        </p>
+      </div>
+    );
+  }
+
+  // Step 2 — destination chosen: the form, scoped to it.
   const r = await resolveContext(user.email, ctxParam);
-  // Standard categories plus any the user already created in this context.
   const categories = mergeCategories(r.error ? [] : await getUsedCategories(r.context));
 
-  // Group: payer = participants (value=opaque key, label=nickname); split =
-  // Equal + participants. Raw emails stay on the server; the action resolves
-  // keys. Personal is solo, so the form hides these and the server forces them.
   const payerOptions = r.wire.members.map((m) => ({ value: m.key, label: m.displayName }));
   const splitOptions = [
     { value: SPLIT_EQUAL, label: "Equal Split" },
     ...r.wire.members.map((m) => ({ value: m.key, label: m.displayName })),
   ];
-
-  // Default payer is the logged-in user when they are a member, else first member.
   const defaultPayer =
     r.wire.members.find((m) => m.isSelf)?.key ?? payerOptions[0]?.value ?? "";
+  const destination = r.isPersonal
+    ? "Personal"
+    : r.options.find((o) => o.value === r.ctxValue)?.label ?? "Group";
 
   return (
     <div className="space-y-6">
       <h1>Add Expense</h1>
-      <ContextSelector label="Add expense to:" options={r.options} current={r.ctxValue} />
+      <p className="text-sm">
+        Adding to <strong>{destination}</strong>{" "}
+        <Link href="/add" className="text-muted underline">
+          (change)
+        </Link>
+      </p>
 
       {r.error ? (
         <div className="alert-error">{r.error}</div>

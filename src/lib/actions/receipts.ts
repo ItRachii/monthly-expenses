@@ -119,7 +119,6 @@ export async function addReceiptAction(input: {
     }
   }
 
-  for (const p of ["/", "/add", "/log", "/summary", "/settlement", "/notifications"])
-    revalidatePath(p);
+  revalidatePath("/", "layout");
   return { ok: true, count: items.length };
 }
