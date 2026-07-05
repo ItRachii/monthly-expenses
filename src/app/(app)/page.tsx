@@ -79,7 +79,7 @@ export default async function HomePage() {
         href="/add"
         className="btn-primary fixed bottom-20 right-4 z-30 rounded-full px-5 py-3 shadow-lg shadow-black/40 md:bottom-8 md:right-8"
       >
-        🧾 Add expense
+        + Add expense
       </Link>
     </div>
   );
