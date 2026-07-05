@@ -243,7 +243,7 @@ export function ExpenseLog({
   );
 }
 
-function EditExpenseModal({
+export function EditExpenseModal({
   expense,
   categories,
   payerOptions,

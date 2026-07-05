@@ -2,80 +2,85 @@ import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { getPendingInvitesForUser } from "@/lib/groups";
 import { PendingInvites } from "@/components/PendingInvites";
+import { HomeGroups } from "@/components/HomeGroups";
+import {
+  getGroupBalancesForUser,
+  getPersonalMonthSpend,
+} from "@/lib/balances";
+import { SETTLE_EPS } from "@/lib/settlementMath";
+import { formatINR } from "@/lib/format";
 
-const pages = [
-  ["Add Expense", "Log a new expense — date, category, amount, payer, and split", "/add"],
-  ["Expense Log", "View, filter, edit, and delete expenses; export to CSV", "/log"],
-  ["Monthly Summary", "Charts and per-person breakdown for any month", "/summary"],
-  ["Settlement", "See the net balance and mark months as settled", "/settlement"],
-  ["Groups", "Create groups, send invites, manage members", "/groups"],
-];
-
-const splits = [
-  ["Equal Split", "The amount is shared equally among all group members"],
-  ["A specific person", "That member is responsible for the full amount"],
-];
-
+// Splitwise-style dashboard: overall position, one card per group with
+// per-member balances, a Personal card, and the Add-expense FAB.
 export default async function HomePage() {
   const user = await requireUser();
-  const pending = await getPendingInvitesForUser(user.email);
+  const [pending, balances, personal] = await Promise.all([
+    getPendingInvitesForUser(user.email),
+    getGroupBalancesForUser(user.email),
+    getPersonalMonthSpend(user.email),
+  ]);
+  const { overall, groups } = balances;
 
   return (
-    <div className="space-y-8">
-      <header className="space-y-2">
-        <h1>Monthly Expense Tracker</h1>
-        <p className="text-muted">
-          Track your <strong className="text-ink">personal</strong> expenses or
-          collaborate in <strong className="text-ink">groups</strong>. Use the
-          selector at the top of each page to switch between Personal and a Group.
-        </p>
+    <div className="space-y-6 pb-24">
+      <header className="flex items-start justify-between gap-3">
+        <h1 className="text-xl font-semibold">
+          {overall > SETTLE_EPS ? (
+            <>
+              Overall, you are owed{" "}
+              <span className="text-emerald-400">{formatINR(overall)}</span>
+            </>
+          ) : overall < -SETTLE_EPS ? (
+            <>
+              Overall, you owe{" "}
+              <span className="text-orange-400">{formatINR(Math.abs(overall))}</span>
+            </>
+          ) : (
+            "You are all settled up"
+          )}
+        </h1>
+        <Link
+          href="/groups"
+          aria-label="Create or manage groups"
+          title="Create or manage groups"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-lg text-muted transition hover:bg-white/5 hover:text-ink"
+        >
+          +
+        </Link>
       </header>
 
       {pending.length > 0 ? <PendingInvites invites={pending} /> : null}
 
-      <section className="space-y-3">
-        <h2 className="section-title">Pages</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {pages.map(([title, desc, href]) => (
-            <Link
-              key={title}
-              href={href}
-              className="card group transition hover:border-white/20 hover:bg-white/5"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold">{title}</span>
-                <span
-                  aria-hidden
-                  className="text-muted transition group-hover:translate-x-0.5 group-hover:text-ink"
-                >
-                  →
-                </span>
-              </div>
-              <div className="mt-1 text-sm text-muted">{desc}</div>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <HomeGroups groups={groups} />
 
-      <section className="space-y-3">
-        <h2 className="section-title">Split types</h2>
-        <div className="card space-y-3">
-          {splits.map(([k, v]) => (
-            <div key={k} className="flex items-start gap-3 text-sm">
-              <span className="pill min-w-[8rem] shrink-0 text-center font-mono">
-                {k}
-              </span>
-              <span className="text-muted">{v}</span>
-            </div>
-          ))}
-          <p className="pt-1 text-xs text-muted">
-            The <strong className="text-ink">Payer</strong> field records who
-            physically paid. The <strong className="text-ink">Split</strong> field
-            records who owes what. These are tracked independently so the balance is
-            always accurate.
-          </p>
+      <Link
+        href="/g/personal"
+        className="card block transition hover:border-white/20 hover:bg-white/5"
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="font-semibold">Personal expenses</span>
+          <span className="shrink-0 text-xs text-muted">{personal.month}</span>
         </div>
-      </section>
+        <div className="mt-1 text-sm text-muted">
+          {personal.count > 0 ? (
+            <>
+              <span className="font-medium text-ink">{formatINR(personal.total)}</span>{" "}
+              spent this month across {personal.count} expense
+              {personal.count === 1 ? "" : "s"}
+            </>
+          ) : (
+            "Nothing spent this month yet"
+          )}
+        </div>
+      </Link>
+
+      {/* Floating Add-expense button, clear of the mobile bottom nav. */}
+      <Link
+        href="/add"
+        className="btn-primary fixed bottom-20 right-4 z-30 rounded-full px-5 py-3 shadow-lg shadow-black/40 md:bottom-8 md:right-8"
+      >
+        🧾 Add expense
+      </Link>
     </div>
   );
 }

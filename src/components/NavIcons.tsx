@@ -184,6 +184,32 @@ function NotificationsIcon() {
   );
 }
 
+function ProfileIcon() {
+  const u = useId().replace(/:/g, "");
+  return (
+    <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+      <defs>
+        <linearGradient id={`${u}a`} gradientUnits="userSpaceOnUse" x1="4" y1="20" x2="20" y2="4">
+          <stop offset="0%" stopColor="#1E5FCF" />
+          <stop offset="100%" stopColor="#1FB8B0" />
+        </linearGradient>
+        <linearGradient id={`${u}b`} gradientUnits="userSpaceOnUse" x1="12" y1="6" x2="12" y2="23">
+          <stop offset="0%" stopColor="#6FE0EA" />
+          <stop offset="100%" stopColor="#2E84F5" />
+        </linearGradient>
+        <clipPath id={`${u}c`}>
+          <circle cx="12" cy="12" r="10" />
+        </clipPath>
+      </defs>
+      <circle cx="12" cy="12" r="10" fill={`url(#${u}a)`} />
+      <g clipPath={`url(#${u}c)`} fill={`url(#${u}b)`}>
+        <circle cx="12" cy="9.5" r="2.7" />
+        <path d="M5.6 21.6 A6.4 7.2 0 0 1 18.4 21.6 Z" />
+      </g>
+    </svg>
+  );
+}
+
 // href -> custom icon. Items absent here fall back to their emoji.
 export const NAV_ICONS: Record<string, FC> = {
   "/": HomeIcon,
@@ -193,4 +219,5 @@ export const NAV_ICONS: Record<string, FC> = {
   "/settlement": SettlementIcon,
   "/notifications": NotificationsIcon,
   "/groups": GroupsIcon,
+  "/profile": ProfileIcon,
 };

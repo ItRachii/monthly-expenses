@@ -1,22 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { NAV_ICONS } from "./NavIcons";
 
+// Desktop sidebar links. Per-context pages (log/summary/settlement) merged
+// into the home screen + /g/[ctx] tabs, so the nav is just the app shell.
 const items = [
   { href: "/", label: "Home", icon: "🏠" },
   { href: "/add", label: "Add Expense", icon: "➕" },
-  { href: "/log", label: "Expense Log", icon: "📋" },
-  { href: "/summary", label: "Monthly Summary", icon: "📊" },
-  { href: "/settlement", label: "Settlement", icon: "💰" },
   { href: "/notifications", label: "Notifications", icon: "🔔" },
   { href: "/groups", label: "Groups", icon: "👥" },
 ];
-
-// Tabs that operate on the selected Personal/Group context. The Groups page
-// is context-agnostic, so we don't carry ?ctx into it.
-const contextAware = new Set(["/", "/add", "/log", "/summary", "/settlement"]);
 
 export function NavLinks({
   unreadCount = 0,
@@ -26,24 +21,17 @@ export function NavLinks({
   collapsed?: boolean;
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const ctx = searchParams.get("ctx");
 
   return (
     <nav className="flex flex-col gap-1">
       {items.map((it) => {
         const active = pathname === it.href;
-        // Preserve the selected group across navigation (personal = no ?ctx).
-        const href =
-          ctx && ctx !== "personal" && contextAware.has(it.href)
-            ? `${it.href}?ctx=${encodeURIComponent(ctx)}`
-            : it.href;
         const showBadge = it.href === "/notifications" && unreadCount > 0;
         const Icon = NAV_ICONS[it.href];
         return (
           <Link
             key={it.href}
-            href={href}
+            href={it.href}
             title={collapsed ? it.label : undefined}
             className={`flex items-center gap-3 rounded-lg px-3 py-2 text-base transition ${
               active

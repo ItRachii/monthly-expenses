@@ -15,8 +15,8 @@ import { emailForKey } from "@/lib/wire";
 const INVITES_PER_HOUR = 20;
 
 function revalidateGroupViews() {
-  for (const p of ["/", "/groups", "/add", "/log", "/summary", "/settlement"])
-    revalidatePath(p);
+  // Group changes affect the home dashboard and every /g/[ctx] screen.
+  revalidatePath("/", "layout");
 }
 
 async function requireEmail(): Promise<string | null> {

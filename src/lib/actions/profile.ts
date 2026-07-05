@@ -13,7 +13,6 @@ export async function saveProfileAction(
   if (!email) return { ok: false, error: "Not signed in." };
 
   await updateUsername(email, cleanText(username, 40) || null);
-  for (const p of ["/", "/add", "/log", "/summary", "/settlement", "/profile"])
-    revalidatePath(p);
+  revalidatePath("/", "layout");
   return { ok: true, message: "Profile updated successfully!" };
 }
