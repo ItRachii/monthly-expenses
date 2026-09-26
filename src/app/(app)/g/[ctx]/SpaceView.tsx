@@ -211,6 +211,7 @@ export function SpaceView({
 
       {tab === "expenses" ? (
         <ExpenseFeed
+          ctx={ctx}
           rows={rows}
           nameMap={nameMap}
           categories={categories}
