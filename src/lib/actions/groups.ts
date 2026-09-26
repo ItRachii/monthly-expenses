@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import * as groups from "@/lib/groups";
 import { sendInviteEmail } from "@/lib/email";
+import { notifyGroup } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
 import { maskEmail } from "@/lib/pii";
 import { cleanText, isValidEmail } from "@/lib/validate";
@@ -36,6 +37,33 @@ export async function createGroupAction(name: string, description: string) {
     groupId,
     message: `Group "${cleanName}" created! You are the admin.`,
   };
+}
+
+export async function renameGroupAction(groupId: string, name: string) {
+  const email = await requireEmail();
+  if (!email) return { ok: false, error: "Not signed in." };
+  const members = await groups.getGroupMembers(groupId);
+  const me = members.find((m) => m.email === email);
+  if (!me || me.role !== "admin") return { ok: false, error: "Admins only." };
+  const cleanName = cleanText(name, 80);
+  if (!cleanName) return { ok: false, error: "Please enter a group name." };
+  const before = await groups.getGroup(groupId);
+  if (!before) return { ok: false, error: "Group not found." };
+  const changed = await groups.renameGroup(groupId, cleanName, email);
+  if (!changed) return { ok: true, message: "Name unchanged." };
+  try {
+    const actor = await prisma.appUser.findUnique({ where: { email } });
+    await notifyGroup({
+      groupId,
+      actorEmail: email,
+      type: "group_renamed",
+      message: `${displayNameFor(actor, maskEmail(email))} renamed the group "${before.name}" to "${cleanName}"`,
+    });
+  } catch (err) {
+    console.error("Rename notification failed:", err);
+  }
+  revalidateGroupViews();
+  return { ok: true, message: `Group renamed to "${cleanName}".` };
 }
 
 export async function inviteAction(groupId: string, inviteEmail: string) {

@@ -9,6 +9,7 @@ const ICONS: Record<string, string> = {
   expense_added: "➕",
   expense_deleted: "🗑",
   settlement_recorded: "💰",
+  group_renamed: "✏️",
 };
 
 function timeAgo(iso: string): string {

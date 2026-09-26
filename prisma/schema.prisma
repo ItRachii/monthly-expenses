@@ -96,8 +96,25 @@ model Group {
   expenses      Expense[]
   settlements   Settlement[]
   notifications Notification[]
+  nameHistory   GroupNameHistory[]
 
   @@map("groups")
+}
+
+// SCD Type 2 history of a group's name. `groups.name` always holds the
+// current name; every rename closes the open row (sets valid_to) and opens a
+// new one, so old names and the exact period each was in use are preserved.
+model GroupNameHistory {
+  id        Int       @id @default(autoincrement())
+  groupId   String    @map("group_id")
+  name      String
+  validFrom DateTime  @map("valid_from")
+  validTo   DateTime? @map("valid_to")
+  changedBy String    @map("changed_by")
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, validFrom(sort: Desc)], map: "group_name_history_group_idx")
+  @@map("group_name_history")
 }
 
 model GroupMember {

@@ -37,6 +37,13 @@ export interface GroupInviteDTO {
   status: string;
 }
 
+export interface GroupNameHistoryDTO {
+  name: string;
+  validFrom: string;
+  /** Null for the row that is still current. */
+  validTo: string | null;
+}
+
 export type InviteResult = "ok" | "already_member" | "already_invited";
 
 export async function createGroup(
@@ -58,9 +65,74 @@ export async function createGroup(
           { email: creatorEmail, displayName: "", role: "admin", joinedAt: now },
         ],
       },
+      nameHistory: {
+        create: [{ name: name.trim(), validFrom: now, validTo: null, changedBy: creatorEmail }],
+      },
     },
   });
   return group.id;
+}
+
+/**
+ * Renames a group, keeping the old name as SCD Type 2 history: the open
+ * history row is closed at `now` and a new open row is inserted. Groups
+ * created before history existed get their first row seeded from
+ * `created_at`, so the timeline is complete from creation onward.
+ * Returns false when the name is unchanged (nothing is written).
+ */
+export async function renameGroup(
+  groupId: string,
+  newName: string,
+  changedBy: string,
+): Promise<boolean> {
+  const name = newName.trim();
+  return prisma.$transaction(async (tx) => {
+    const group = await tx.group.findFirst({ where: { id: groupId, active: 1 } });
+    if (!group || group.name === name) return false;
+    const now = new Date();
+
+    const open = await tx.groupNameHistory.findFirst({
+      where: { groupId, validTo: null },
+      orderBy: { validFrom: "desc" },
+    });
+    if (open) {
+      await tx.groupNameHistory.update({ where: { id: open.id }, data: { validTo: now } });
+    } else {
+      await tx.groupNameHistory.create({
+        data: {
+          groupId,
+          name: group.name,
+          validFrom: group.createdAt,
+          validTo: now,
+          changedBy: group.createdBy,
+        },
+      });
+    }
+    await tx.groupNameHistory.create({
+      data: { groupId, name, validFrom: now, validTo: null, changedBy },
+    });
+    await tx.group.update({ where: { id: groupId }, data: { name } });
+    return true;
+  });
+}
+
+/** Name history, newest first. Falls back to the current name for groups
+ *  that predate history and have never been renamed. */
+export async function getGroupNameHistory(groupId: string): Promise<GroupNameHistoryDTO[]> {
+  const rows = await prisma.groupNameHistory.findMany({
+    where: { groupId },
+    orderBy: { validFrom: "desc" },
+  });
+  if (rows.length === 0) {
+    const g = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!g) return [];
+    return [{ name: g.name, validFrom: g.createdAt.toISOString(), validTo: null }];
+  }
+  return rows.map((r) => ({
+    name: r.name,
+    validFrom: r.validFrom.toISOString(),
+    validTo: r.validTo ? r.validTo.toISOString() : null,
+  }));
 }
 
 export async function getUserGroups(userEmail: string): Promise<GroupDTO[]> {

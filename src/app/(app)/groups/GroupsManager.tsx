@@ -9,6 +9,7 @@ import {
   inviteAction,
   leaveGroupAction,
   removeMemberAction,
+  renameGroupAction,
 } from "@/lib/actions/groups";
 import { NAV_ICONS } from "@/components/NavIcons";
 
@@ -23,6 +24,8 @@ export interface GroupView {
   isCreator: boolean;
   members: { key: string; displayName: string; role: string; isSelf: boolean }[];
   pendingInvites: { id: number; invitedEmail: string }[];
+  /** SCD Type 2 name history, newest first. validTo is null for the current name. */
+  nameHistory: { name: string; validFrom: string; validTo: string | null }[];
 }
 
 export function GroupsManager({ groups }: { groups: GroupView[] }) {
@@ -89,6 +92,10 @@ function GroupCard({ group }: { group: GroupView }) {
       </summary>
 
       <div className="mt-4 space-y-5">
+        {/* Rename (admin) + name history */}
+        {group.isAdmin ? <RenameForm groupId={group.id} current={group.name} /> : null}
+        {group.nameHistory.length > 1 ? <NameHistory rows={group.nameHistory} /> : null}
+
         {/* Members */}
         <div>
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
@@ -188,6 +195,120 @@ function GroupCard({ group }: { group: GroupView }) {
           )}
         </div>
       </div>
+    </details>
+  );
+}
+
+function RenameForm({ groupId, current }: { groupId: string; current: string }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(current);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    startTransition(async () => {
+      const res = await renameGroupAction(groupId, value);
+      setMessage({ ok: res.ok, text: res.ok ? (res.message ?? "") : (res.error ?? "") });
+      if (res.ok) setEditing(false);
+      router.refresh();
+    });
+  }
+
+  if (!editing) {
+    return (
+      <div className="space-y-2">
+        {message ? (
+          <div className={message.ok ? "alert-success" : "alert-error"}>{message.text}</div>
+        ) : null}
+        <button
+          type="button"
+          className="btn-secondary px-3 py-1 text-xs"
+          onClick={() => {
+            setValue(current);
+            setMessage(null);
+            setEditing(true);
+          }}
+        >
+          Rename group
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-2">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">
+        Rename Group
+      </h3>
+      {message && !message.ok ? <div className="alert-error">{message.text}</div> : null}
+      <div className="flex gap-2">
+        <input
+          className="input"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          maxLength={80}
+          autoFocus
+        />
+        <button type="submit" className="btn-primary shrink-0" disabled={pending}>
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button
+          type="button"
+          className="btn-secondary shrink-0"
+          disabled={pending}
+          onClick={() => setEditing(false)}
+        >
+          Cancel
+        </button>
+      </div>
+      <p className="text-xs text-muted">
+        The old name is kept in the group&apos;s name history.
+      </p>
+    </form>
+  );
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function NameHistory({
+  rows,
+}: {
+  rows: { name: string; validFrom: string; validTo: string | null }[];
+}) {
+  return (
+    <details>
+      <summary className="cursor-pointer select-none text-sm font-semibold uppercase tracking-wide text-muted">
+        Name History ({rows.length})
+      </summary>
+      <table className="data-table mt-2">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>From</th>
+            <th>To</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={`${r.name}-${r.validFrom}`}>
+              <td>
+                {r.name}
+                {r.validTo === null ? <span className="text-muted"> (current)</span> : null}
+              </td>
+              <td>{formatDate(r.validFrom)}</td>
+              <td>{r.validTo === null ? "Present" : formatDate(r.validTo)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </details>
   );
 }
