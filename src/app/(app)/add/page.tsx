@@ -1,4 +1,4 @@
-import { NAV_ICONS } from "@/components/NavIcons";
+import { GroupsIcon, ProfileIcon } from "@/components/NavIcons";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { resolveContext } from "@/lib/resolveContext";
@@ -11,9 +11,6 @@ import { ReceiptScanner } from "./ReceiptScanner";
 
 // Two-step Splitwise-style flow: first pick WHERE the expense goes (Personal
 // or a group), then fill the form scoped to that choice.
-const ProfileIcon = NAV_ICONS["/profile"];
-const GroupsIcon = NAV_ICONS["/groups"];
-
 export default async function AddPage({
   searchParams,
 }: {
