@@ -47,12 +47,13 @@ export async function notifyGroup(params: {
   });
 }
 
+/** Unread notifications only: once seen, an item leaves the tab for good. */
 export async function getNotifications(
   email: string,
   limit = 50,
 ): Promise<NotificationDTO[]> {
   const rows = await prisma.notification.findMany({
-    where: { recipientEmail: email },
+    where: { recipientEmail: email, isRead: false },
     orderBy: { createdAt: "desc" },
     take: limit,
   });

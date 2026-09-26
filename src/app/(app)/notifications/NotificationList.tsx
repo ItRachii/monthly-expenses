@@ -31,8 +31,6 @@ export function NotificationList({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const hasUnread = notifications.some((n) => !n.isRead);
-
   function markAll() {
     startTransition(async () => {
       await markAllReadAction();
@@ -41,7 +39,6 @@ export function NotificationList({
   }
 
   function onItemClick(n: NotificationDTO) {
-    if (n.isRead) return;
     startTransition(async () => {
       await markReadAction(n.id);
       router.refresh();
@@ -51,8 +48,8 @@ export function NotificationList({
   if (notifications.length === 0) {
     return (
       <div className="alert-info">
-        No notifications yet. Group activity — added or deleted expenses and
-        settlements — will show up here.
+        You are all caught up. New group activity, such as added or deleted
+        expenses and settlements, will show up here until you have seen it.
       </div>
     );
   }
@@ -63,7 +60,7 @@ export function NotificationList({
         <button
           className="btn-secondary"
           onClick={markAll}
-          disabled={pending || !hasUnread}
+          disabled={pending}
         >
           Mark all as read
         </button>
@@ -74,9 +71,8 @@ export function NotificationList({
           <button
             key={n.id}
             onClick={() => onItemClick(n)}
-            className={`card flex w-full items-start gap-3 text-left transition ${
-              n.isRead ? "opacity-60" : "border-primary/30 bg-primary/5"
-            }`}
+            title="Mark as read"
+            className="card flex w-full items-start gap-3 border-primary/30 bg-primary/5 text-left transition hover:bg-primary/10"
           >
             <span className="text-lg" aria-hidden>
               {ICONS[n.type] ?? "🔔"}
@@ -85,9 +81,7 @@ export function NotificationList({
               <div className="text-sm text-ink">{n.message}</div>
               <div className="mt-0.5 text-xs text-muted">{timeAgo(n.createdAt)}</div>
             </div>
-            {!n.isRead ? (
-              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />
-            ) : null}
+            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />
           </button>
         ))}
       </div>
