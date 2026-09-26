@@ -1,5 +1,6 @@
 "use client";
 
+import { XIcon } from "@/components/Icons";
 import { useMemo, useState, type ReactNode } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { SPLIT_EQUAL } from "@/lib/constants";
@@ -188,9 +189,9 @@ export function Summary({
             <button
               type="button"
               onClick={() => setSelectedCategory(null)}
-              className="text-sm text-muted hover:text-ink"
+              className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
             >
-              Clear filter ✕
+              Clear filter <XIcon className="h-4 w-4" />
             </button>
           ) : null}
         </div>

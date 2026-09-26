@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckIcon, XIcon } from "@/components/Icons";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { respondInviteAction } from "@/lib/actions/groups";
@@ -43,14 +44,14 @@ export function PendingInvites({ invites }: { invites: PendingInviteDTO[] }) {
               disabled={pending}
               onClick={() => respond(inv.inviteId, true)}
             >
-              ✅ Accept
+              <CheckIcon className="h-4 w-4" /> Accept
             </button>
             <button
               className="btn-secondary"
               disabled={pending}
               onClick={() => respond(inv.inviteId, false)}
             >
-              ❌ Decline
+              <XIcon className="h-4 w-4" /> Decline
             </button>
           </div>
         </div>

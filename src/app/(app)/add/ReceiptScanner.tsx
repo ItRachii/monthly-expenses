@@ -1,5 +1,6 @@
 "use client";
 
+import { CameraIcon, ImageIcon, TrashIcon, XIcon } from "@/components/Icons";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ocrImages, type OcrProgress } from "@/lib/ocr";
@@ -189,7 +190,7 @@ export function ReceiptScanner({
       <div className="space-y-2">
         {message ? <div className="alert-success">{message}</div> : null}
         <button type="button" className="btn-secondary w-full" onClick={() => setOpen(true)}>
-          📷 Scan a receipt to add itemized expenses
+          <CameraIcon className="h-4 w-4" /> Scan a receipt to add itemized expenses
         </button>
       </div>
     );
@@ -198,17 +199,19 @@ export function ReceiptScanner({
   return (
     <div className="card space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="section-title">📷 Scan a receipt</h2>
+        <h2 className="section-title flex items-center gap-2">
+          <CameraIcon /> Scan a receipt
+        </h2>
         <button
           type="button"
-          className="text-muted hover:text-ink"
+          className="icon-btn"
           aria-label="Close"
           onClick={() => {
             reset();
             setOpen(false);
           }}
         >
-          ✕
+          <XIcon />
         </button>
       </div>
       <p className="text-xs text-muted">
@@ -224,7 +227,7 @@ export function ReceiptScanner({
           <div className="flex flex-wrap gap-2">
             {/* No `capture` → the gallery/photo picker. */}
             <label className="btn-secondary flex-1 cursor-pointer text-center">
-              🖼️ Choose from gallery
+              <ImageIcon className="h-4 w-4" /> Choose from gallery
               <input
                 type="file"
                 accept="image/*"
@@ -236,7 +239,7 @@ export function ReceiptScanner({
             </label>
             {/* `capture` → opens the camera on mobile (ignored on desktop). */}
             <label className="btn-secondary flex-1 cursor-pointer text-center">
-              📷 Take photo
+              <CameraIcon className="h-4 w-4" /> Take photo
               <input
                 type="file"
                 accept="image/*"
@@ -259,10 +262,10 @@ export function ReceiptScanner({
                   <button
                     type="button"
                     aria-label={`Remove image ${i + 1}`}
-                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/75 text-xs text-white"
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/75 text-white"
                     onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
                   >
-                    ✕
+                    <XIcon className="h-3 w-3" />
                   </button>
                 </div>
               ))}
@@ -395,11 +398,11 @@ export function ReceiptScanner({
                     <td className="text-right">
                       <button
                         type="button"
-                        className="text-red-400 hover:text-red-300"
+                        className="icon-btn text-red-400 hover:text-red-300"
                         aria-label="Remove item"
                         onClick={() => removeRow(i)}
                       >
-                        🗑
+                        <TrashIcon />
                       </button>
                     </td>
                   </tr>

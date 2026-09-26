@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeftIcon, SettingsIcon } from "@/components/Icons";
 import Link from "next/link";
 import { useState } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
@@ -80,18 +81,18 @@ export function SpaceView({
           <Link
             href="/"
             aria-label="Back to home"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-lg text-muted transition hover:bg-white/5 hover:text-ink"
+            className="icon-btn"
           >
-            ←
+            <ArrowLeftIcon />
           </Link>
           {!isPersonal ? (
             <Link
               href="/groups"
               aria-label="Group settings"
               title="Group settings"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted transition hover:bg-white/5 hover:text-ink"
+              className="icon-btn"
             >
-              ⚙
+              <SettingsIcon />
             </Link>
           ) : null}
         </div>

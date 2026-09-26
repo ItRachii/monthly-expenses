@@ -1,3 +1,4 @@
+import { NAV_ICONS } from "@/components/NavIcons";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { resolveContext } from "@/lib/resolveContext";
@@ -10,6 +11,9 @@ import { ReceiptScanner } from "./ReceiptScanner";
 
 // Two-step Splitwise-style flow: first pick WHERE the expense goes (Personal
 // or a group), then fill the form scoped to that choice.
+const ProfileIcon = NAV_ICONS["/profile"];
+const GroupsIcon = NAV_ICONS["/groups"];
+
 export default async function AddPage({
   searchParams,
 }: {
@@ -31,7 +35,9 @@ export default async function AddPage({
             href="/add?ctx=personal"
             className="card flex items-center gap-3 transition hover:border-white/20 hover:bg-white/5"
           >
-            <span aria-hidden className="text-xl">👤</span>
+            <span aria-hidden className="text-2xl leading-none">
+              <ProfileIcon />
+            </span>
             <span>
               <span className="block font-semibold">Personal</span>
               <span className="block text-xs text-muted">Just your own ledger</span>
@@ -43,7 +49,9 @@ export default async function AddPage({
               href={`/add?ctx=${encodeURIComponent(g.id)}`}
               className="card flex items-center gap-3 transition hover:border-white/20 hover:bg-white/5"
             >
-              <span aria-hidden className="text-xl">👥</span>
+              <span aria-hidden className="text-2xl leading-none">
+                <GroupsIcon />
+              </span>
               <span>
                 <span className="block font-semibold">{g.name}</span>
                 <span className="block text-xs text-muted">
