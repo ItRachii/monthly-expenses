@@ -171,11 +171,7 @@ export async function getGroupMembers(groupId: string): Promise<MemberDTO[]> {
   const byEmail = new Map(users.map((u) => [u.email, u]));
   return members.map((m) => {
     const u = byEmail.get(m.email);
-    const display = u
-      ? u.username && u.username.trim()
-        ? u.username.trim()
-        : u.firstName
-      : m.displayName || m.email;
+    const display = displayNameFor(u ?? null, m.displayName || m.email);
     return {
       email: m.email,
       displayName: display,
@@ -224,11 +220,7 @@ export async function getGroupParticipants(groupId: string): Promise<MemberDTO[]
   const byEmail = new Map(users.map((u) => [u.email, u]));
   return rows.map((m) => {
     const u = byEmail.get(m.email);
-    const display = u
-      ? u.username && u.username.trim()
-        ? u.username.trim()
-        : u.firstName
-      : m.displayName || m.email;
+    const display = displayNameFor(u ?? null, m.displayName || m.email);
     return {
       email: m.email,
       displayName: display,

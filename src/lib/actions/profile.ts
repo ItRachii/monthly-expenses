@@ -2,17 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
-import { updateUsername } from "@/lib/users";
+import { updateName } from "@/lib/users";
 import { cleanText } from "@/lib/validate";
 
 export async function saveProfileAction(
-  username: string,
+  firstName: string,
+  lastName: string,
 ): Promise<{ ok: boolean; message?: string; error?: string }> {
   const session = await auth();
   const email = session?.user?.email;
   if (!email) return { ok: false, error: "Not signed in." };
 
-  await updateUsername(email, cleanText(username, 40) || null);
+  const first = cleanText(firstName, 40);
+  if (!first) return { ok: false, error: "Please enter a first name." };
+  await updateName(email, first, cleanText(lastName, 40) || null);
   revalidatePath("/", "layout");
   return { ok: true, message: "Profile updated successfully!" };
 }

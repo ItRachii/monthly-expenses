@@ -19,7 +19,7 @@ export default async function ProfilePage() {
       <ProfileForm
         email={user.appUser.email}
         firstName={user.appUser.firstName}
-        username={user.appUser.username}
+        lastName={user.appUser.lastName}
         image={user.image}
       />
 

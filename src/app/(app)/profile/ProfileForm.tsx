@@ -8,37 +8,40 @@ import { UserAvatar } from "@/components/UserAvatar";
 export function ProfileForm({
   email,
   firstName,
-  username,
+  lastName,
   image,
 }: {
   email: string;
   firstName: string;
-  username: string | null;
+  lastName: string | null;
   image: string | null;
 }) {
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(username ?? "");
+  const [first, setFirst] = useState(firstName);
+  const [last, setLast] = useState(lastName ?? "");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
-  const displayName = username?.trim() || firstName;
+  const displayName = [firstName, lastName ?? ""].map((s) => s.trim()).filter(Boolean).join(" ");
 
   function startEdit() {
-    setValue(username ?? "");
+    setFirst(firstName);
+    setLast(lastName ?? "");
     setMessage(null);
     setEditing(true);
   }
 
   function cancel() {
     setEditing(false);
-    setValue(username ?? "");
+    setFirst(firstName);
+    setLast(lastName ?? "");
   }
 
   function save(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await saveProfileAction(value);
+      const res = await saveProfileAction(first, last);
       if (res.ok) {
         setMessage({ ok: true, text: res.message ?? "Saved." });
         setEditing(false);
@@ -73,25 +76,40 @@ export function ProfileForm({
         ) : null}
 
         <dl className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
-          <Field label="Display Name">
+          <Field label="First Name">
             {editing ? (
               <input
                 className="input mt-1"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder={firstName}
+                value={first}
+                onChange={(e) => setFirst(e.target.value)}
                 maxLength={40}
+                required
                 autoFocus
               />
             ) : (
-              <span>{username?.trim() || <span className="text-muted">Not set</span>}</span>
+              firstName
             )}
-            <p className="mt-1 text-xs text-muted">
-              Shown to other members instead of your first name.
-            </p>
           </Field>
-          <Field label="First Name">{firstName}</Field>
-          <Field label="Email address">{email}</Field>
+          <Field label="Last Name">
+            {editing ? (
+              <input
+                className="input mt-1"
+                value={last}
+                onChange={(e) => setLast(e.target.value)}
+                maxLength={40}
+              />
+            ) : (
+              lastName?.trim() || <span className="text-muted">Not set</span>
+            )}
+          </Field>
+          <Field label="Email address">
+            {email}
+            {editing ? (
+              <p className="mt-1 text-xs font-normal text-muted">
+                Comes from your Google sign-in and cannot be changed here.
+              </p>
+            ) : null}
+          </Field>
         </dl>
 
         {editing ? (
