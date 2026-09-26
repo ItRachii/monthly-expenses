@@ -76,6 +76,8 @@ model Settlement {
 model AppUser {
   email      String  @id
   firstName  String  @map("first_name")
+  lastName   String? @map("last_name")
+  /** Legacy nickname column; no longer read (see db/2026_09_app_users_last_name.sql). */
   username   String?
   systemRole String  @map("system_role")
 

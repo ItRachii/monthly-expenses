@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { getUnreadCount } from "@/lib/notifications";
+import { displayNameFor } from "@/lib/users";
 import { wireKey } from "@/lib/wire";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/SidebarContext";
@@ -17,11 +18,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
-  const displayName =
-    user.appUser?.username?.trim() ||
-    user.appUser?.firstName ||
-    user.name ||
-    user.email;
+  const displayName = displayNameFor(user.appUser, user.name || user.email);
   const unreadCount = await getUnreadCount(user.email);
 
   return (

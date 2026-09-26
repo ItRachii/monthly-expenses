@@ -15,12 +15,12 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-4">
-      <h1>User Profile</h1>
-      <p className="text-muted">Customize your display name across the application.</p>
+      <h1>My Profile</h1>
       <ProfileForm
         email={user.appUser.email}
         firstName={user.appUser.firstName}
-        username={user.appUser.username}
+        lastName={user.appUser.lastName}
+        image={user.image}
       />
 
       <form action={doSignOut}>

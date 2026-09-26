@@ -8,32 +8,39 @@ export async function registerUserIfNeeded(email: string, name: string) {
   const existing = await prisma.appUser.findUnique({ where: { email } });
   if (existing) return existing;
 
-  const firstName = (name || "User").trim().split(/\s+/)[0] || "User";
+  const parts = (name || "User").trim().split(/\s+/);
+  const firstName = parts[0] || "User";
+  const lastName = parts.slice(1).join(" ") || null;
 
   try {
     // system_role is a legacy NOT NULL column we keep to avoid a migration;
     // it is no longer used in logic, so store an empty string.
-    return await prisma.appUser.create({ data: { email, firstName, systemRole: "" } });
+    return await prisma.appUser.create({
+      data: { email, firstName, lastName, systemRole: "" },
+    });
   } catch {
     // Lost a create race with a concurrent request — re-read.
     return prisma.appUser.findUnique({ where: { email } });
   }
 }
 
+/** "First Last" from the editable profile fields, or the fallback. */
 export function displayNameFor(
-  user: { username: string | null; firstName: string } | null,
+  user: { firstName: string; lastName?: string | null } | null,
   fallback: string,
 ): string {
   if (!user) return fallback;
-  if (user.username && user.username.trim()) return user.username.trim();
-  if (user.firstName && user.firstName.trim()) return user.firstName.trim();
-  return fallback;
+  const full = [user.firstName, user.lastName ?? ""]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(" ");
+  return full || fallback;
 }
 
 export async function getAppUser(email: string) {
   return prisma.appUser.findUnique({ where: { email } });
 }
 
-export async function updateUsername(email: string, username: string | null) {
-  return prisma.appUser.update({ where: { email }, data: { username } });
+export async function updateName(email: string, firstName: string, lastName: string | null) {
+  return prisma.appUser.update({ where: { email }, data: { firstName, lastName } });
 }
