@@ -9,6 +9,7 @@ import { SETTLE_EPS, round2 } from "@/lib/settlementMath";
 import { formatINR } from "@/lib/format";
 import { deleteExpenseAction } from "@/lib/actions/expenses";
 import { EditExpenseModal } from "../../log/ExpenseLog";
+import { ExportButton } from "./ExportDialog";
 
 interface Opt {
   value: string;
@@ -56,8 +57,9 @@ function involvement(
 }
 
 // Splitwise-style expense feed: rows grouped by month, each month section
-// collapsible (latest month open by default), with edit/delete and CSV export.
+// collapsible (latest month open by default), with edit/delete and Excel export.
 export function ExpenseFeed({
+  ctx,
   rows,
   nameMap,
   categories,
@@ -67,6 +69,7 @@ export function ExpenseFeed({
   selfKey,
   memberCount,
 }: {
+  ctx: string;
   rows: ExpenseDTO[];
   nameMap: Record<string, string>;
   categories: string[];
@@ -104,24 +107,10 @@ export function ExpenseFeed({
   const isOpen = (key: string) => toggled[key] ?? key === latest;
 
   const payerLabel = (v: string) => nameMap[v] ?? v;
-  const splitLabel = (v: string) => (v === SPLIT_EQUAL ? "Equal Split" : nameMap[v] ?? v);
 
-  function exportCsv() {
-    const header = ["Date", "Category", "Item", "Amount", "Payer", "Split"];
-    const lines = rows.map((r) =>
-      [r.date, r.category, r.item, r.amount.toFixed(2), payerLabel(r.payer), splitLabel(r.split)]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-        .join(","),
-    );
-    const csv = [header.join(","), ...lines].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "expenses_export.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  // rows arrive newest first, so the range bounds are the ends of the list.
+  const maxDate = rows[0]?.date ?? "";
+  const minDate = rows[rows.length - 1]?.date ?? "";
 
   function remove(id: number) {
     if (!confirm("Delete this expense?")) return;
@@ -261,9 +250,7 @@ export function ExpenseFeed({
         </section>
       ))}
 
-      <button className="btn-secondary" onClick={exportCsv}>
-        Export to CSV
-      </button>
+      <ExportButton ctx={ctx} minDate={minDate} maxDate={maxDate} />
 
       {editing ? (
         <EditExpenseModal
