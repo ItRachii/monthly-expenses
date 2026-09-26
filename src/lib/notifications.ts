@@ -5,7 +5,8 @@ export type NotificationType =
   | "expense_added"
   | "expense_updated"
   | "expense_deleted"
-  | "settlement_recorded";
+  | "settlement_recorded"
+  | "group_renamed";
 
 // Deliberately excludes actor_email: the client renders only the message
 // (which uses display names), so the actor's address never leaves the server.

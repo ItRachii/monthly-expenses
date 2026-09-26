@@ -4,6 +4,7 @@ import {
   getUserGroups,
   getGroupMembers,
   getGroupInvites,
+  getGroupNameHistory,
 } from "@/lib/groups";
 import { wireKey } from "@/lib/wire";
 import { PendingInvites } from "@/components/PendingInvites";
@@ -18,6 +19,7 @@ export default async function GroupsPage() {
     groups.map(async (g) => {
       const members = await getGroupMembers(g.id);
       const isAdmin = g.role === "admin";
+      const nameHistory = await getGroupNameHistory(g.id);
       const pendingInvites = isAdmin
         ? (await getGroupInvites(g.id))
             .filter((i) => i.status === "pending")
@@ -38,6 +40,7 @@ export default async function GroupsPage() {
           isSelf: m.email === user.email,
         })),
         pendingInvites,
+        nameHistory,
       };
     }),
   );
