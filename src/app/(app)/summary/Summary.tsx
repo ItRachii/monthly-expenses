@@ -1,11 +1,12 @@
 "use client";
 
 import { XIcon } from "@/components/Icons";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 import { Metric } from "@/components/Metric";
+import { MonthSelect } from "@/components/MonthSelect";
 import {
   CategoryBar,
   CategoryPie,
@@ -40,13 +41,11 @@ export function Summary({
   isPersonal,
   nameMap,
   members,
-  contextSelector,
 }: {
   rows: ExpenseDTO[];
   isPersonal: boolean;
   nameMap: Record<string, string>;
   members: Member[];
-  contextSelector: ReactNode;
 }) {
   const months = useMemo(() => {
     const set = new Set(rows.map((r) => r.date.slice(0, 7)));
@@ -59,10 +58,7 @@ export function Summary({
 
   if (rows.length === 0) {
     return (
-      <div className="space-y-6">
-        {contextSelector}
-        <div className="alert-info">No expenses recorded yet.</div>
-      </div>
+      <div className="alert-info">No expenses recorded yet.</div>
     );
   }
 
@@ -84,27 +80,17 @@ export function Summary({
 
   return (
     <div className="space-y-6">
-      {/* Context + month selectors on one horizontal line. */}
-      <div className="grid grid-cols-2 items-end gap-3">
-        {contextSelector}
-        <div>
-          <label className="label">Select Month</label>
-          <select
-            className="select"
-            value={selectedMonth}
-            onChange={(e) => {
-              setMonth(e.target.value);
-              setSelectedCategory(null);
-            }}
-          >
-            {months.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="section-title">Overview</h2>
+        <MonthSelect
+          months={months}
+          value={selectedMonth}
+          onChange={(m) => {
+            setMonth(m);
+            setSelectedCategory(null);
+          }}
+        />
       </div>
-
-      <h2 className="section-title">Overview</h2>
 
       {isPersonal ? (
         <div className="grid gap-3 sm:grid-cols-2">

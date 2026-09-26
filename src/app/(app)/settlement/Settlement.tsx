@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
 import type { SettlementDTO } from "@/lib/settlements";
@@ -18,6 +18,7 @@ import {
 } from "@/lib/settlementMath";
 import { formatINR } from "@/lib/format";
 import { Metric } from "@/components/Metric";
+import { MonthSelect } from "@/components/MonthSelect";
 import { settleAction } from "@/lib/actions/settlements";
 
 interface Member {
@@ -38,7 +39,6 @@ export function Settlement({
   nameMap,
   members,
   payerOptions,
-  contextSelector,
 }: {
   ctx: string;
   rows: ExpenseDTO[];
@@ -47,7 +47,6 @@ export function Settlement({
   nameMap: Record<string, string>;
   members: Member[];
   payerOptions: Opt[];
-  contextSelector: ReactNode;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -178,10 +177,7 @@ export function Settlement({
 
   if (rows.length === 0) {
     return (
-      <div className="space-y-6">
-        {contextSelector}
-        <div className="alert-info">No expenses recorded yet.</div>
-      </div>
+      <div className="alert-info">No expenses recorded yet.</div>
     );
   }
 
@@ -189,20 +185,10 @@ export function Settlement({
 
   return (
     <div className="space-y-6">
-      {/* Context + month selectors on one horizontal line. */}
-      <div className="grid grid-cols-2 items-end gap-3">
-        {contextSelector}
-        <div>
-          <label className="label">Select Month</label>
-          <select className="select" value={selectedMonth} onChange={(e) => setMonth(e.target.value)}>
-            {months.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="section-title">Balance</h2>
+        <MonthSelect months={months} value={selectedMonth} onChange={setMonth} />
       </div>
-
-      <h2 className="section-title">Balance — {selectedMonth}</h2>
 
       {isPersonal ? (
         <div className="space-y-3">

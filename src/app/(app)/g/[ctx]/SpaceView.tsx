@@ -115,30 +115,13 @@ export function SpaceView({
           </div>
         ) : null}
 
-        {/* Quick actions */}
-        <div className="flex flex-wrap gap-2">
+        <div>
           <Link
             href={`/add?ctx=${encodeURIComponent(ctx)}`}
             className="btn-primary px-3 py-1.5 text-sm"
           >
             + Add expense
           </Link>
-          {!isPersonal ? (
-            <button
-              type="button"
-              className="btn-secondary px-3 py-1.5 text-sm"
-              onClick={() => setTab("balances")}
-            >
-              Settle up
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="btn-secondary px-3 py-1.5 text-sm"
-            onClick={() => setTab("summary")}
-          >
-            Charts
-          </button>
         </div>
       </div>
 
@@ -184,7 +167,6 @@ export function SpaceView({
           nameMap={nameMap}
           members={members}
           payerOptions={payerOptions}
-          contextSelector={<div aria-hidden />}
         />
       ) : null}
 
@@ -194,7 +176,6 @@ export function SpaceView({
           isPersonal={isPersonal}
           nameMap={nameMap}
           members={members}
-          contextSelector={<div aria-hidden />}
         />
       ) : null}
     </div>
