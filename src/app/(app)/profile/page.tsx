@@ -23,8 +23,8 @@ export default async function ProfilePage() {
         username={user.appUser.username}
       />
 
-      <form action={doSignOut} className="border-t border-white/10 pt-4">
-        <button type="submit" className="btn-secondary">
+      <form action={doSignOut}>
+        <button type="submit" className="btn-danger">
           Sign out
         </button>
       </form>
