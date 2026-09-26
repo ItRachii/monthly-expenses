@@ -1,5 +1,6 @@
 "use client";
 
+import { PencilIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/Icons";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
@@ -178,7 +179,7 @@ export function ExpenseLog({
                       className="ml-1 rounded bg-white/5 px-1.5 py-0.5 text-xs text-muted"
                       title={`From scanned receipt: ${r.receiptMerchant}`}
                     >
-                      🧾 {r.receiptMerchant}
+                      <ReceiptIcon className="inline h-3 w-3 align-[-1px]" /> {r.receiptMerchant}
                     </span>
                   ) : null}
                   {r.gstRate ? (
@@ -189,24 +190,24 @@ export function ExpenseLog({
                 <td>{payerLabel(r.payer)}</td>
                 <td>{splitLabel(r.split)}</td>
                 <td className="text-right">
-                  <div className="flex items-center justify-end gap-3">
+                  <div className="flex items-center justify-end gap-1">
                     <button
-                      className="text-muted hover:text-ink disabled:opacity-50"
+                      className="icon-btn"
                       onClick={() => setEditing(r)}
                       disabled={pending}
                       aria-label="Edit expense"
                       title="Edit"
                     >
-                      ✏️
+                      <PencilIcon />
                     </button>
                     <button
-                      className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                      className="icon-btn text-red-400 hover:text-red-300"
                       onClick={() => remove(r.id)}
                       disabled={pending}
                       aria-label="Delete expense"
                       title="Delete"
                     >
-                      🗑
+                      <TrashIcon />
                     </button>
                   </div>
                 </td>
@@ -335,10 +336,10 @@ export function EditExpenseModal({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted hover:text-ink"
+            className="icon-btn"
             aria-label="Close"
           >
-            ✕
+            <XIcon />
           </button>
         </div>
 

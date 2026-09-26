@@ -1,5 +1,6 @@
 "use client";
 
+import { PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
@@ -190,7 +191,7 @@ export function ExpenseFeed({
                             className="ml-1 rounded bg-white/5 px-1 py-0.5 text-[10px] text-muted"
                             title={`From scanned receipt: ${r.receiptMerchant}`}
                           >
-                            🧾
+                            <ReceiptIcon className="inline h-3 w-3 align-[-1px]" />
                           </span>
                         ) : null}
                       </div>
@@ -232,24 +233,24 @@ export function ExpenseFeed({
                         </>
                       ) : null}
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-1">
                       <button
-                        className="text-muted hover:text-ink disabled:opacity-50"
+                        className="icon-btn"
                         onClick={() => setEditing(r)}
                         disabled={pending}
                         aria-label="Edit expense"
                         title="Edit"
                       >
-                        ✏️
+                        <PencilIcon />
                       </button>
                       <button
-                        className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                        className="icon-btn text-red-400 hover:text-red-300"
                         onClick={() => remove(r.id)}
                         disabled={pending}
                         aria-label="Delete expense"
                         title="Delete"
                       >
-                        🗑
+                        <TrashIcon />
                       </button>
                     </div>
                   </div>

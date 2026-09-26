@@ -1,3 +1,4 @@
+import { ArrowLeftIcon } from "@/components/Icons";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { resolveContext } from "@/lib/resolveContext";
@@ -28,8 +29,8 @@ export default async function SpacePage({
     return (
       <div className="space-y-4">
         <div className="alert-error">{r.error}</div>
-        <Link href="/" className="btn-secondary inline-block">
-          ← Back to home
+        <Link href="/" className="btn-secondary">
+          <ArrowLeftIcon className="h-4 w-4" /> Back to home
         </Link>
       </div>
     );

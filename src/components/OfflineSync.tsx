@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangleIcon, ClockIcon, RefreshIcon, WifiOffIcon } from "@/components/Icons";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
@@ -82,7 +83,13 @@ export function OfflineSync({ ownerTag }: { ownerTag: string }) {
       <div className="pointer-events-auto card w-full max-w-md space-y-2 px-4 py-3 text-sm shadow-xl">
         {n > 0 ? (
           <div className="flex items-center gap-3">
-            <span aria-hidden>{syncing ? "🔄" : online ? "⏳" : "📴"}</span>
+            {syncing ? (
+              <RefreshIcon className="h-5 w-5 animate-spin text-muted" />
+            ) : online ? (
+              <ClockIcon className="h-5 w-5 text-muted" />
+            ) : (
+              <WifiOffIcon className="h-5 w-5 text-muted" />
+            )}
             <span className="flex-1">
               {syncing
                 ? `Syncing ${n} offline expense${plural}…`
@@ -102,7 +109,7 @@ export function OfflineSync({ ownerTag }: { ownerTag: string }) {
         ) : null}
         {failed.map((f) => (
           <div key={f.id} className="flex items-center gap-3">
-            <span aria-hidden>⚠️</span>
+            <AlertTriangleIcon className="h-5 w-5 text-red-300" />
             <span className="flex-1 text-red-300">
               Couldn&apos;t sync &quot;{f.item}&quot; — {f.error}
             </span>

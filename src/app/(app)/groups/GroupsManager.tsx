@@ -12,6 +12,7 @@ import {
   renameGroupAction,
 } from "@/lib/actions/groups";
 import { NAV_ICONS } from "@/components/NavIcons";
+import { XIcon } from "@/components/Icons";
 
 const GroupsIcon = NAV_ICONS["/groups"];
 
@@ -395,9 +396,9 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-muted hover:text-ink"
+            className="icon-btn"
           >
-            ✕
+            <XIcon />
           </button>
         </div>
         <div>

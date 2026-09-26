@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ACCOUNT_ITEMS, NavLinks } from "./NavLinks";
 import { useSidebar } from "./SidebarContext";
 import { doSignOut } from "@/lib/actions/auth";
+import { ChevronRightIcon, LogOutIcon, MenuIcon } from "@/components/Icons";
 
 export function Sidebar({
   name,
@@ -64,11 +65,9 @@ export function Sidebar({
             onClick={() => setCollapsed((v) => !v)}
             aria-label={collapsed ? "Expand sidebar" : "Minimise sidebar"}
             aria-expanded={!collapsed}
-            className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-white/5 hover:text-ink ${
-              collapsed ? "md:order-first" : ""
-            }`}
+            className={`icon-btn ${collapsed ? "md:order-first" : ""}`}
           >
-            {collapsed ? <ChevronRightIcon /> : <HamburgerIcon />}
+            {collapsed ? <ChevronRightIcon /> : <MenuIcon />}
           </button>
         </div>
 
@@ -104,7 +103,7 @@ export function Sidebar({
           >
             <span className={collapsed ? "md:hidden" : ""}>Sign out</span>
             <span className={collapsed ? "hidden md:inline" : "hidden"} aria-hidden>
-              <LogoutIcon />
+              <LogOutIcon />
             </span>
           </button>
         </form>
@@ -136,63 +135,6 @@ function ProfileAvatar() {
         <circle cx="12" cy="9" r="3.1" />
         <path d="M4.6 23.6 A7.4 8.6 0 0 1 19.4 23.6 Z" />
       </g>
-    </svg>
-  );
-}
-
-function HamburgerIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      aria-hidden
-    >
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="3" y1="12" x2="21" y2="12" />
-      <line x1="3" y1="18" x2="21" y2="18" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  );
-}
-
-function LogoutIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
     </svg>
   );
 }
