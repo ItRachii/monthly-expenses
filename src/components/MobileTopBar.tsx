@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { UserAvatar } from "./UserAvatar";
-import { NAV_ICONS } from "./NavIcons";
-
-const BellIcon = NAV_ICONS["/notifications"];
+import { NotificationsIcon } from "./NavIcons";
 
 // Mobile-only top bar (the desktop sidebar covers md+). Notifications and the
 // profile avatar sit at the top-right and show on every app page.
@@ -22,7 +20,9 @@ export function MobileTopBar({
           aria-label="Notifications"
           className="relative grid h-10 w-10 place-items-center rounded-lg text-2xl leading-none transition hover:bg-white/5"
         >
-          <span aria-hidden>{BellIcon ? <BellIcon /> : "🔔"}</span>
+          <span aria-hidden>
+            <NotificationsIcon />
+          </span>
           {unreadCount > 0 ? (
             <span className="absolute right-1 top-1 grid h-4 min-w-[1rem] place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-white">
               {unreadCount > 9 ? "9+" : unreadCount}

@@ -134,7 +134,7 @@ function SettlementIcon() {
   );
 }
 
-function GroupsIcon() {
+export function GroupsIcon() {
   const u = useId().replace(/:/g, "");
   return (
     <svg viewBox="0 0 24 24" className={cls} aria-hidden>
@@ -163,7 +163,7 @@ function GroupsIcon() {
   );
 }
 
-function NotificationsIcon() {
+export function NotificationsIcon() {
   const u = useId().replace(/:/g, "");
   return (
     <svg viewBox="0 0 24 24" className={cls} aria-hidden>
@@ -184,7 +184,7 @@ function NotificationsIcon() {
   );
 }
 
-function ProfileIcon() {
+export function ProfileIcon() {
   const u = useId().replace(/:/g, "");
   return (
     <svg viewBox="0 0 24 24" className={cls} aria-hidden>
@@ -211,6 +211,9 @@ function ProfileIcon() {
 }
 
 // href -> custom icon. Items absent here fall back to their emoji.
+// Client components only: a server component must import the named icon
+// (e.g. ProfileIcon) because a client module's record cannot be indexed on
+// the server and comes back undefined.
 export const NAV_ICONS: Record<string, FC> = {
   "/": HomeIcon,
   "/add": AddIcon,
