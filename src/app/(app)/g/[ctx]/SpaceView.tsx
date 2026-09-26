@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeftIcon, ChevronDownIcon, SettingsIcon } from "@/components/Icons";
-import { BalanceHeadline, BalanceLines, PeoplePill } from "@/components/BalanceSummary";
+import { BalanceHeadline, BalanceLines } from "@/components/BalanceSummary";
 import Link from "next/link";
 import { useState } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
@@ -76,15 +76,12 @@ export function SpaceView({
     <div className="space-y-5">
       {/* Hero */}
       <div className="space-y-3">
-        {/* One row: back, name + people pill, settings. */}
+        {/* One row: back, name, settings. */}
         <div className="flex items-center gap-2">
           <Link href="/" aria-label="Back to home" className="icon-btn -ml-2">
             <ArrowLeftIcon />
           </Link>
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-            <h1 className="truncate text-2xl font-semibold">{name}</h1>
-            {!isPersonal ? <PeoplePill count={memberCount} /> : null}
-          </div>
+          <h1 className="min-w-0 flex-1 truncate text-2xl font-semibold">{name}</h1>
           {!isPersonal ? (
             <Link
               href="/groups"

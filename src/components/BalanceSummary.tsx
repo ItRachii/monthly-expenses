@@ -5,15 +5,6 @@ import { formatINR } from "@/lib/format";
 // One look for "where do I stand" everywhere: the home group cards and the
 // group page hero render these same pieces, so the two screens never drift.
 
-/** "2 people" pill shown next to a group name. */
-export function PeoplePill({ count }: { count: number }) {
-  return (
-    <span className="pill shrink-0 text-muted">
-      👥 {count} {count === 1 ? "person" : "people"}
-    </span>
-  );
-}
-
 /** Headline: You owe / You are owed <amount> overall, or settled up. */
 export function BalanceHeadline({ net }: { net: number }) {
   if (net > SETTLE_EPS) {

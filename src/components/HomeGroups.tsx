@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { GroupBalance } from "@/lib/balances";
-import { BalanceHeadline, BalanceLines, PeoplePill } from "./BalanceSummary";
+import { BalanceHeadline, BalanceLines } from "./BalanceSummary";
 
 // Splitwise-style group cards: net balance headline + per-member lines.
 // Settled-up groups collapse behind a toggle so the list stays scannable.
@@ -14,10 +14,7 @@ function GroupCard({ g }: { g: GroupBalance }) {
       href={`/g/${encodeURIComponent(g.id)}`}
       className="card block transition hover:border-white/20 hover:bg-white/5"
     >
-      <div className="flex items-center justify-between gap-3">
-        <span className="truncate text-lg font-semibold">{g.name}</span>
-        <PeoplePill count={g.memberCount} />
-      </div>
+      <div className="truncate text-lg font-semibold">{g.name}</div>
       <div className="mt-2">
         <BalanceHeadline net={g.settled ? 0 : g.net} />
       </div>
