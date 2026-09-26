@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { GroupBalance } from "@/lib/balances";
-import { formatINR } from "@/lib/format";
+import { BalanceHeadline, BalanceLines, PeoplePill } from "./BalanceSummary";
 
 // Splitwise-style group cards: net balance headline + per-member lines.
 // Settled-up groups collapse behind a toggle so the list stays scannable.
@@ -14,40 +14,16 @@ function GroupCard({ g }: { g: GroupBalance }) {
       href={`/g/${encodeURIComponent(g.id)}`}
       className="card block transition hover:border-white/20 hover:bg-white/5"
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate font-semibold">{g.name}</span>
-        <span className="shrink-0 text-xs text-muted">{g.memberCount} people</span>
+      <div className="flex items-center justify-between gap-3">
+        <span className="truncate text-lg font-semibold">{g.name}</span>
+        <PeoplePill count={g.memberCount} />
       </div>
-      <div
-        className={`mt-1 text-sm font-medium ${
-          g.settled ? "text-muted" : g.net >= 0 ? "text-emerald-400" : "text-orange-400"
-        }`}
-      >
-        {g.settled
-          ? "settled up"
-          : g.net >= 0
-          ? `you are owed ${formatINR(g.net)}`
-          : `you owe ${formatINR(Math.abs(g.net))}`}
+      <div className="mt-2">
+        <BalanceHeadline net={g.settled ? 0 : g.net} />
       </div>
-      {g.lines.length > 0 ? (
-        <div className="mt-2 space-y-0.5 border-l-2 border-white/10 pl-3">
-          {g.lines.map((l) => (
-            <p key={`${l.key}-${l.direction}`} className="text-sm text-muted">
-              {l.direction === "owes_you" ? (
-                <>
-                  {l.name} owes you{" "}
-                  <span className="text-emerald-400">{formatINR(l.amount)}</span>
-                </>
-              ) : (
-                <>
-                  You owe {l.name}{" "}
-                  <span className="text-orange-400">{formatINR(l.amount)}</span>
-                </>
-              )}
-            </p>
-          ))}
-        </div>
-      ) : null}
+      <div className="mt-2">
+        <BalanceLines lines={g.lines} />
+      </div>
     </Link>
   );
 }
