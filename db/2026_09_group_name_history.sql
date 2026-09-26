@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS public.group_name_history (
 CREATE INDEX IF NOT EXISTS group_name_history_group_idx
   ON public.group_name_history (group_id, valid_from DESC);
 
+-- Match every other app table: RLS on with no policies, so the table is
+-- reachable only through the app's postgres role, never the anon API.
+ALTER TABLE public.group_name_history ENABLE ROW LEVEL SECURITY;
+
 -- Backfill: seed one open row per existing group so the history starts at
 -- creation, attributed to the creator. Idempotent.
 INSERT INTO public.group_name_history (group_id, name, valid_from, valid_to, changed_by)
