@@ -9,6 +9,7 @@ import {
 } from "@/lib/balances";
 import { SETTLE_EPS } from "@/lib/settlementMath";
 import { formatINR } from "@/lib/format";
+import { PlusIcon } from "@/components/Icons";
 
 // Splitwise-style dashboard: overall position, one card per group with
 // per-member balances, a Personal card, and the Add-expense FAB.
@@ -43,9 +44,9 @@ export default async function HomePage() {
           href="/groups"
           aria-label="Create or manage groups"
           title="Create or manage groups"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-lg text-muted transition hover:bg-white/5 hover:text-ink"
+          className="icon-btn rounded-full border border-white/10"
         >
-          +
+          <PlusIcon />
         </Link>
       </header>
 

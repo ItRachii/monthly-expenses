@@ -184,3 +184,20 @@ export function AlertTriangleIcon(p: IconProps) {
     </Base>
   );
 }
+
+export function PlusIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </Base>
+  );
+}
+
+export function ChevronDownIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <polyline points="6 9 12 15 18 9" />
+    </Base>
+  );
+}

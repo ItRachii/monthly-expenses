@@ -1,13 +1,12 @@
 "use client";
 
-import { ArrowLeftIcon, SettingsIcon } from "@/components/Icons";
+import { ArrowLeftIcon, ChevronDownIcon, SettingsIcon } from "@/components/Icons";
+import { BalanceHeadline, BalanceLines } from "@/components/BalanceSummary";
 import Link from "next/link";
 import { useState } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
 import type { SettlementDTO } from "@/lib/settlements";
 import type { BalanceLine } from "@/lib/balances";
-import { SETTLE_EPS } from "@/lib/settlementMath";
-import { formatINR } from "@/lib/format";
 import { ExpenseFeed } from "./ExpenseFeed";
 import { Settlement } from "../../settlement/Settlement";
 import { Summary } from "../../summary/Summary";
@@ -77,14 +76,12 @@ export function SpaceView({
     <div className="space-y-5">
       {/* Hero */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            href="/"
-            aria-label="Back to home"
-            className="icon-btn"
-          >
+        {/* One row: back, name, settings. */}
+        <div className="flex items-center gap-2">
+          <Link href="/" aria-label="Back to home" className="icon-btn -ml-2">
             <ArrowLeftIcon />
           </Link>
+          <h1 className="min-w-0 flex-1 truncate text-2xl font-semibold">{name}</h1>
           {!isPersonal ? (
             <Link
               href="/groups"
@@ -96,12 +93,6 @@ export function SpaceView({
             </Link>
           ) : null}
         </div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">{name}</h1>
-          {!isPersonal ? (
-            <span className="pill shrink-0">👥 {memberCount} people</span>
-          ) : null}
-        </div>
 
         {!isPersonal ? (
           <div className="card space-y-2">
@@ -111,55 +102,16 @@ export function SpaceView({
               aria-expanded={linesOpen}
               onClick={() => setLinesOpen((v) => !v)}
             >
-              <span className="text-sm font-medium">
-                {heroNet > SETTLE_EPS ? (
-                  <>
-                    You are owed{" "}
-                    <span className="text-emerald-400">{formatINR(heroNet)}</span>{" "}
-                    overall
-                  </>
-                ) : heroNet < -SETTLE_EPS ? (
-                  <>
-                    You owe{" "}
-                    <span className="text-orange-400">
-                      {formatINR(Math.abs(heroNet))}
-                    </span>{" "}
-                    overall
-                  </>
-                ) : (
-                  "You are settled up in this group"
-                )}
-              </span>
+              <BalanceHeadline net={heroNet} />
               {heroLines.length > 0 ? (
-                <span
-                  aria-hidden
-                  className={`inline-block text-muted transition-transform ${
+                <ChevronDownIcon
+                  className={`h-4 w-4 text-muted transition-transform ${
                     linesOpen ? "rotate-180" : ""
                   }`}
-                >
-                  ▾
-                </span>
+                />
               ) : null}
             </button>
-            {linesOpen && heroLines.length > 0 ? (
-              <div className="space-y-0.5 border-l-2 border-white/10 pl-3">
-                {heroLines.map((l) => (
-                  <p key={`${l.key}-${l.direction}`} className="text-sm text-muted">
-                    {l.direction === "owes_you" ? (
-                      <>
-                        {l.name} owes you{" "}
-                        <span className="text-emerald-400">{formatINR(l.amount)}</span>
-                      </>
-                    ) : (
-                      <>
-                        You owe {l.name}{" "}
-                        <span className="text-orange-400">{formatINR(l.amount)}</span>
-                      </>
-                    )}
-                  </p>
-                ))}
-              </div>
-            ) : null}
+            {linesOpen ? <BalanceLines lines={heroLines} /> : null}
           </div>
         ) : null}
 
