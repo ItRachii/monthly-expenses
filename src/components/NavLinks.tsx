@@ -4,26 +4,42 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ICONS } from "./NavIcons";
 
+export interface NavItem {
+  href: string;
+  label: string;
+  /** Fallback when NAV_ICONS has no custom icon for the href. */
+  icon: string;
+}
+
 // Desktop sidebar links. Per-context pages (log/summary/settlement) merged
 // into the home screen + /g/[ctx] tabs, so the nav is just the app shell.
-const items = [
+const MAIN_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: "🏠" },
   { href: "/add", label: "Add Expense", icon: "➕" },
   { href: "/notifications", label: "Notifications", icon: "🔔" },
   { href: "/groups", label: "Groups", icon: "👥" },
 ];
 
+// "Account" section under the main nav: where the user edits their profile.
+export const ACCOUNT_ITEMS: NavItem[] = [
+  { href: "/profile", label: "Edit Profile", icon: "👤" },
+];
+
 export function NavLinks({
+  items = MAIN_ITEMS,
   unreadCount = 0,
   collapsed = false,
+  ariaLabel,
 }: {
+  items?: NavItem[];
   unreadCount?: number;
   collapsed?: boolean;
+  ariaLabel?: string;
 }) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-col gap-1">
+    <nav aria-label={ariaLabel} className="flex flex-col gap-1">
       {items.map((it) => {
         const active = pathname === it.href;
         const showBadge = it.href === "/notifications" && unreadCount > 0;

@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { NavLinks } from "./NavLinks";
+import { ACCOUNT_ITEMS, NavLinks } from "./NavLinks";
 import { useSidebar } from "./SidebarContext";
 import { doSignOut } from "@/lib/actions/auth";
 
@@ -31,8 +31,8 @@ export function Sidebar({
         }`}
       >
         <div className={`flex items-center gap-3 ${collapsed ? "md:flex-col" : ""}`}>
-          {/* The avatar is the entry point to the profile page (the old
-              Profile nav item was redundant with it). */}
+          {/* The avatar is a shortcut to the profile page; the Account
+              section below is the labelled route to the same screen. */}
           <Link
             href="/profile"
             aria-label="Profile"
@@ -74,6 +74,23 @@ export function Sidebar({
 
         <div className={collapsed ? "hidden w-full md:block" : "w-full"}>
           <NavLinks unreadCount={unreadCount} collapsed={collapsed} />
+        </div>
+
+        {/* Account section: heading when open, a thin separator on the
+            collapsed rail where the icon alone has to carry it. */}
+        <div
+          className={`w-full ${
+            collapsed ? "hidden md:block md:border-t md:border-white/10 md:pt-3" : ""
+          }`}
+        >
+          <h2
+            className={`mb-1 px-3 text-xs font-semibold uppercase tracking-wide text-muted ${
+              collapsed ? "md:hidden" : ""
+            }`}
+          >
+            Account
+          </h2>
+          <NavLinks items={ACCOUNT_ITEMS} collapsed={collapsed} ariaLabel="Account" />
         </div>
 
         <form
