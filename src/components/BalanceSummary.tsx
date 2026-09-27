@@ -17,7 +17,7 @@ export function BalanceHeadline({ net }: { net: number }) {
   if (net < -SETTLE_EPS) {
     return (
       <span className="text-sm font-medium">
-        You owe <span className="text-orange-400">{formatINR(Math.abs(net))}</span> overall
+        You owe <span className="text-red-400">{formatINR(Math.abs(net))}</span> overall
       </span>
     );
   }
@@ -39,7 +39,7 @@ export function BalanceLines({ lines }: { lines: BalanceLine[] }) {
           ) : (
             <>
               You owe {l.name}{" "}
-              <span className="text-orange-400">{formatINR(l.amount)}</span>
+              <span className="text-red-400">{formatINR(l.amount)}</span>
             </>
           )}
         </p>

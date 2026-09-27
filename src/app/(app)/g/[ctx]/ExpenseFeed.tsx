@@ -36,6 +36,7 @@ function involvement(
   selfKey: string,
   memberCount: number,
 ): { label: string; amount: number | null; tone: "lent" | "borrowed" | "muted" } {
+  // "you paid" with nothing lent means the whole cost was yours: no balance.
   const share =
     r.split === SPLIT_EQUAL
       ? memberCount > 0
@@ -48,13 +49,20 @@ function involvement(
     const lent = round2(r.amount - share);
     return lent > SETTLE_EPS
       ? { label: "you lent", amount: lent, tone: "lent" }
-      : { label: "you paid", amount: r.amount, tone: "muted" };
+      : { label: "no balance", amount: null, tone: "muted" };
   }
   const borrowed = round2(share);
   return borrowed > SETTLE_EPS
     ? { label: "you borrowed", amount: borrowed, tone: "borrowed" }
     : { label: "not involved", amount: null, tone: "muted" };
 }
+
+const AMOUNT_COL = "w-[5.5rem] shrink-0 sm:w-28";
+const TONE = {
+  lent: "text-emerald-400",
+  borrowed: "text-red-400",
+  muted: "text-muted",
+} as const;
 
 // Splitwise-style expense feed: rows grouped by month, each month section
 // collapsible (latest month open by default), with edit/delete and Excel export.
@@ -172,55 +180,40 @@ export function ExpenseFeed({
                         {String(d).padStart(2, "0")}
                       </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {r.item}
-                        {r.receiptMerchant ? (
-                          <span
-                            className="ml-1 rounded bg-white/5 px-1 py-0.5 text-[10px] text-muted"
-                            title={`From scanned receipt: ${r.receiptMerchant}`}
-                          >
-                            <ReceiptIcon className="inline h-3 w-3 align-[-1px]" />
-                          </span>
+                    {/* Phone: name on its own line, amounts below it. sm+: one line. */}
+                    <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-3">
+                      <div className="min-w-0 sm:flex-1">
+                        <div className="truncate text-sm font-medium">
+                          {r.item}
+                          {r.receiptMerchant ? (
+                            <span
+                              className="ml-1 rounded bg-white/5 px-1 py-0.5 text-[10px] text-muted"
+                              title={`From scanned receipt: ${r.receiptMerchant}`}
+                            >
+                              <ReceiptIcon className="inline h-3 w-3 align-[-1px]" />
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="truncate text-xs text-muted">{r.category || "Uncategorised"}</div>
+                      </div>
+                      {/* Two fixed-width columns so amounts line up down the list:
+                          who paid and the full amount, then your share of it. */}
+                      <div className="mt-1.5 flex justify-end gap-3 sm:mt-0">
+                        <div className={`${AMOUNT_COL} text-right`}>
+                          <div className="truncate text-[11px] text-muted">
+                            {isPersonal ? "spent" : `${payerLabel(r.payer)} paid`}
+                          </div>
+                          <div className="text-sm font-semibold text-ink">{formatINR(r.amount)}</div>
+                        </div>
+                        {inv ? (
+                          <div className={`${AMOUNT_COL} text-right`}>
+                            <div className={`truncate text-[11px] ${TONE[inv.tone]}`}>{inv.label}</div>
+                            <div className={`text-sm font-semibold ${TONE[inv.tone]}`}>
+                              {formatINR(inv.amount ?? 0)}
+                            </div>
+                          </div>
                         ) : null}
                       </div>
-                      <div className="truncate text-xs text-muted">
-                        {isPersonal
-                          ? r.category
-                          : `${payerLabel(r.payer)} paid ${formatINR(r.amount)} · ${r.category}`}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      {isPersonal ? (
-                        <div className="text-sm font-semibold">{formatINR(r.amount)}</div>
-                      ) : inv ? (
-                        <>
-                          <div
-                            className={`text-[10px] ${
-                              inv.tone === "lent"
-                                ? "text-emerald-400"
-                                : inv.tone === "borrowed"
-                                ? "text-orange-400"
-                                : "text-muted"
-                            }`}
-                          >
-                            {inv.label}
-                          </div>
-                          {inv.amount != null ? (
-                            <div
-                              className={`text-sm font-semibold ${
-                                inv.tone === "lent"
-                                  ? "text-emerald-400"
-                                  : inv.tone === "borrowed"
-                                  ? "text-orange-400"
-                                  : ""
-                              }`}
-                            >
-                              {formatINR(inv.amount)}
-                            </div>
-                          ) : null}
-                        </>
-                      ) : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       <button
