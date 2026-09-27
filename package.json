@@ -9,7 +9,9 @@
     "lint": "next lint",
     "postinstall": "prisma generate",
     "db:pull": "prisma db pull",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "test:statements": "tsx tests/statements/run.ts",
+    "db:setup-local": "prisma db push && prisma db execute --schema prisma/schema.prisma --file db/expense_changes_cdc.sql && prisma db execute --schema prisma/schema.prisma --file db/2026_09_pii_email.sql"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
@@ -17,6 +19,7 @@
     "next": "15.5.18",
     "next-auth": "5.0.0-beta.31",
     "nodemailer": "7.0.13",
+    "pdfjs-dist": "^6.3.289",
     "react": "19.0.6",
     "react-dom": "19.0.6",
     "recharts": "3.8.1",
@@ -31,6 +34,7 @@
     "postcss": "^8.4.49",
     "prisma": "6.19.3",
     "tailwindcss": "3.4.19",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.0"
   }
 }

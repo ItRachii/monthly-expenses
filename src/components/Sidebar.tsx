@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { ACCOUNT_ITEMS, NavLinks } from "./NavLinks";
+import { ACCOUNT_ITEMS, NavLinks, mainItems } from "./NavLinks";
 import { useSidebar } from "./SidebarContext";
 import { doSignOut } from "@/lib/actions/auth";
 import { ChevronRightIcon, LogOutIcon, MenuIcon } from "@/components/Icons";
@@ -11,10 +11,13 @@ export function Sidebar({
   name,
   image,
   unreadCount,
+  statements = false,
 }: {
   name: string;
   image: string | null;
   unreadCount: number;
+  /** Show the statement import entry. */
+  statements?: boolean;
 }) {
   const { collapsed, setCollapsed } = useSidebar();
 
@@ -72,7 +75,7 @@ export function Sidebar({
         </div>
 
         <div className={collapsed ? "hidden w-full md:block" : "w-full"}>
-          <NavLinks unreadCount={unreadCount} collapsed={collapsed} />
+          <NavLinks items={mainItems(statements)} unreadCount={unreadCount} collapsed={collapsed} />
         </div>
 
         {/* Account section: heading when open, a thin separator on the

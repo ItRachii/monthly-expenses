@@ -9,6 +9,7 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { OfflineSync } from "@/components/OfflineSync";
 import { AddExpenseProvider } from "@/components/AddExpense";
 import { getUserGroups } from "@/lib/groups";
+import { statementsEnabled } from "@/lib/features";
 
 // Every page in this group depends on the signed-in user, so never prerender.
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export default async function AppLayout({
     getUserGroups(user.email),
   ]);
   const offlineOwner = offlineOwnerFor(user);
+  const statements = statementsEnabled();
   const addContexts = [
     { value: "personal", label: "Personal" },
     ...groups.map((g) => ({ value: g.id, label: g.name })),
@@ -36,10 +38,10 @@ export default async function AppLayout({
         <div className="flex min-h-screen flex-col md:flex-row">
           {/* Desktop: left sidebar. Mobile: a top bar (profile + notifications)
               and a bottom tab bar; these handle their own safe-area insets. */}
-          <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} />
+          <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} statements={statements} />
           <MobileTopBar image={user.image} unreadCount={unreadCount} />
           <AppMain>{children}</AppMain>
-          <MobileBottomNav />
+          <MobileBottomNav statements={statements} />
           {/* Replays expenses queued while offline. The tag is an opaque HMAC of
               the user's email, so queue items carry no PII and never sync into
               a different account on a shared device. */}
