@@ -10,6 +10,7 @@ import {
 import { SETTLE_EPS } from "@/lib/settlementMath";
 import { formatINR } from "@/lib/format";
 import { PlusIcon } from "@/components/Icons";
+import { AddExpenseButton } from "@/components/AddExpense";
 
 // Splitwise-style dashboard: overall position, one card per group with
 // per-member balances, a Personal card, and the Add-expense FAB.
@@ -76,12 +77,9 @@ export default async function HomePage() {
       </Link>
 
       {/* Floating Add-expense button, clear of the mobile bottom nav. */}
-      <Link
-        href="/add"
-        className="btn-primary fixed bottom-20 right-4 z-30 rounded-full px-5 py-3 shadow-lg shadow-black/40 md:bottom-8 md:right-8"
-      >
+      <AddExpenseButton className="btn-primary fixed bottom-20 right-4 z-30 rounded-full px-5 py-3 shadow-lg shadow-black/40 md:bottom-8 md:right-8">
         + Add expense
-      </Link>
+      </AddExpenseButton>
     </div>
   );
 }

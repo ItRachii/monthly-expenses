@@ -8,6 +8,8 @@ import { AppMain } from "@/components/AppMain";
 import { MobileTopBar } from "@/components/MobileTopBar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { OfflineSync } from "@/components/OfflineSync";
+import { AddExpenseProvider } from "@/components/AddExpense";
+import { getUserGroups } from "@/lib/groups";
 
 // Every page in this group depends on the signed-in user, so never prerender.
 export const dynamic = "force-dynamic";
@@ -19,22 +21,32 @@ export default async function AppLayout({
 }) {
   const user = await requireUser();
   const displayName = displayNameFor(user.appUser, user.name || user.email);
-  const unreadCount = await getUnreadCount(user.email);
+  const [unreadCount, groups] = await Promise.all([
+    getUnreadCount(user.email),
+    getUserGroups(user.email),
+  ]);
+  const offlineOwner = wireKey("offline-owner", user.email);
+  const addContexts = [
+    { value: "personal", label: "Personal" },
+    ...groups.map((g) => ({ value: g.id, label: g.name })),
+  ];
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen flex-col md:flex-row">
-        {/* Desktop: left sidebar. Mobile: a top bar (profile + notifications)
-            and a bottom tab bar — these handle their own safe-area insets. */}
-        <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} />
-        <MobileTopBar image={user.image} unreadCount={unreadCount} />
-        <AppMain>{children}</AppMain>
-        <MobileBottomNav />
-        {/* Replays expenses queued while offline. The tag is an opaque HMAC of
-            the user's email, so queue items carry no PII and never sync into
-            a different account on a shared device. */}
-        <OfflineSync ownerTag={wireKey("offline-owner", user.email)} />
-      </div>
+      <AddExpenseProvider contexts={addContexts} offlineOwner={offlineOwner}>
+        <div className="flex min-h-screen flex-col md:flex-row">
+          {/* Desktop: left sidebar. Mobile: a top bar (profile + notifications)
+              and a bottom tab bar; these handle their own safe-area insets. */}
+          <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} />
+          <MobileTopBar image={user.image} unreadCount={unreadCount} />
+          <AppMain>{children}</AppMain>
+          <MobileBottomNav />
+          {/* Replays expenses queued while offline. The tag is an opaque HMAC of
+              the user's email, so queue items carry no PII and never sync into
+              a different account on a shared device. */}
+          <OfflineSync ownerTag={offlineOwner} />
+        </div>
+      </AddExpenseProvider>
     </SidebarProvider>
   );
 }
