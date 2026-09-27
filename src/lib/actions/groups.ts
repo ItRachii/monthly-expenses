@@ -9,6 +9,7 @@ import { sendInviteEmail } from "@/lib/email";
 import { notifyGroup } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
 import { maskEmail } from "@/lib/pii";
+import { maskedEmailFor } from "@/lib/piiStore";
 import { cleanText, isValidEmail } from "@/lib/validate";
 import { emailForKey } from "@/lib/wire";
 
@@ -97,7 +98,9 @@ export async function inviteAction(groupId: string, inviteEmail: string) {
   // Identify the inviter by display name + masked address — never the raw
   // email — since the recipient may be a stranger or a mistyped address.
   const inviter = await prisma.appUser.findUnique({ where: { email } });
-  const inviterLabel = `${displayNameFor(inviter, "A member")} (${maskEmail(email)})`;
+  const inviterMasked = await maskedEmailFor(email);
+  const inviterName = displayNameFor(inviter, "A member");
+  const inviterLabel = inviterMasked ? `${inviterName} (${inviterMasked})` : inviterName;
   const sent = await sendInviteEmail(target, group?.name ?? "the group", inviterLabel);
   revalidateGroupViews();
   if (sent.ok)

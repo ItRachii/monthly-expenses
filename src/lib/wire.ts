@@ -23,7 +23,7 @@ import type { MemberDTO } from "./groups";
 import type { ExpenseDTO } from "./expenses";
 import type { SettlementDTO } from "./settlements";
 import { SPLIT_EQUAL } from "./constants";
-import { maskEmail, looksLikeEmail } from "./pii";
+import { labelForUnknown, looksLikeEmail } from "./pii";
 
 // AUTH_SECRET is always set in any environment where auth works. The dev
 // fallback only keeps local builds without a secret from throwing.
@@ -59,7 +59,7 @@ export interface Wire {
 function safeLabel(displayName: string, email: string): string {
   return displayName && !looksLikeEmail(displayName)
     ? displayName
-    : maskEmail(email);
+    : labelForUnknown(email);
 }
 
 export function buildWire(scope: string, members: MemberDTO[], selfEmail: string): Wire {
@@ -75,8 +75,8 @@ export function buildWire(scope: string, members: MemberDTO[], selfEmail: string
   const toKey = (email: string) => {
     const key = wireKey(scope, email);
     // A value not in the participant list (e.g. someone who has since left but
-    // paid a past expense): surface a masked label, never the raw address.
-    if (!(key in nameMap)) nameMap[key] = maskEmail(email);
+    // paid a past expense): a generic label, never an address or id.
+    if (!(key in nameMap)) nameMap[key] = labelForUnknown(email);
     return key;
   };
   return { members: wireMembers, nameMap, toKey };
@@ -89,7 +89,7 @@ export function buildPersonalWire(selfEmail: string, displayName: string): Wire 
   const toKey = (email: string) => {
     if (email === selfEmail) return SELF_KEY;
     const key = wireKey("personal", email);
-    if (!(key in nameMap)) nameMap[key] = maskEmail(email);
+    if (!(key in nameMap)) nameMap[key] = labelForUnknown(email);
     return key;
   };
   return { members: [], nameMap, toKey };

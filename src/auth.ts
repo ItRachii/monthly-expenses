@@ -1,14 +1,27 @@
 import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
+import { authConfig } from "./auth.config";
+import { upsertUserOnSignIn } from "@/lib/users";
+import { ensurePiiMigrated } from "@/lib/piiMigration";
 
-// Auth.js v5 reads AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET / AUTH_SECRET from env.
-// JWT session strategy means no database adapter or extra auth tables are
-// needed — the app's own app_users row is created lazily on first sign-in.
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [Google],
-  session: { strategy: "jwt" },
-  trustHost: true,
-  pages: {
-    signIn: "/login",
+const nextAuth = NextAuth({
+  ...authConfig,
+  events: {
+    // The only moment the app sees the address: store it encrypted on the
+    // user's row, keyed by user id.
+    async signIn({ user }) {
+      if (user.email) await upsertUserOnSignIn(user.email, user.name ?? "User");
+    },
   },
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+
+/**
+ * The signed-in session for server code. `session.user.email` is the user id,
+ * not the address. Waits for the one-time email migration, so no request ever
+ * mixes ids with raw addresses.
+ */
+export async function auth() {
+  await ensurePiiMigrated();
+  return nextAuth.auth();
+}

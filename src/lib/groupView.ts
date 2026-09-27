@@ -15,6 +15,7 @@ export interface GroupView {
   isAdmin: boolean;
   isCreator: boolean;
   members: { key: string; displayName: string; role: string; isSelf: boolean }[];
+  /** Invitees by masked address only. */
   pendingInvites: { id: number; invitedEmail: string }[];
   /** SCD Type 2 name history, newest first. validTo is null for the current name. */
   nameHistory: { name: string; validFrom: string; validTo: string | null }[];
@@ -44,7 +45,7 @@ export async function buildGroupView(g: GroupDTO, userEmail: string): Promise<Gr
     })),
     pendingInvites: invites
       .filter((i) => i.status === "pending")
-      .map((i) => ({ id: i.id, invitedEmail: i.invitedEmail })),
+      .map((i) => ({ id: i.id, invitedEmail: i.invitedEmailMasked })),
     nameHistory,
   };
 }

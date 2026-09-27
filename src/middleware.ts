@@ -1,5 +1,9 @@
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { authConfig } from "@/auth.config";
+
+// Edge-safe instance: no database access here.
+const { auth } = NextAuth(authConfig);
 
 // Defense-in-depth auth gate: every page already calls requireUser(), but this
 // rejects unauthenticated requests at the edge before any server code runs.
