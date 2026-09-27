@@ -137,11 +137,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+/** Pencil icon, the same edit affordance as expenses and the group name. */
 function EditButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" className="btn-secondary shrink-0" onClick={onClick}>
-      Edit
-      <PencilIcon className="h-4 w-4" />
+    <button
+      type="button"
+      className="icon-btn shrink-0"
+      onClick={onClick}
+      aria-label="Edit profile"
+      title="Edit"
+    >
+      <PencilIcon />
     </button>
   );
 }

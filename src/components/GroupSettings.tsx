@@ -10,7 +10,7 @@ import {
   removeMemberAction,
   renameGroupAction,
 } from "@/lib/actions/groups";
-import { XIcon } from "@/components/Icons";
+import { CheckIcon, PencilIcon, XIcon } from "@/components/Icons";
 import type { GroupView } from "@/lib/groupView";
 
 // Group settings, opened from the gear on a group screen.
@@ -34,8 +34,13 @@ function GroupSettingsBody({ group }: { group: GroupView }) {
   return (
     <div className="space-y-5">
       {error ? <div className="alert-error">{error}</div> : null}
-      {/* Rename (admin) + name history */}
-      {group.isAdmin ? <RenameForm groupId={group.id} current={group.name} /> : null}
+      {/* Name (editable by admins) + name history */}
+      <NameField
+        groupId={group.id}
+        current={group.name}
+        description={group.description}
+        canEdit={group.isAdmin}
+      />
       {group.nameHistory.length > 1 ? <NameHistory rows={group.nameHistory} /> : null}
 
       {/* Members */}
@@ -140,74 +145,112 @@ function GroupSettingsBody({ group }: { group: GroupView }) {
   );
 }
 
-function RenameForm({ groupId, current }: { groupId: string; current: string }) {
+/**
+ * The group name, edited in place like any other field: admins get a pencil
+ * icon that swaps the name for an input with save and cancel icons.
+ */
+function NameField({
+  groupId,
+  current,
+  description,
+  canEdit,
+}: {
+  groupId: string;
+  current: string;
+  description: string | null;
+  canEdit: boolean;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(current);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function submit(e: React.FormEvent) {
+  function startEdit() {
+    setValue(current);
+    setError(null);
+    setEditing(true);
+  }
+
+  function save(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
       const res = await renameGroupAction(groupId, value);
-      setMessage({ ok: res.ok, text: res.ok ? (res.message ?? "") : (res.error ?? "") });
-      if (res.ok) setEditing(false);
-      router.refresh();
+      if (res.ok) {
+        setEditing(false);
+        router.refresh();
+      } else setError(res.error ?? "Something went wrong.");
     });
   }
 
-  if (!editing) {
-    return (
-      <div className="space-y-2">
-        {message ? (
-          <div className={message.ok ? "alert-success" : "alert-error"}>{message.text}</div>
-        ) : null}
-        <button
-          type="button"
-          className="btn-secondary px-3 py-1 text-xs"
-          onClick={() => {
-            setValue(current);
-            setMessage(null);
-            setEditing(true);
-          }}
-        >
-          Rename group
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <form onSubmit={submit} className="space-y-2">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">
-        Rename Group
-      </h3>
-      {message && !message.ok ? <div className="alert-error">{message.text}</div> : null}
-      <div className="flex gap-2">
-        <input
-          className="input"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          maxLength={80}
-          autoFocus
-        />
-        <button type="submit" className="btn-primary shrink-0" disabled={pending}>
-          {pending ? "Saving…" : "Save"}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary shrink-0"
-          disabled={pending}
-          onClick={() => setEditing(false)}
-        >
-          Cancel
-        </button>
-      </div>
-      <p className="text-xs text-muted">
-        The old name is kept in the group&apos;s name history.
-      </p>
-    </form>
+    <div>
+      <div className="text-sm text-muted">Group name</div>
+      {editing ? (
+        <form onSubmit={save} className="mt-1 space-y-2">
+          <div className="flex items-center gap-1">
+            <input
+              className="input"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                // Escape cancels the edit without closing the overlay.
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setEditing(false);
+                }
+              }}
+              maxLength={80}
+              aria-label="Group name"
+              autoFocus
+            />
+            <button
+              type="submit"
+              className="icon-btn text-primary"
+              disabled={pending}
+              aria-label="Save name"
+              title="Save"
+            >
+              <CheckIcon />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              disabled={pending}
+              onClick={() => setEditing(false)}
+              aria-label="Cancel rename"
+              title="Cancel"
+            >
+              <XIcon />
+            </button>
+          </div>
+          {error ? <div className="alert-error">{error}</div> : null}
+          <p className="text-xs text-muted">
+            The old name is kept in the group&apos;s name history.
+          </p>
+        </form>
+      ) : (
+        <div className="mt-1 flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-base font-medium text-ink">{current}</div>
+            {description ? (
+              <div className="truncate text-sm text-muted">{description}</div>
+            ) : null}
+          </div>
+          {canEdit ? (
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={startEdit}
+              aria-label="Edit group name"
+              title="Edit"
+            >
+              <PencilIcon />
+            </button>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -341,13 +384,7 @@ export function GroupSettingsOverlay({
         style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="section-title">Group settings</h2>
-            <p className="truncate text-sm text-muted">
-              <span className="font-semibold text-ink">{group.name}</span>
-              {group.description ? <> · {group.description}</> : null}
-            </p>
-          </div>
+          <h2 className="section-title">Group settings</h2>
           <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
             <XIcon />
           </button>
