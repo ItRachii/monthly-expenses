@@ -25,17 +25,6 @@ function byCategory(rows: ExpenseDTO[]) {
   return Array.from(m, ([category, amount]) => ({ category, amount }));
 }
 
-function byMonth(rows: ExpenseDTO[]) {
-  const m = new Map<string, number>();
-  for (const r of rows) {
-    const k = r.date.slice(0, 7);
-    m.set(k, (m.get(k) ?? 0) + r.amount);
-  }
-  return Array.from(m, ([month, amount]) => ({ month, amount })).sort((a, b) =>
-    a.month.localeCompare(b.month),
-  );
-}
-
 export function Summary({
   rows,
   isPersonal,
@@ -67,7 +56,6 @@ export function Summary({
   const total = monthRows.reduce((s, r) => s + r.amount, 0);
 
   const categoryData = byCategory(monthRows);
-  const trendData = byMonth(rows);
   // Clicking a pie slice filters the detail table to that category.
   const detailRows = selectedCategory
     ? monthRows.filter((r) => r.category === selectedCategory)
@@ -156,7 +144,7 @@ export function Summary({
             />
           )}
           {tabs[tab] === "Category (Bar)" && <CategoryBar data={categoryData} />}
-          {tabs[tab] === "Monthly Trend" && <MonthlyTrend data={trendData} />}
+          {tabs[tab] === "Monthly Trend" && <MonthlyTrend rows={rows} />}
         </div>
         {tabs[tab] === "Category (Pie)" ? (
           <p className="text-xs text-muted">
