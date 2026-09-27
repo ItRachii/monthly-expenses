@@ -1,16 +1,45 @@
 import { prisma } from "./prisma";
+import { emailId } from "./piiCrypto";
+import { decryptEmail, encryptEmail } from "./piiStore";
+import { ensurePiiMigrated } from "./piiMigration";
 
 // Ported from legacy-streamlit/utils/auth.py (register_user_if_needed) and
 // pages/5_Profile.py. The legacy system-role concept has been removed:
 // Personal mode is now the logged-in user's own (solo) ledger.
 
+function splitName(name: string) {
+  const parts = (name || "User").trim().split(/\s+/);
+  return { firstName: parts[0] || "User", lastName: parts.slice(1).join(" ") || null };
+}
+
+/**
+ * Called once per Google sign-in, the only time the app sees the address:
+ * creates the user's row, or refreshes its encrypted copy of the address.
+ */
+export async function upsertUserOnSignIn(email: string, name: string) {
+  await ensurePiiMigrated();
+  const id = await emailId(email);
+  const emailEnc = encryptEmail(email);
+  await prisma.appUser.upsert({
+    where: { email: id },
+    create: { email: id, emailEnc, ...splitName(name), systemRole: "" },
+    update: { emailEnc },
+  });
+}
+
+/** The user's own address, decrypted, for showing back to them. */
+export function ownEmail(user: { emailEnc: string | null } | null): string | null {
+  return decryptEmail(user?.emailEnc);
+}
+
+/** `email` is the user id (session.user.email). */
 export async function registerUserIfNeeded(email: string, name: string) {
   const existing = await prisma.appUser.findUnique({ where: { email } });
   if (existing) return existing;
 
-  const parts = (name || "User").trim().split(/\s+/);
-  const firstName = parts[0] || "User";
-  const lastName = parts.slice(1).join(" ") || null;
+  // Normally created at sign-in (upsertUserOnSignIn). This fallback has no
+  // address to encrypt; the next sign-in fills it in.
+  const { firstName, lastName } = splitName(name);
 
   try {
     // system_role is a legacy NOT NULL column we keep to avoid a migration;

@@ -1,7 +1,6 @@
-import { requireUser } from "@/lib/session";
+import { offlineOwnerFor, requireUser } from "@/lib/session";
 import { getUnreadCount } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
-import { wireKey } from "@/lib/wire";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarProvider } from "@/components/SidebarContext";
 import { AppMain } from "@/components/AppMain";
@@ -25,7 +24,7 @@ export default async function AppLayout({
     getUnreadCount(user.email),
     getUserGroups(user.email),
   ]);
-  const offlineOwner = wireKey("offline-owner", user.email);
+  const offlineOwner = offlineOwnerFor(user);
   const addContexts = [
     { value: "personal", label: "Personal" },
     ...groups.map((g) => ({ value: g.id, label: g.name })),

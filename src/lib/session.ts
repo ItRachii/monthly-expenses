@@ -1,9 +1,11 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { registerUserIfNeeded } from "@/lib/users";
+import { ownEmail, registerUserIfNeeded } from "@/lib/users";
+import { wireKey } from "@/lib/wire";
 
 export interface CurrentUser {
+  /** The user id stored in every table (see src/lib/piiCrypto.ts), not the address. */
   email: string;
   name: string;
   image: string | null;
@@ -23,3 +25,12 @@ export const requireUser = cache(async (): Promise<CurrentUser> => {
   const appUser = await registerUserIfNeeded(email, name);
   return { email, name, image: session.user.image ?? null, appUser };
 });
+
+/**
+ * Scopes the browser's offline queue to this user. Derived from the address
+ * when it can be decrypted, so drafts queued before email ids were introduced
+ * still belong to the same user.
+ */
+export function offlineOwnerFor(user: CurrentUser): string {
+  return wireKey("offline-owner", ownEmail(user.appUser) ?? user.email);
+}

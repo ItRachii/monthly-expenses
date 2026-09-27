@@ -31,10 +31,10 @@ model Expense {
 
   // Scanned-receipt line items: tagged with their receipt + optional per-item
   // GST. All nullable, so existing rows and every current query are unaffected.
-  receiptId  String?  @map("receipt_id")
-  receipt    Receipt? @relation(fields: [receiptId], references: [id])
-  gstRate    Float?   @map("gst_rate")
-  gstAmount  Float?   @map("gst_amount")
+  receiptId String?  @map("receipt_id")
+  receipt   Receipt? @relation(fields: [receiptId], references: [id])
+  gstRate   Float?   @map("gst_rate")
+  gstAmount Float?   @map("gst_amount")
 
   @@index([receiptId], map: "expenses_receipt_idx")
   @@map("expenses")
@@ -62,7 +62,9 @@ model Settlement {
   month      String
   settledAt  DateTime @map("settled_at")
   settledBy  String   @map("settled_by")
-  /** Who received the payment. Null on rows recorded before partial payments. */
+  /**
+   * Who received the payment. Null on rows recorded before partial payments.
+   */
   settledTo  String?  @map("settled_to")
   amount     Float
   note       String?
@@ -73,11 +75,17 @@ model Settlement {
   @@map("settlements")
 }
 
+// PII: `email` holds the user id ("u_" + keyed hash of the address), never the
+// address itself. The address is only in email_enc, AES-256-GCM encrypted.
+// The same applies to every other *email / payer / split / *_by column.
 model AppUser {
   email      String  @id
+  emailEnc   String? @map("email_enc")
   firstName  String  @map("first_name")
   lastName   String? @map("last_name")
-  /** Legacy nickname column; no longer read (see db/2026_09_app_users_last_name.sql). */
+  /**
+   * Legacy nickname column; no longer read (see db/2026_09_app_users_last_name.sql).
+   */
   username   String?
   systemRole String  @map("system_role")
 
@@ -132,14 +140,18 @@ model GroupMember {
 }
 
 model GroupInvite {
-  id           Int       @id @default(autoincrement())
-  groupId      String    @map("group_id")
-  invitedEmail String    @map("invited_email")
-  invitedBy    String    @map("invited_by")
-  status       String    @default("pending")
-  createdAt    DateTime  @map("created_at")
-  respondedAt  DateTime? @map("responded_at")
-  group        Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  id              Int       @id @default(autoincrement())
+  groupId         String    @map("group_id")
+  invitedEmail    String    @map("invited_email")
+  /**
+   * Encrypted address, so the invite can still be shown masked.
+   */
+  invitedEmailEnc String?   @map("invited_email_enc")
+  invitedBy       String    @map("invited_by")
+  status          String    @default("pending")
+  createdAt       DateTime  @map("created_at")
+  respondedAt     DateTime? @map("responded_at")
+  group           Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@map("group_invites")
 }
@@ -157,4 +169,12 @@ model Notification {
 
   @@index([recipientEmail, isRead, createdAt(sort: Desc)], map: "notifications_recipient_idx")
   @@map("notifications")
+}
+
+// Records one-time data migrations run by the app (see src/lib/piiMigration.ts).
+model PiiMigration {
+  id        String   @id
+  appliedAt DateTime @default(now()) @map("applied_at") @db.Timestamptz(6)
+
+  @@map("pii_migrations")
 }

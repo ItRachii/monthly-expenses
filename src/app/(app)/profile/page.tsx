@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/session";
 import { doSignOut } from "@/lib/actions/auth";
 import { ProfileForm } from "./ProfileForm";
+import { ownEmail } from "@/lib/users";
 
 export default async function ProfilePage() {
   const user = await requireUser();
@@ -17,7 +18,7 @@ export default async function ProfilePage() {
     <div className="space-y-4">
       <h1>My Profile</h1>
       <ProfileForm
-        email={user.appUser.email}
+        email={ownEmail(user.appUser) ?? "Sign in again to show your email"}
         firstName={user.appUser.firstName}
         lastName={user.appUser.lastName}
         image={user.image}

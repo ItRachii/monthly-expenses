@@ -17,9 +17,17 @@ export function maskEmail(email: string): string {
   return `${mask(local, 2)}@${mask(domainName, 1)}${tld}`;
 }
 
-/** True if a string looks like it contains a raw email address. */
+/** True if a string contains a raw (unmasked) email address. */
 export function looksLikeEmail(s: string): boolean {
-  return s.includes("@");
+  return /[^\s@•]+@[^\s@•]+\.[^\s@•]+/.test(s);
+}
+
+/**
+ * Label for a stored id or address that matches no current participant, e.g.
+ * someone who paid an old expense and has since left the group.
+ */
+export function labelForUnknown(idOrEmail: string): string {
+  return looksLikeEmail(idOrEmail) ? maskEmail(idOrEmail) : "Former member";
 }
 
 /** Escapes a string for safe interpolation into HTML (e.g. email bodies). */

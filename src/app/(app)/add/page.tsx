@@ -1,8 +1,7 @@
 import { GroupsIcon, ProfileIcon } from "@/components/NavIcons";
 import Link from "next/link";
-import { requireUser } from "@/lib/session";
+import { offlineOwnerFor, requireUser } from "@/lib/session";
 import { getUserGroups } from "@/lib/groups";
-import { wireKey } from "@/lib/wire";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { buildAddSetup } from "@/lib/addSetup";
 import { AddExpenseForm } from "./AddExpenseForm";
@@ -104,7 +103,7 @@ export default async function AddPage({
             defaultPayer={setup.defaultPayer}
             defaultSplit={SPLIT_EQUAL}
             memberCount={setup.memberCount}
-            offlineOwner={wireKey("offline-owner", user.email)}
+            offlineOwner={offlineOwnerFor(user)}
           />
         </>
       )}

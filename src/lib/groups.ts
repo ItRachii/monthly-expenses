@@ -2,8 +2,16 @@ import { randomBytes } from "crypto";
 import { prisma } from "./prisma";
 import { displayNameFor } from "./users";
 import { maskEmail } from "./pii";
+import { emailId } from "./piiCrypto";
+import { decryptEmail, encryptEmail, maskedEmailsFor } from "./piiStore";
 
 // Ported from legacy-streamlit/utils/groups.py
+
+/** Masked address of an invitee, from the invite's encrypted copy. */
+function maskedInvitee(enc: string | null): string {
+  const plain = decryptEmail(enc);
+  return plain ? maskEmail(plain) : "Invited member";
+}
 
 export interface GroupDTO {
   id: string;
@@ -32,7 +40,10 @@ export interface PendingInviteDTO {
 
 export interface GroupInviteDTO {
   id: number;
+  /** User id of the invitee. */
   invitedEmail: string;
+  /** "ne•••@g•••.com", for display. */
+  invitedEmailMasked: string;
   invitedBy: string;
   status: string;
 }
@@ -208,7 +219,8 @@ export async function getGroupParticipants(groupId: string): Promise<MemberDTO[]
       .filter((inv) => !memberEmails.has(inv.invitedEmail))
       .map((inv) => ({
         email: inv.invitedEmail,
-        displayName: "",
+        // No name yet: show the masked address from the invite.
+        displayName: maskedInvitee(inv.invitedEmailEnc),
         role: "invited",
         joinedAt: inv.createdAt,
       })),
@@ -238,12 +250,13 @@ export async function deleteGroup(groupId: string): Promise<void> {
   await prisma.group.update({ where: { id: groupId }, data: { active: 0 } });
 }
 
+/** `invitedEmail` is the typed address; `invitedBy` a user id. */
 export async function sendInvite(
   groupId: string,
   invitedEmail: string,
   invitedBy: string,
 ): Promise<InviteResult> {
-  const email = invitedEmail.trim().toLowerCase();
+  const email = await emailId(invitedEmail);
 
   const existingMember = await prisma.groupMember.findFirst({
     where: { groupId, email },
@@ -259,6 +272,7 @@ export async function sendInvite(
     data: {
       groupId,
       invitedEmail: email,
+      invitedEmailEnc: encryptEmail(invitedEmail),
       invitedBy,
       status: "pending",
       createdAt: new Date(),
@@ -271,7 +285,7 @@ export async function getPendingInvitesForUser(
   userEmail: string,
 ): Promise<PendingInviteDTO[]> {
   const invites = await prisma.groupInvite.findMany({
-    where: { invitedEmail: userEmail.toLowerCase(), status: "pending" },
+    where: { invitedEmail: userEmail, status: "pending" },
     include: { group: true },
   });
   // Label the inviter by name + masked email — never expose their raw address
@@ -280,8 +294,9 @@ export async function getPendingInvitesForUser(
     where: { email: { in: invites.map((i) => i.invitedBy) } },
   });
   const byEmail = new Map(inviters.map((u) => [u.email, u]));
+  const maskedById = await maskedEmailsFor(invites.map((i) => i.invitedBy));
   return invites.map((inv) => {
-    const masked = maskEmail(inv.invitedBy);
+    const masked = maskedById.get(inv.invitedBy) ?? "a member";
     const name = displayNameFor(byEmail.get(inv.invitedBy) ?? null, masked);
     return {
       inviteId: inv.id,
@@ -299,7 +314,7 @@ export async function respondToInvite(
   userEmail: string,
 ): Promise<void> {
   const invite = await prisma.groupInvite.findUnique({ where: { id: inviteId } });
-  if (!invite || invite.invitedEmail !== userEmail.toLowerCase()) return;
+  if (!invite || invite.invitedEmail !== userEmail) return;
 
   await prisma.groupInvite.update({
     where: { id: inviteId },
@@ -332,6 +347,7 @@ export async function getGroupInvites(groupId: string): Promise<GroupInviteDTO[]
   return invites.map((inv) => ({
     id: inv.id,
     invitedEmail: inv.invitedEmail,
+    invitedEmailMasked: maskedInvitee(inv.invitedEmailEnc),
     invitedBy: inv.invitedBy,
     status: inv.status,
   }));

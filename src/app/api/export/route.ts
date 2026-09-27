@@ -6,7 +6,7 @@ import { getSettlements } from "@/lib/settlements";
 import { getAppUser, displayNameFor } from "@/lib/users";
 import { buildWorkbook } from "@/lib/export";
 import { isValidDateISO } from "@/lib/validate";
-import { maskEmail } from "@/lib/pii";
+import { labelForUnknown } from "@/lib/pii";
 
 // GET /api/export?ctx=<personal|groupId>&from=YYYY-MM-DD&to=YYYY-MM-DD
 // Omit from/to for the full history. Streams an .xlsx: Summary sheet first,
@@ -50,7 +50,7 @@ export async function GET(req: Request) {
     title = r.options.find((o) => o.value === r.ctxValue)?.label ?? "Group";
   }
   // People who left the group still appear on old rows: masked, never raw.
-  const nameFor = (e: string) => memberNames.get(e) ?? maskEmail(e);
+  const nameFor = (e: string) => memberNames.get(e) ?? labelForUnknown(e);
 
   const buffer = await buildWorkbook({
     title,
