@@ -413,16 +413,73 @@ export function MonthlyTrend({
 // Donut: this month by category, same colours as the trend. Categories
 // outside the named seven fold into one "Other" slice.
 
+const DONUT_INNER = 50;
+const DONUT_OUTER = 72;
+const RAD = Math.PI / 180;
+
+interface CalloutProps {
+  cx: number;
+  cy: number;
+  midAngle: number;
+  outerRadius: number;
+  index: number;
+  value: number;
+}
+
+/**
+ * Value callout for one slice, drawn outside the ring: a leader line from the
+ * slice's middle, then the amount (ink) over its share (muted). Rendered only
+ * for the slice being hovered or selected.
+ */
+function DonutCallout({
+  cx,
+  cy,
+  midAngle,
+  outerRadius,
+  index,
+  value,
+  shown,
+  colour,
+  percent,
+}: CalloutProps & { shown: number | null; colour: string; percent: number }) {
+  if (index !== shown) return <g />;
+  const cos = Math.cos(-midAngle * RAD);
+  const sin = Math.sin(-midAngle * RAD);
+  const right = cos >= 0;
+  const sx = cx + (outerRadius + 3) * cos;
+  const sy = cy + (outerRadius + 3) * sin;
+  const mx = cx + (outerRadius + 14) * cos;
+  const my = cy + (outerRadius + 14) * sin;
+  const ex = mx + (right ? 10 : -10);
+  const tx = ex + (right ? 5 : -5);
+  const anchor = right ? "start" : "end";
+  return (
+    <g pointerEvents="none">
+      <path d={`M${sx},${sy}L${mx},${my}L${ex},${my}`} stroke={colour} strokeWidth={1.5} fill="none" />
+      <circle cx={ex} cy={my} r={2.5} fill={colour} />
+      <text x={tx} y={my} dy={-2} textAnchor={anchor} fill={INK} fontSize={13} fontWeight={600}>
+        {compactINR(value)}
+      </text>
+      <text x={tx} y={my} dy={13} textAnchor={anchor} fill={MUTED} fontSize={11}>
+        {percent.toFixed(percent < 10 ? 1 : 0)}%
+      </text>
+    </g>
+  );
+}
+
 export function CategoryDonut({
   rows,
   palette,
   selected,
   onSelect,
+  onClear,
 }: {
   rows: { category: string; amount: number }[];
   palette: Palette;
   selected: string | null;
   onSelect: (category: string) => void;
+  /** Clears the selection: a click on the chart that misses every slice. */
+  onClear: () => void;
 }) {
   const data = useMemo(() => {
     const m = new Map<string, number>();
@@ -435,48 +492,61 @@ export function CategoryDonut({
   }, [rows, palette]);
   const total = data.reduce((s, d) => s + d.amount, 0);
   const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
+  // The slice whose value is called out: the hovered one, else the selected
+  // one (so a tap on a phone, where there is no hover, still shows it).
+  const [hover, setHover] = useState<number | null>(null);
+  const selectedIndex = selected ? data.findIndex((d) => d.category === selected) : -1;
+  const shown = hover ?? (selectedIndex >= 0 ? selectedIndex : null);
+  const dimmed = (i: number) =>
+    hover !== null ? hover !== i : Boolean(selected) && data[i]?.category !== selected;
 
   return (
     <ChartCard title="Where it went">
       <div className="flex flex-col items-center gap-4 sm:flex-row lg:flex-col 2xl:flex-row">
-        <div className="relative h-52 w-52 shrink-0">
+        {/* The ring is drawn smaller than the box so the hover callout has
+            room outside it instead of covering the centre. */}
+        <div
+          className="relative h-64 w-80 max-w-full shrink-0"
+          // A click anywhere in the chart that is not on a slice (the hole,
+          // the space around the ring) removes the filter.
+          onClick={(e) => {
+            if (!(e.target as Element).closest(".recharts-sector")) onClear();
+          }}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
                 dataKey="amount"
                 nameKey="category"
-                innerRadius="64%"
-                outerRadius="100%"
+                innerRadius={DONUT_INNER}
+                outerRadius={DONUT_OUTER}
                 paddingAngle={data.length > 1 ? 2 : 0}
                 cornerRadius={6}
                 stroke="none"
                 isAnimationActive={false}
+                labelLine={false}
+                label={(props: unknown) => (
+                  <DonutCallout
+                    {...(props as CalloutProps)}
+                    shown={shown}
+                    colour={palette.colourOf(data[(props as CalloutProps).index]?.category ?? OTHER)}
+                    percent={pct(data[(props as CalloutProps).index]?.amount ?? 0)}
+                  />
+                )}
+                onMouseEnter={(_, i) => setHover(i)}
+                onMouseLeave={() => setHover(null)}
                 onClick={(_, i) => data[i] && onSelect(data[i].category)}
               >
-                {data.map((d) => (
+                {data.map((d, i) => (
                   <Cell
                     key={d.category}
                     fill={palette.colourOf(d.category)}
-                    fillOpacity={selected && selected !== d.category ? 0.3 : 1}
+                    fillOpacity={dimmed(i) ? 0.3 : 1}
                     cursor="pointer"
                   />
                 ))}
               </Pie>
-              <Tooltip
-                content={({ active, payload }) => {
-                  const d = active ? (payload?.[0]?.payload as { category: string; amount: number } | undefined) : undefined;
-                  if (!d) return null;
-                  return (
-                    <div className={tooltipBox}>
-                      <div className="font-semibold">{formatINR(d.amount)}</div>
-                      <div className="text-muted">
-                        {d.category} · {pct(d.amount).toFixed(1)}%
-                      </div>
-                    </div>
-                  );
-                }}
-              />
             </PieChart>
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
@@ -486,17 +556,21 @@ export function CategoryDonut({
         </div>
 
         <ul className="w-full min-w-0 space-y-0.5">
-          {data.map((d) => {
+          {data.map((d, i) => {
             const on = selected === d.category;
             return (
               <li key={d.category}>
                 <button
                   type="button"
                   onClick={() => onSelect(d.category)}
+                  onMouseEnter={() => setHover(i)}
+                  onMouseLeave={() => setHover(null)}
+                  onFocus={() => setHover(i)}
+                  onBlur={() => setHover(null)}
                   aria-pressed={on}
                   className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition hover:bg-white/5 ${
-                    selected && !on ? "opacity-50" : ""
-                  } ${on ? "bg-white/5" : ""}`}
+                    dimmed(i) ? "opacity-50" : ""
+                  } ${on || hover === i ? "bg-white/5" : ""}`}
                 >
                   <Swatch colour={palette.colourOf(d.category)} />
                   <span className="min-w-0 flex-1 truncate">{d.category}</span>
@@ -508,7 +582,11 @@ export function CategoryDonut({
           })}
         </ul>
       </div>
-      <p className="text-xs text-muted">Tap a slice or a row to filter the expense detail.</p>
+      <p className="text-xs text-muted">
+        {selected
+          ? "Tap the empty part of the chart, or the same slice again, to remove the filter."
+          : "Tap a slice or a row to filter the expense detail."}
+      </p>
     </ChartCard>
   );
 }

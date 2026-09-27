@@ -146,6 +146,7 @@ export function Summary({
             // Picking a category is a request to see those expenses.
             if (next) setDetailOpen(true);
           }}
+          onClear={() => setSelectedCategory(null)}
         />
         <CategoryBars rows={monthRows} palette={palette} />
       </div>
