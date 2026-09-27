@@ -20,3 +20,10 @@ CREATE TABLE IF NOT EXISTS public.user_incomes (
 -- Match every other app table: RLS on with no policies, so the table is
 -- reachable only through the app's postgres role, never the anon API.
 ALTER TABLE public.user_incomes ENABLE ROW LEVEL SECURITY;
+
+-- Income prompt: new users are asked during onboarding; existing users get a
+-- skippable popup with "Remind me later". NULL on existing rows means "not
+-- asked yet", so every current user sees the popup once.
+ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS income_prompt text;
+ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS income_prompt_at timestamp(3);
+ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS last_sign_in_at timestamp(3);

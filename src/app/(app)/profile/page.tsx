@@ -17,7 +17,9 @@ export default async function ProfilePage() {
     );
   }
 
-  const income = incomeForMonth(await getIncomeHistory(user.email), monthKey(new Date()));
+  const currentMonth = monthKey(new Date());
+  const incomeHistory = await getIncomeHistory(user.email);
+  const income = incomeForMonth(incomeHistory, currentMonth);
 
   return (
     <div className="space-y-4">
@@ -27,6 +29,8 @@ export default async function ProfilePage() {
         firstName={user.appUser.firstName}
         lastName={user.appUser.lastName}
         monthlyIncome={income}
+        incomeHistory={incomeHistory}
+        currentMonth={currentMonth}
         image={user.image}
       />
 

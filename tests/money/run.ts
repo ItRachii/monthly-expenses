@@ -1,7 +1,13 @@
 // Unit checks for split and savings math (no database). Run with
 // `npm run test:money`.
 import { computeNets, parseShares, shareFor, simplifyDebts } from "../../src/lib/settlementMath";
-import { incomeForMonth, monthFinance } from "../../src/lib/incomeMath";
+import {
+  REMIND_LATER_MS,
+  incomeForMonth,
+  incomeMonthOptions,
+  incomePromptFor,
+  monthFinance,
+} from "../../src/lib/incomeMath";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -55,6 +61,24 @@ check(
 );
 check("overspent", monthFinance(100, 150, 0).savings === -50);
 check("no income, no savings", monthFinance(null, 150, 0).savings === null);
+
+// Income prompt: onboarding for new users, skippable popup for existing ones.
+const now = new Date("2026-09-27T12:00:00Z");
+const ago = (ms: number) => new Date(now.getTime() - ms);
+const user = (incomePrompt: string | null, at: Date | null = null, signIn: Date | null = null) => ({
+  incomePrompt,
+  incomePromptAt: at,
+  lastSignInAt: signIn,
+});
+check("prompt: has income", incomePromptFor(user("onboarding"), true, now) === "none");
+check("prompt: new user", incomePromptFor(user("onboarding"), false, now) === "onboarding");
+check("prompt: existing, not asked", incomePromptFor(user(null), false, now) === "popup");
+check("prompt: skipped", incomePromptFor(user("skipped", ago(1e10)), false, now) === "none");
+check("prompt: later, same session", incomePromptFor(user("later", ago(60_000), ago(3_600_000)), false, now) === "none");
+check("prompt: later, signed in again", incomePromptFor(user("later", ago(3_600_000), ago(60_000)), false, now) === "popup");
+check("prompt: later, a day on", incomePromptFor(user("later", ago(REMIND_LATER_MS), null), false, now) === "popup");
+const opts = incomeMonthOptions("2026-02", 3);
+check("month options", same(opts, ["2026-02", "2026-01", "2025-12", "2025-11"]), opts.join(","));
 
 console.log(failures ? `\n${failures} failed` : "\nall passed");
 process.exit(failures ? 1 : 0);

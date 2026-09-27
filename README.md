@@ -102,8 +102,9 @@ adds the editable last name and folds old nicknames into the first name;
 `2026_09_category_dedupe.sql` merges categories that differ only by case,
 spacing or a plural "s" into one spelling;
 `2026_09_income_and_unequal_split.sql` adds `expenses.shares` for unequal
-group splits and the `user_incomes` table behind the monthly income and
-savings figures. Deploy the code only after it has run.
+group splits, the `user_incomes` table behind the monthly income and
+savings figures, and the `app_users` columns that drive the income
+onboarding step and popup. Deploy the code only after it has run.
 
 ## Google OAuth setup
 

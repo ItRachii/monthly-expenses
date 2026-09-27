@@ -36,3 +36,15 @@ export function cleanText(s: string, max: number): string {
   }
   return out.trim().slice(0, max);
 }
+
+/**
+ * Parses a typed rupee amount ("50000", "50000.5"): digits with at most two
+ * decimals, zero allowed. Null for anything else, including blank.
+ */
+export function parseMoney(text: unknown): number | null {
+  if (typeof text !== "string") return null;
+  const t = text.trim();
+  if (!/^\d+(\.\d{0,2})?$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n <= MAX_AMOUNT ? n : null;
+}

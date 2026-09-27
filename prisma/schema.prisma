@@ -93,6 +93,18 @@ model AppUser {
   username   String?
   systemRole String  @map("system_role")
 
+  /**
+   * Income popup state: "onboarding" (new user, ask before anything else),
+   * "later" (remind on next sign-in), "skipped", or null (existing user not
+   * asked yet). Ignored once an income is set.
+   */
+  incomePrompt   String?   @map("income_prompt")
+  /**
+   * When "later" or "skipped" was chosen.
+   */
+  incomePromptAt DateTime? @map("income_prompt_at")
+  lastSignInAt   DateTime? @map("last_sign_in_at")
+
   @@map("app_users")
 }
 

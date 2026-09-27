@@ -5,7 +5,7 @@ import { prisma } from "./prisma";
 import { getGroupParticipants, getUserGroups } from "./groups";
 import { monthKey } from "./format";
 import { parseShares, round2, shareFor } from "./settlementMath";
-import { incomeForMonth, type IncomeEntry } from "./incomeMath";
+import { incomeForMonth, incomeMonthOptions, type IncomeEntry } from "./incomeMath";
 
 /** Every income change for the user, oldest first. */
 export async function getIncomeHistory(email: string): Promise<IncomeEntry[]> {
@@ -18,17 +18,48 @@ export async function getIncomeHistory(email: string): Promise<IncomeEntry[]> {
 }
 
 /**
- * Sets the fixed monthly income from the current month on. Earlier months
- * keep the amount they had, so a raise never rewrites past savings.
+ * Sets the fixed monthly income from `fromMonth` (default: this month) on.
+ * Earlier months keep their amount; changes recorded after `fromMonth` are
+ * replaced, since the new amount is what the user earns now. Future months
+ * are refused: income is always "what I earn since".
  */
-export async function setMonthlyIncome(email: string, amount: number): Promise<void> {
-  const month = monthKey(new Date());
+export async function setMonthlyIncome(
+  email: string,
+  amount: number,
+  fromMonth: string = monthKey(new Date()),
+): Promise<void> {
+  if (fromMonth > monthKey(new Date())) throw new Error("Income cannot start in a future month.");
   const history = await getIncomeHistory(email);
-  if (incomeForMonth(history, month) === amount) return;
-  await prisma.userIncome.upsert({
-    where: { userEmail_effectiveMonth: { userEmail: email, effectiveMonth: month } },
-    create: { userEmail: email, effectiveMonth: month, amount },
-    update: { amount },
+  const unchanged =
+    incomeForMonth(history, fromMonth) === amount && !history.some((h) => h.month > fromMonth);
+  if (unchanged) return;
+  const upsert = (month: string, value: number) =>
+    prisma.userIncome.upsert({
+      where: { userEmail_effectiveMonth: { userEmail: email, effectiveMonth: month } },
+      create: { userEmail: email, effectiveMonth: month, amount: value },
+      update: { amount: value },
+    });
+  // The earliest amount also covers every month before it. A change starting
+  // before the earliest row would take that over, so pin the old amount to
+  // the month just before the change.
+  const writes = [];
+  if (history.length > 0 && !history.some((h) => h.month <= fromMonth)) {
+    const before = incomeMonthOptions(fromMonth, 1)[1];
+    const baseline = incomeForMonth(history, before);
+    if (baseline !== null && baseline !== amount) writes.push(upsert(before, baseline));
+  }
+  await prisma.$transaction([
+    prisma.userIncome.deleteMany({ where: { userEmail: email, effectiveMonth: { gt: fromMonth } } }),
+    ...writes,
+    upsert(fromMonth, amount),
+  ]);
+}
+
+/** Records the user's answer to the income popup ("later" or "skipped"). */
+export async function setIncomePrompt(email: string, choice: "later" | "skipped"): Promise<void> {
+  await prisma.appUser.update({
+    where: { email },
+    data: { incomePrompt: choice, incomePromptAt: new Date() },
   });
 }
 

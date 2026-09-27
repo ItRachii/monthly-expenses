@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { formatINR } from "@/lib/format";
+import { AddIncomeButton } from "@/components/IncomePrompt";
 import { incomeForMonth, monthFinance, type IncomeEntry, type MonthFinance } from "@/lib/incomeMath";
 
 /** Income plus your share of group spending, for the Personal screen. */
@@ -54,9 +54,15 @@ export function FinanceCard({ f }: { f: MonthFinance }) {
         This month: {formatINR(f.personal)} personal + {formatINR(f.groups)} your share in groups.
       </p>
       {f.income === null ? (
-        <Link href="/profile" className="block text-sm text-primary hover:underline">
-          Add your monthly income to track savings
-        </Link>
+        // Highlighted until set: the popup is skippable, this is the way back.
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3">
+          <p className="text-sm text-amber-200">
+            Add your monthly income to see what you save each month.
+          </p>
+          <AddIncomeButton className="btn-primary shrink-0 px-3 py-1.5 text-sm">
+            Add income
+          </AddIncomeButton>
+        </div>
       ) : null}
     </div>
   );
