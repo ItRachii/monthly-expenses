@@ -472,11 +472,14 @@ export function CategoryDonut({
   palette,
   selected,
   onSelect,
+  onClear,
 }: {
   rows: { category: string; amount: number }[];
   palette: Palette;
   selected: string | null;
   onSelect: (category: string) => void;
+  /** Clears the selection: a click on the chart that misses every slice. */
+  onClear: () => void;
 }) {
   const data = useMemo(() => {
     const m = new Map<string, number>();
@@ -502,7 +505,14 @@ export function CategoryDonut({
       <div className="flex flex-col items-center gap-4 sm:flex-row lg:flex-col 2xl:flex-row">
         {/* The ring is drawn smaller than the box so the hover callout has
             room outside it instead of covering the centre. */}
-        <div className="relative h-64 w-80 max-w-full shrink-0">
+        <div
+          className="relative h-64 w-80 max-w-full shrink-0"
+          // A click anywhere in the chart that is not on a slice (the hole,
+          // the space around the ring) removes the filter.
+          onClick={(e) => {
+            if (!(e.target as Element).closest(".recharts-sector")) onClear();
+          }}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -572,7 +582,11 @@ export function CategoryDonut({
           })}
         </ul>
       </div>
-      <p className="text-xs text-muted">Tap a slice or a row to filter the expense detail.</p>
+      <p className="text-xs text-muted">
+        {selected
+          ? "Tap the empty part of the chart, or the same slice again, to remove the filter."
+          : "Tap a slice or a row to filter the expense detail."}
+      </p>
     </ChartCard>
   );
 }
