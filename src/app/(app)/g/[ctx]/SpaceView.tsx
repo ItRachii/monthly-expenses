@@ -10,7 +10,7 @@ import type { ExpenseDTO } from "@/lib/expenses";
 import type { SettlementDTO } from "@/lib/settlements";
 import type { BalanceLine } from "@/lib/balances";
 import type { GroupView } from "@/lib/groupView";
-import { GroupSettingsOverlay } from "../../groups/GroupsManager";
+import { GroupSettingsOverlay } from "@/components/GroupSettings";
 import { ExpenseFeed } from "./ExpenseFeed";
 import { Settlement } from "../../settlement/Settlement";
 import { Summary } from "../../summary/Summary";

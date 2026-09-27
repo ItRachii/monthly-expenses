@@ -136,18 +136,17 @@ export async function removeMemberAction(groupId: string, targetKey: string) {
   return { ok: true };
 }
 
-// `goHome` is set from the group screen itself, which stops existing for the
-// user once they leave: the redirect lands them home in the same round trip.
-export async function leaveGroupAction(groupId: string, goHome = false) {
+// Leave and delete run from the group screen, which stops existing for the
+// user afterwards: the redirect lands them home in the same round trip.
+export async function leaveGroupAction(groupId: string) {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
   await groups.removeMember(groupId, email);
   revalidateGroupViews();
-  if (goHome) redirect("/");
-  return { ok: true };
+  redirect("/");
 }
 
-export async function deleteGroupAction(groupId: string, goHome = false) {
+export async function deleteGroupAction(groupId: string) {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
   const group = await groups.getGroup(groupId);
@@ -155,8 +154,7 @@ export async function deleteGroupAction(groupId: string, goHome = false) {
     return { ok: false, error: "Only the creator can delete this group." };
   await groups.deleteGroup(groupId);
   revalidateGroupViews();
-  if (goHome) redirect("/");
-  return { ok: true };
+  redirect("/");
 }
 
 export async function cancelInviteAction(groupId: string, inviteId: number) {
