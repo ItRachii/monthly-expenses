@@ -13,8 +13,10 @@ import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
 import { formatINR } from "@/lib/format";
-import { SPLIT_EQUAL } from "@/lib/constants";
-import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
+import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
+import { MAX_AMOUNT, cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
+import { SETTLE_EPS, round2, type Shares } from "@/lib/settlementMath";
+import type { MemberDTO } from "@/lib/groups";
 import { emailForKey } from "@/lib/wire";
 import { maskEmail } from "@/lib/pii";
 import { buildAddSetup, type AddSetup } from "@/lib/addSetup";
@@ -57,6 +59,42 @@ function validateExpenseInput(input: {
   return { item, category };
 }
 
+/**
+ * Resolves an unequal split sent as { wireKey: rupees } to { email: rupees }.
+ * Every key must be a current participant, every amount a non-negative
+ * number, and the shares must add up to the expense amount to the paisa.
+ */
+function resolveShares(
+  scope: string,
+  participants: MemberDTO[],
+  input: unknown,
+  amount: number,
+): { shares: Shares } | { error: string } {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    return { error: "Enter how much each person owes." };
+  const entries = Object.entries(input as Record<string, unknown>);
+  if (entries.length > participants.length)
+    return { error: "The split has more people than the group." };
+  const shares: Shares = {};
+  let total = 0;
+  for (const [key, value] of entries) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > MAX_AMOUNT)
+      return { error: "Each share must be zero or a positive amount." };
+    const n = round2(value);
+    if (n === 0) continue;
+    const email = emailForKey(scope, participants, key);
+    if (!email) return { error: "Someone in this split is no longer in the group. Reopen the form." };
+    total += n;
+    shares[email] = n;
+  }
+  if (Object.keys(shares).length === 0) return { error: "Enter how much each person owes." };
+  if (Math.abs(round2(total) - round2(amount)) > SETTLE_EPS)
+    return {
+      error: `Shares add up to ${formatINR(round2(total))} but the expense is ${formatINR(amount)}.`,
+    };
+  return { shares };
+}
+
 export async function addExpenseAction(input: {
   ctx: string; // "personal" or a group id
   date: string;
@@ -64,7 +102,8 @@ export async function addExpenseAction(input: {
   item: string;
   amount: number;
   payer: string; // wire participant key, resolved to an email server-side
-  split: string; // "equal" or a wire participant key
+  split: string; // "equal", "custom" or a wire participant key
+  shares?: Record<string, number>; // wire key -> rupees, when split = "custom"
 }): Promise<ActionResult> {
   const session = await auth();
   const email = session?.user?.email;
@@ -80,6 +119,7 @@ export async function addExpenseAction(input: {
   // keys, and anything invalid or stale falls back to a safe default.
   let payer: string;
   let split: string;
+  let shares: Shares | null = null;
 
   if (input.ctx === "personal") {
     // Personal/solo: the only person is the signed-in user.
@@ -95,10 +135,17 @@ export async function addExpenseAction(input: {
 
     const participants = await getGroupParticipants(input.ctx);
     payer = emailForKey(input.ctx, participants, input.payer) ?? email;
-    split =
-      input.split === SPLIT_EQUAL
-        ? SPLIT_EQUAL
-        : emailForKey(input.ctx, participants, input.split) ?? SPLIT_EQUAL;
+    if (input.split === SPLIT_CUSTOM) {
+      const res = resolveShares(input.ctx, participants, input.shares, input.amount);
+      if ("error" in res) return { ok: false, error: res.error };
+      split = SPLIT_CUSTOM;
+      shares = res.shares;
+    } else {
+      split =
+        input.split === SPLIT_EQUAL
+          ? SPLIT_EQUAL
+          : emailForKey(input.ctx, participants, input.split) ?? SPLIT_EQUAL;
+    }
   }
 
   const [category] = await canonicalCategoriesFor(
@@ -113,6 +160,7 @@ export async function addExpenseAction(input: {
     amount: input.amount,
     payer,
     split,
+    shares,
     ownerEmail,
     groupId,
   });
@@ -144,7 +192,8 @@ export async function updateExpenseAction(
     item: string;
     amount: number;
     payer: string; // wire participant key
-    split: string; // "equal" or a wire participant key
+    split: string; // "equal", "custom" or a wire participant key
+    shares?: Record<string, number>; // wire key -> rupees, when split = "custom"
   },
 ): Promise<ActionResult> {
   const session = await auth();
@@ -163,6 +212,7 @@ export async function updateExpenseAction(
   // context (mirrors addExpenseAction) so stale form values can't be persisted.
   let payer: string;
   let split: string;
+  let shares: Shares | null = null;
   if (exp.ownerEmail) {
     if (exp.ownerEmail !== email) return { ok: false, error: "Not authorized." };
     payer = exp.ownerEmail;
@@ -173,10 +223,19 @@ export async function updateExpenseAction(
     const participants = await getGroupParticipants(exp.groupId);
     // Unknown keys keep the row's existing values rather than guessing.
     payer = emailForKey(exp.groupId, participants, input.payer) ?? exp.payer;
-    split =
-      input.split === SPLIT_EQUAL
-        ? SPLIT_EQUAL
-        : emailForKey(exp.groupId, participants, input.split) ?? exp.split;
+    if (input.split === SPLIT_CUSTOM) {
+      const res = resolveShares(exp.groupId, participants, input.shares, input.amount);
+      if ("error" in res) return { ok: false, error: res.error };
+      split = SPLIT_CUSTOM;
+      shares = res.shares;
+    } else {
+      split =
+        input.split === SPLIT_EQUAL
+          ? SPLIT_EQUAL
+          : emailForKey(exp.groupId, participants, input.split) ?? exp.split;
+      // A stale key on an unequal row would keep "custom" without shares.
+      if (split === SPLIT_CUSTOM) return { ok: false, error: "Pick how to split this expense." };
+    }
   } else {
     // Legacy row with neither owner nor group: nobody may edit it blindly.
     return { ok: false, error: "Not authorized." };
@@ -198,6 +257,7 @@ export async function updateExpenseAction(
     amount: input.amount,
     payer,
     split,
+    shares,
   });
 
   if (exp.groupId) {

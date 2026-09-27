@@ -10,6 +10,10 @@ import { OfflineSync } from "@/components/OfflineSync";
 import { AddExpenseProvider } from "@/components/AddExpense";
 import { getUserGroups } from "@/lib/groups";
 import { statementsEnabled } from "@/lib/features";
+import { redirect } from "next/navigation";
+import { getIncomeHistory } from "@/lib/income";
+import { incomePromptFor } from "@/lib/incomeMath";
+import { IncomePromptHost } from "@/components/IncomePrompt";
 
 // Every page in this group depends on the signed-in user, so never prerender.
 export const dynamic = "force-dynamic";
@@ -21,10 +25,17 @@ export default async function AppLayout({
 }) {
   const user = await requireUser();
   const displayName = displayNameFor(user.appUser, user.name || user.email);
-  const [unreadCount, groups] = await Promise.all([
+  const [unreadCount, groups, incomeHistory] = await Promise.all([
     getUnreadCount(user.email),
     getUserGroups(user.email),
+    getIncomeHistory(user.email),
   ]);
+  // New users set their income before anything else; existing users without
+  // one get a skippable popup.
+  const incomePrompt = user.appUser
+    ? incomePromptFor(user.appUser, incomeHistory.length > 0, new Date())
+    : "none";
+  if (incomePrompt === "onboarding") redirect("/welcome");
   const offlineOwner = offlineOwnerFor(user);
   const statements = statementsEnabled();
   const addContexts = [
@@ -46,6 +57,7 @@ export default async function AppLayout({
               the user's email, so queue items carry no PII and never sync into
               a different account on a shared device. */}
           <OfflineSync ownerTag={offlineOwner} />
+          {incomePrompt === "popup" ? <IncomePromptHost /> : null}
         </div>
       </AddExpenseProvider>
     </SidebarProvider>

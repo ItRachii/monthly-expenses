@@ -11,6 +11,7 @@ import type { SettlementDTO } from "@/lib/settlements";
 import type { BalanceLine } from "@/lib/balances";
 import type { GroupView } from "@/lib/groupView";
 import { GroupSettingsOverlay } from "@/components/GroupSettings";
+import { FinanceCard, financeFor, type FinanceData } from "@/components/PersonalFinance";
 import { ExpenseFeed } from "./ExpenseFeed";
 import { Settlement } from "../../settlement/Settlement";
 import { Summary } from "../../summary/Summary";
@@ -45,6 +46,7 @@ export function SpaceView({
   splitOptions,
   selfKey,
   settings,
+  finance,
 }: {
   ctx: string;
   name: string;
@@ -64,6 +66,8 @@ export function SpaceView({
   selfKey: string;
   /** Group settings for the gear overlay; null for Personal. */
   settings: GroupView | null;
+  /** Income and group shares for savings; Personal only. */
+  finance: FinanceData | null;
 }) {
   const tabs: { id: SpaceTab; label: string }[] = isPersonal
     ? [
@@ -128,6 +132,8 @@ export function SpaceView({
           </div>
         ) : null}
 
+        {finance ? <FinanceCard f={financeFor(finance, rows, finance.currentMonth)} /> : null}
+
         <div>
           <AddExpenseButton ctx={ctx} lock className="btn-primary px-3 py-1.5 text-sm">
             + Add expense
@@ -183,6 +189,7 @@ export function SpaceView({
       {tab === "summary" ? (
         <Summary
           rows={rows}
+          finance={finance}
           isPersonal={isPersonal}
           nameMap={nameMap}
           members={members}

@@ -20,10 +20,20 @@ export async function upsertUserOnSignIn(email: string, name: string) {
   await ensurePiiMigrated();
   const id = await emailId(email);
   const emailEnc = encryptEmail(email);
+  const now = new Date();
   await prisma.appUser.upsert({
     where: { email: id },
-    create: { email: id, emailEnc, ...splitName(name), systemRole: "" },
-    update: { emailEnc },
+    // New users are asked for their income during onboarding.
+    create: {
+      email: id,
+      emailEnc,
+      ...splitName(name),
+      systemRole: "",
+      incomePrompt: "onboarding",
+      lastSignInAt: now,
+    },
+    // lastSignInAt brings back an income popup the user put off until "later".
+    update: { emailEnc, lastSignInAt: now },
   });
 }
 
@@ -45,7 +55,7 @@ export async function registerUserIfNeeded(email: string, name: string) {
     // system_role is a legacy NOT NULL column we keep to avoid a migration;
     // it is no longer used in logic, so store an empty string.
     return await prisma.appUser.create({
-      data: { email, firstName, lastName, systemRole: "" },
+      data: { email, firstName, lastName, systemRole: "", incomePrompt: "onboarding" },
     });
   } catch {
     // Lost a create race with a concurrent request — re-read.

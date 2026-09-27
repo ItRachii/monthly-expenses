@@ -2,6 +2,9 @@ import { requireUser } from "@/lib/session";
 import { doSignOut } from "@/lib/actions/auth";
 import { ProfileForm } from "./ProfileForm";
 import { ownEmail } from "@/lib/users";
+import { getIncomeHistory } from "@/lib/income";
+import { incomeForMonth } from "@/lib/incomeMath";
+import { monthKey } from "@/lib/format";
 
 export default async function ProfilePage() {
   const user = await requireUser();
@@ -14,6 +17,10 @@ export default async function ProfilePage() {
     );
   }
 
+  const currentMonth = monthKey(new Date());
+  const incomeHistory = await getIncomeHistory(user.email);
+  const income = incomeForMonth(incomeHistory, currentMonth);
+
   return (
     <div className="space-y-4">
       <h1>My Profile</h1>
@@ -21,6 +28,9 @@ export default async function ProfilePage() {
         email={ownEmail(user.appUser) ?? "Sign in again to show your email"}
         firstName={user.appUser.firstName}
         lastName={user.appUser.lastName}
+        monthlyIncome={income}
+        incomeHistory={incomeHistory}
+        currentMonth={currentMonth}
         image={user.image}
       />
 

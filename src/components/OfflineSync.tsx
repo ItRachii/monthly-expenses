@@ -44,6 +44,7 @@ export function OfflineSync({ ownerTag }: { ownerTag: string }) {
           amount: q.amount,
           payer: q.payer,
           split: q.split,
+          shares: q.shares,
         }),
       );
       if (res.synced > 0) router.refresh();

@@ -20,6 +20,8 @@ export interface QueuedExpenseInput {
   amount: number;
   payer: string;
   split: string;
+  /** Wire key -> rupees, for an unequal split. */
+  shares?: Record<string, number>;
 }
 
 export interface QueuedExpense extends QueuedExpenseInput {

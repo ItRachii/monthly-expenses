@@ -4,11 +4,18 @@ import { PencilIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/Icons";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
-import { SPLIT_EQUAL } from "@/lib/constants";
+import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 import { deleteExpenseAction, updateExpenseAction } from "@/lib/actions/expenses";
 import { Metric } from "@/components/Metric";
 import { CategorySelect } from "@/components/CategorySelect";
+import {
+  SplitShares,
+  sharesError,
+  sharesFromInputs,
+  sharesToInputs,
+  type ShareInputs,
+} from "@/components/SplitShares";
 
 interface Opt {
   value: string;
@@ -59,7 +66,8 @@ export function ExpenseLog({
   );
 
   const payerLabel = (v: string) => nameMap[v] ?? v;
-  const splitLabel = (v: string) => (v === SPLIT_EQUAL ? "Equal Split" : nameMap[v] ?? v);
+  const splitLabel = (v: string) =>
+    v === SPLIT_EQUAL ? "Equal Split" : v === SPLIT_CUSTOM ? "Unequal split" : nameMap[v] ?? v;
 
   const totalSpent = filtered.reduce((s, r) => s + r.amount, 0);
 
@@ -269,6 +277,8 @@ export function EditExpenseModal({
   const [amount, setAmount] = useState(String(expense.amount));
   const [payer, setPayer] = useState(expense.payer);
   const [split, setSplit] = useState(expense.split);
+  const [shareInputs, setShareInputs] = useState<ShareInputs>(() => sharesToInputs(expense.shares));
+  const custom = !isPersonal && split === SPLIT_CUSTOM;
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -303,6 +313,13 @@ export function EditExpenseModal({
       setError("Amount must be greater than zero.");
       return;
     }
+    if (custom) {
+      const err = sharesError(shareInputs, payerOptions, amt);
+      if (err) {
+        setError(err);
+        return;
+      }
+    }
     startTransition(async () => {
       const res = await updateExpenseAction(expense.id, {
         date,
@@ -311,6 +328,7 @@ export function EditExpenseModal({
         amount: amt,
         payer,
         split,
+        ...(custom ? { shares: sharesFromInputs(shareInputs, payerOptions) } : {}),
       });
       if (res.ok) {
         onSaved();
@@ -403,6 +421,17 @@ export function EditExpenseModal({
                 ))}
               </select>
             </div>
+            {custom ? (
+              <SplitShares
+                members={payerOptions}
+                amount={parseFloat(amount)}
+                values={shareInputs}
+                onChange={(v) => {
+                  setShareInputs(v);
+                  setError(null);
+                }}
+              />
+            ) : null}
           </>
         ) : null}
 

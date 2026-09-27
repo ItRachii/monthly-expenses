@@ -4,9 +4,15 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
 import { enqueueExpense } from "@/lib/offlineQueue";
-import { SPLIT_EQUAL } from "@/lib/constants";
+import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { todayISO } from "@/lib/format";
 import { CategorySelect } from "@/components/CategorySelect";
+import {
+  SplitShares,
+  sharesError,
+  sharesFromInputs,
+  type ShareInputs,
+} from "@/components/SplitShares";
 
 interface Opt {
   value: string;
@@ -49,6 +55,8 @@ export function AddExpenseForm({
   // always matches what is shown — no silent divergence.
   const [payer, setPayer] = useState(defaultPayer);
   const [split, setSplit] = useState(defaultSplit);
+  const [shareInputs, setShareInputs] = useState<ShareInputs>({});
+  const custom = !isPersonal && split === SPLIT_CUSTOM;
   const [message, setMessage] = useState<
     { ok: boolean; text: string; info?: string } | null
   >(null);
@@ -71,7 +79,24 @@ export function AddExpenseForm({
       return;
     }
 
-    const input = { ctx, date, category, item: item.trim(), amount: amt, payer, split };
+    if (custom) {
+      const err = sharesError(shareInputs, payerOptions, amt);
+      if (err) {
+        setMessage({ ok: false, text: err });
+        return;
+      }
+    }
+
+    const input = {
+      ctx,
+      date,
+      category,
+      item: item.trim(),
+      amount: amt,
+      payer,
+      split,
+      ...(custom ? { shares: sharesFromInputs(shareInputs, payerOptions) } : {}),
+    };
 
     // No connection: skip the doomed request and park the expense locally.
     // OfflineSync replays it through the same server action on reconnect.
@@ -88,6 +113,7 @@ export function AddExpenseForm({
         });
         setItem("");
         setAmount("");
+        setShareInputs({});
       } else {
         setMessage({
           ok: false,
@@ -131,6 +157,7 @@ export function AddExpenseForm({
         });
         setItem("");
         setAmount("");
+        setShareInputs({});
       } else {
         setMessage({ ok: false, text: res.error ?? "Something went wrong." });
       }
@@ -236,6 +263,20 @@ export function AddExpenseForm({
               </select>
             </div>
           </div>
+          {custom ? (
+            <div className="sm:col-span-2">
+              <label className="label">How much does each person owe?</label>
+              <SplitShares
+                members={payerOptions}
+                amount={parseFloat(amount)}
+                values={shareInputs}
+                onChange={(v) => {
+                  setShareInputs(v);
+                  setMessage(null);
+                }}
+              />
+            </div>
+          ) : null}
         </div>
       )}
 

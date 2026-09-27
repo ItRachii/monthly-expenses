@@ -16,6 +16,8 @@ export const CATEGORIES = [
 ] as const;
 
 export const SPLIT_EQUAL = "equal";
+/** Unequal split: the row's `shares` map holds each participant's amount. */
+export const SPLIT_CUSTOM = "custom";
 
 /**
  * Identity of a category for duplicate checks: case, surrounding and repeated

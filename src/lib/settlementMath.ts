@@ -3,12 +3,17 @@
 // code, so "how much is still owed?" can never disagree between them. Must
 // stay free of server-only and client-only imports.
 
-import { SPLIT_EQUAL } from "./constants";
+import { SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
+
+/** Participant id -> rupees, for rows with split = SPLIT_CUSTOM. */
+export type Shares = Record<string, number>;
 
 export interface ExpenseLike {
   payer: string;
   split: string;
   amount: number;
+  /** Only read when split = SPLIT_CUSTOM. */
+  shares?: Shares | null;
 }
 
 export interface PaymentLike {
@@ -38,19 +43,33 @@ export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * Reads a stored `shares` value (Prisma Json) into a Shares map, dropping
+ * anything that is not a finite, non-negative number. Null when unusable.
+ */
+export function parseShares(v: unknown): Shares | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Shares = {};
+  for (const [k, n] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof n === "number" && Number.isFinite(n) && n >= 0) out[k] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** What one participant owes for one expense row. */
+export function shareFor(r: ExpenseLike, id: string, memberCount: number): number {
+  if (r.split === SPLIT_EQUAL) return memberCount > 0 ? r.amount / memberCount : 0;
+  if (r.split === SPLIT_CUSTOM) return r.shares?.[id] ?? 0;
+  return r.split === id ? r.amount : 0;
+}
+
 /** Per-member expense balance (paid vs owed) for one month's rows. */
 export function computeNets(rows: ExpenseLike[], memberIds: string[]): NetBalance[] {
-  const equalPool = rows
-    .filter((r) => r.split === SPLIT_EQUAL)
-    .reduce((s, r) => s + r.amount, 0);
-  const equalShare = memberIds.length ? equalPool / memberIds.length : 0;
   return memberIds.map((id) => {
     const paid = rows
       .filter((r) => r.payer === id)
       .reduce((s, r) => s + r.amount, 0);
-    const owes =
-      rows.filter((r) => r.split === id).reduce((s, r) => s + r.amount, 0) +
-      equalShare;
+    const owes = rows.reduce((s, r) => s + shareFor(r, id, memberIds.length), 0);
     return { id, paid: round2(paid), owes: round2(owes), net: round2(paid - owes) };
   });
 }
