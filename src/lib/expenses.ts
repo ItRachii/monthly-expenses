@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { formatDate, formatINR } from "./format";
-import { SPLIT_EQUAL } from "./constants";
+import { SPLIT_EQUAL, canonicalCategory, mergeCategories } from "./constants";
 import type { Context } from "./context";
 
 export interface ExpenseDTO {
@@ -32,6 +32,19 @@ export async function getUsedCategories(ctx: Context): Promise<string[]> {
     distinct: ["category"],
   });
   return rows.map((r) => r.category).filter((c) => c && c.trim());
+}
+
+/**
+ * Maps user-entered categories onto the ones already in use in this context
+ * (plus the standard set), so a differently cased or pluralised variant can
+ * never be stored as a new category.
+ */
+export async function canonicalCategoriesFor(
+  ctx: Context,
+  names: string[],
+): Promise<string[]> {
+  const known = mergeCategories(await getUsedCategories(ctx));
+  return names.map((n) => canonicalCategory(n, known));
 }
 
 export async function getExpenses(
