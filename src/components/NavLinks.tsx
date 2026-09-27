@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ICONS } from "./NavIcons";
-import { useAddExpense } from "./AddExpense";
 
 export interface NavItem {
   href: string;
@@ -16,7 +15,6 @@ export interface NavItem {
 // into the home screen + /g/[ctx] tabs, so the nav is just the app shell.
 const MAIN_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: "🏠" },
-  { href: "/add", label: "Add Expense", icon: "➕" },
   { href: "/notifications", label: "Notifications", icon: "🔔" },
   { href: "/groups", label: "Groups", icon: "👥" },
 ];
@@ -38,7 +36,6 @@ export function NavLinks({
   ariaLabel?: string;
 }) {
   const pathname = usePathname();
-  const { open } = useAddExpense();
 
   return (
     <nav aria-label={ariaLabel} className="flex flex-col gap-1">
@@ -47,10 +44,9 @@ export function NavLinks({
         const showBadge = it.href === "/notifications" && unreadCount > 0;
         const Icon = NAV_ICONS[it.href];
         return (
-          <NavItemLink
+          <Link
             key={it.href}
             href={it.href}
-            onAdd={() => open()}
             title={collapsed ? it.label : undefined}
             className={`flex items-center gap-3 rounded-lg px-3 py-2 text-base transition ${
               active
@@ -81,37 +77,9 @@ export function NavLinks({
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             ) : null}
-          </NavItemLink>
+          </Link>
         );
       })}
     </nav>
-  );
-}
-
-/** A nav link, except "Add Expense", which opens the overlay in place. */
-function NavItemLink({
-  href,
-  onAdd,
-  title,
-  className,
-  children,
-}: {
-  href: string;
-  onAdd: () => void;
-  title?: string;
-  className: string;
-  children: React.ReactNode;
-}) {
-  if (href === "/add") {
-    return (
-      <button type="button" onClick={onAdd} title={title} className={`${className} w-full text-left`}>
-        {children}
-      </button>
-    );
-  }
-  return (
-    <Link href={href} title={title} className={className}>
-      {children}
-    </Link>
   );
 }

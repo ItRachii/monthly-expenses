@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import * as groups from "@/lib/groups";
@@ -135,15 +136,18 @@ export async function removeMemberAction(groupId: string, targetKey: string) {
   return { ok: true };
 }
 
-export async function leaveGroupAction(groupId: string) {
+// `goHome` is set from the group screen itself, which stops existing for the
+// user once they leave: the redirect lands them home in the same round trip.
+export async function leaveGroupAction(groupId: string, goHome = false) {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
   await groups.removeMember(groupId, email);
   revalidateGroupViews();
+  if (goHome) redirect("/");
   return { ok: true };
 }
 
-export async function deleteGroupAction(groupId: string) {
+export async function deleteGroupAction(groupId: string, goHome = false) {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
   const group = await groups.getGroup(groupId);
@@ -151,6 +155,7 @@ export async function deleteGroupAction(groupId: string) {
     return { ok: false, error: "Only the creator can delete this group." };
   await groups.deleteGroup(groupId);
   revalidateGroupViews();
+  if (goHome) redirect("/");
   return { ok: true };
 }
 

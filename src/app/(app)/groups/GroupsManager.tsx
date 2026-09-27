@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   cancelInviteAction,
@@ -13,21 +13,11 @@ import {
 } from "@/lib/actions/groups";
 import { NAV_ICONS } from "@/components/NavIcons";
 import { XIcon } from "@/components/Icons";
+import type { GroupView } from "@/lib/groupView";
 
 const GroupsIcon = NAV_ICONS["/groups"];
 
-export interface GroupView {
-  id: string;
-  name: string;
-  description: string | null;
-  role: string;
-  isAdmin: boolean;
-  isCreator: boolean;
-  members: { key: string; displayName: string; role: string; isSelf: boolean }[];
-  pendingInvites: { id: number; invitedEmail: string }[];
-  /** SCD Type 2 name history, newest first. validTo is null for the current name. */
-  nameHistory: { name: string; validFrom: string; validTo: string | null }[];
-}
+export type { GroupView };
 
 export function GroupsManager({ groups }: { groups: GroupView[] }) {
   const [showCreate, setShowCreate] = useState(false);
@@ -47,7 +37,7 @@ export function GroupsManager({ groups }: { groups: GroupView[] }) {
         </div>
       )}
 
-      {/* Floating button to create a group — the Groups icon with a + badge.
+      {/* Floating button to create a group: the Groups icon with a + badge.
           Sits above the mobile bottom nav (and bottom-right on desktop). */}
       <button
         type="button"
@@ -72,131 +62,153 @@ export function GroupsManager({ groups }: { groups: GroupView[] }) {
 }
 
 function GroupCard({ group }: { group: GroupView }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  function run(fn: () => Promise<unknown>) {
-    startTransition(async () => {
-      await fn();
-      router.refresh();
-    });
-  }
-
   return (
     <details className="card">
       <summary className="cursor-pointer select-none font-semibold">
         {group.name}
         {group.description ? (
-          <span className="font-normal text-muted"> — {group.description}</span>
+          <span className="font-normal text-muted"> · {group.description}</span>
         ) : null}
       </summary>
+      <div className="mt-4">
+        <GroupSettingsBody group={group} />
+      </div>
+    </details>
+  );
+}
 
-      <div className="mt-4 space-y-5">
-        {/* Rename (admin) + name history */}
-        {group.isAdmin ? <RenameForm groupId={group.id} current={group.name} /> : null}
-        {group.nameHistory.length > 1 ? <NameHistory rows={group.nameHistory} /> : null}
+/**
+ * Rename, name history, members, invites and leave/delete for one group.
+ * Shared by the /groups page and the settings overlay on the group screen.
+ * With `goHome`, leaving or deleting the group redirects to the home screen.
+ */
+export function GroupSettingsBody({
+  group,
+  goHome = false,
+}: {
+  group: GroupView;
+  goHome?: boolean;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-        {/* Members */}
+  function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const res = await fn();
+      if (!res.ok) setError(res.error ?? "Something went wrong.");
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="space-y-5">
+      {error ? <div className="alert-error">{error}</div> : null}
+      {/* Rename (admin) + name history */}
+      {group.isAdmin ? <RenameForm groupId={group.id} current={group.name} /> : null}
+      {group.nameHistory.length > 1 ? <NameHistory rows={group.nameHistory} /> : null}
+
+      {/* Members */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+          Members
+        </h3>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {group.members.map((m) => (
+              <tr key={m.key}>
+                <td>
+                  {m.displayName}
+                  {m.isSelf ? <span className="text-muted"> (you)</span> : null}
+                </td>
+                <td className="capitalize">{m.role}</td>
+                <td className="text-right">
+                  {group.isAdmin && !m.isSelf ? (
+                    <button
+                      className="text-red-400 hover:text-red-300"
+                      disabled={pending}
+                      onClick={() => run(() => removeMemberAction(group.id, m.key))}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Invite */}
+      <InviteForm groupId={group.id} />
+
+      {/* Pending invites (admin) */}
+      {group.isAdmin && group.pendingInvites.length > 0 ? (
         <div>
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-            Members
+            Pending Invites ({group.pendingInvites.length})
           </h3>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Role</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.members.map((m) => (
-                <tr key={m.key}>
-                  <td>
-                    {m.displayName}
-                    {m.isSelf ? <span className="text-muted"> (you)</span> : null}
-                  </td>
-                  <td className="capitalize">{m.role}</td>
-                  <td className="text-right">
-                    {group.isAdmin && !m.isSelf ? (
-                      <button
-                        className="text-red-400 hover:text-red-300"
-                        disabled={pending}
-                        onClick={() => run(() => removeMemberAction(group.id, m.key))}
-                      >
-                        Remove
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Invite */}
-        <InviteForm groupId={group.id} />
-
-        {/* Pending invites (admin) */}
-        {group.isAdmin && group.pendingInvites.length > 0 ? (
-          <div>
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-              Pending Invites ({group.pendingInvites.length})
-            </h3>
-            <div className="space-y-1">
-              {group.pendingInvites.map((inv) => (
-                <div key={inv.id} className="flex items-center justify-between text-sm">
-                  <span>{inv.invitedEmail}</span>
-                  <button
-                    className="btn-secondary px-3 py-1 text-xs"
-                    disabled={pending}
-                    onClick={() => run(() => cancelInviteAction(group.id, inv.id))}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {/* Danger zone */}
-        <div className="border-t border-white/10 pt-4">
-          {!group.isCreator ? (
-            <button
-              className="btn-danger"
-              disabled={pending}
-              onClick={() => run(() => leaveGroupAction(group.id))}
-            >
-              Leave Group
-            </button>
-          ) : !confirmDelete ? (
-            <button className="btn-danger" onClick={() => setConfirmDelete(true)}>
-              Delete Group
-            </button>
-          ) : (
-            <div className="space-y-2">
-              <div className="alert-warning">
-                Are you sure? All group expenses and invites will be lost.
-              </div>
-              <div className="flex gap-2">
+          <div className="space-y-1">
+            {group.pendingInvites.map((inv) => (
+              <div key={inv.id} className="flex items-center justify-between text-sm">
+                <span>{inv.invitedEmail}</span>
                 <button
-                  className="btn-danger"
+                  className="btn-secondary px-3 py-1 text-xs"
                   disabled={pending}
-                  onClick={() => run(() => deleteGroupAction(group.id))}
+                  onClick={() => run(() => cancelInviteAction(group.id, inv.id))}
                 >
-                  Yes, delete permanently
-                </button>
-                <button className="btn-secondary" onClick={() => setConfirmDelete(false)}>
                   Cancel
                 </button>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
+      ) : null}
+
+      {/* Danger zone */}
+      <div className="border-t border-white/10 pt-4">
+        {!group.isCreator ? (
+          <button
+            className="btn-danger"
+            disabled={pending}
+            onClick={() => run(() => leaveGroupAction(group.id, goHome))}
+          >
+            Leave Group
+          </button>
+        ) : !confirmDelete ? (
+          <button className="btn-danger" onClick={() => setConfirmDelete(true)}>
+            Delete Group
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <div className="alert-warning">
+              Are you sure? All group expenses and invites will be lost.
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="btn-danger"
+                disabled={pending}
+                onClick={() => run(() => deleteGroupAction(group.id, goHome))}
+              >
+                Yes, delete permanently
+              </button>
+              <button className="btn-secondary" onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </details>
+    </div>
   );
 }
 
@@ -431,6 +443,66 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Group settings on top of the group screen. Closes on an outside click, the
+ * close button or Escape. Leaving or deleting the group goes back home.
+ */
+export function GroupSettingsOverlay({
+  group,
+  onClose,
+}: {
+  group: GroupView;
+  onClose: () => void;
+}) {
+  const close = useRef(onClose);
+  close.current = onClose;
+
+  // Escape closes; the page behind does not scroll while the overlay is up.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close.current();
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Group settings"
+        className="card max-h-[92vh] w-full space-y-4 overflow-y-auto rounded-b-none md:max-w-xl md:rounded-xl"
+        style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="section-title">Group settings</h2>
+            <p className="truncate text-sm text-muted">
+              <span className="font-semibold text-ink">{group.name}</span>
+              {group.description ? <> · {group.description}</> : null}
+            </p>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+            <XIcon />
+          </button>
+        </div>
+        <GroupSettingsBody group={group} goHome />
+      </div>
     </div>
   );
 }
