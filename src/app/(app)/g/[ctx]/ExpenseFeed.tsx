@@ -115,8 +115,29 @@ export function ExpenseFeed({
       }));
   }, [rows]);
 
+  // Rows that appeared since the last render (your own add, or another
+  // member's picked up by the live refresh) glow briefly, and their month
+  // opens so the new expense is actually visible.
+  const seen = useRef<Set<number> | null>(null);
+  const [fresh, setFresh] = useState<Set<number>>(() => new Set());
+  useEffect(() => {
+    const ids = rows.map((r) => r.id);
+    if (seen.current === null) {
+      seen.current = new Set(ids);
+      return;
+    }
+    const prev = seen.current;
+    const added = ids.filter((id) => !prev.has(id));
+    seen.current = new Set(ids);
+    if (added.length === 0) return;
+    setFresh(new Set(added));
+    const t = window.setTimeout(() => setFresh(new Set()), 4000);
+    return () => window.clearTimeout(t);
+  }, [rows]);
+  const freshMonths = new Set(rows.filter((r) => fresh.has(r.id)).map((r) => r.date.slice(0, 7)));
+
   const latest = sections[0]?.key;
-  const isOpen = (key: string) => toggled[key] ?? key === latest;
+  const isOpen = (key: string) => freshMonths.has(key) || (toggled[key] ?? key === latest);
 
   const payerLabel = (v: string) => nameMap[v] ?? v;
 
@@ -187,6 +208,7 @@ export function ExpenseFeed({
                     category={r.category || "Uncategorised"}
                     inv={inv}
                     isDesktop={isDesktop}
+                    isNew={fresh.has(r.id)}
                     pending={pending}
                     onOpenActions={() => setActionsFor({ expense: r, confirm: false })}
                     onEdit={() => setEditing(r)}
@@ -268,6 +290,7 @@ function ExpenseRow({
   category,
   inv,
   isDesktop,
+  isNew,
   pending,
   onOpenActions,
   onEdit,
@@ -283,6 +306,8 @@ function ExpenseRow({
   category: string;
   inv: ReturnType<typeof involvement> | null;
   isDesktop: boolean;
+  /** Just added: highlighted for a few seconds. */
+  isNew: boolean;
   pending: boolean;
   onOpenActions: () => void;
   onEdit: () => void;
@@ -348,7 +373,9 @@ function ExpenseRow({
   return (
     <div
       {...(isDesktop ? {} : pressable)}
-      className={`flex items-center gap-3 px-3 py-2.5 ${
+      className={`flex items-center gap-3 px-3 py-2.5 transition-colors duration-700 ${
+        isNew ? "bg-primary/15" : ""
+      } ${
         isDesktop
           ? ""
           : "cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-white/5 active:bg-white/5"

@@ -1,11 +1,10 @@
 import { GroupsIcon, ProfileIcon } from "@/components/NavIcons";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
-import { resolveContext } from "@/lib/resolveContext";
 import { getUserGroups } from "@/lib/groups";
-import { getUsedCategories } from "@/lib/expenses";
 import { wireKey } from "@/lib/wire";
-import { SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
+import { SPLIT_EQUAL } from "@/lib/constants";
+import { buildAddSetup } from "@/lib/addSetup";
 import { AddExpenseForm } from "./AddExpenseForm";
 import { ReceiptScanner } from "./ReceiptScanner";
 
@@ -70,19 +69,9 @@ export default async function AddPage({
   }
 
   // Step 2 — destination chosen: the form, scoped to it.
-  const r = await resolveContext(user.email, ctxParam);
-  const categories = mergeCategories(r.error ? [] : await getUsedCategories(r.context));
-
-  const payerOptions = r.wire.members.map((m) => ({ value: m.key, label: m.displayName }));
-  const splitOptions = [
-    { value: SPLIT_EQUAL, label: "Equal Split" },
-    ...r.wire.members.map((m) => ({ value: m.key, label: m.displayName })),
-  ];
-  const defaultPayer =
-    r.wire.members.find((m) => m.isSelf)?.key ?? payerOptions[0]?.value ?? "";
-  const destination = r.isPersonal
-    ? "Personal"
-    : r.options.find((o) => o.value === r.ctxValue)?.label ?? "Group";
+  const res = await buildAddSetup(user.email, ctxParam);
+  const setup = "setup" in res ? res.setup : null;
+  const destination = setup?.name ?? "Personal";
 
   return (
     <div className="space-y-6">
@@ -94,27 +83,27 @@ export default async function AddPage({
         </Link>
       </p>
 
-      {r.error ? (
-        <div className="alert-error">{r.error}</div>
+      {!setup ? (
+        <div className="alert-error">{"error" in res ? res.error : "Something went wrong."}</div>
       ) : (
         <>
           <ReceiptScanner
-            ctx={r.ctxValue}
-            isPersonal={r.isPersonal}
-            categories={categories}
-            payerOptions={payerOptions}
-            splitOptions={splitOptions}
-            defaultPayer={defaultPayer}
+            ctx={setup.ctx}
+            isPersonal={setup.isPersonal}
+            categories={setup.categories}
+            payerOptions={setup.payerOptions}
+            splitOptions={setup.splitOptions}
+            defaultPayer={setup.defaultPayer}
           />
           <AddExpenseForm
-            ctx={r.ctxValue}
-            isPersonal={r.isPersonal}
-            categories={categories}
-            payerOptions={payerOptions}
-            splitOptions={splitOptions}
-            defaultPayer={defaultPayer}
+            ctx={setup.ctx}
+            isPersonal={setup.isPersonal}
+            categories={setup.categories}
+            payerOptions={setup.payerOptions}
+            splitOptions={setup.splitOptions}
+            defaultPayer={setup.defaultPayer}
             defaultSplit={SPLIT_EQUAL}
-            memberCount={r.wire.members.length}
+            memberCount={setup.memberCount}
             offlineOwner={wireKey("offline-owner", user.email)}
           />
         </>

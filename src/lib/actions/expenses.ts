@@ -17,6 +17,7 @@ import { SPLIT_EQUAL } from "@/lib/constants";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { emailForKey } from "@/lib/wire";
 import { maskEmail } from "@/lib/pii";
+import { buildAddSetup, type AddSetup } from "@/lib/addSetup";
 
 export interface ActionResult {
   ok: boolean;
@@ -255,4 +256,15 @@ export async function deleteExpenseAction(id: number): Promise<ActionResult> {
 
   revalidateExpenseViews();
   return { ok: true };
+}
+
+/** Loads the Add Expense form's options for one context (overlay use). */
+export async function getAddSetupAction(
+  ctx: string,
+): Promise<{ ok: true; setup: AddSetup } | { ok: false; error: string }> {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) return { ok: false, error: "Not signed in." };
+  const res = await buildAddSetup(email, typeof ctx === "string" && ctx ? ctx : "personal");
+  return "error" in res ? { ok: false, error: res.error } : { ok: true, setup: res.setup };
 }

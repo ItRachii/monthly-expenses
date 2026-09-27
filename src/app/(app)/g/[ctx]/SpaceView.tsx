@@ -2,6 +2,8 @@
 
 import { ArrowLeftIcon, ChevronDownIcon, SettingsIcon } from "@/components/Icons";
 import { BalanceHeadline, BalanceLines } from "@/components/BalanceSummary";
+import { AddExpenseButton } from "@/components/AddExpense";
+import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import Link from "next/link";
 import { useState } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
@@ -70,6 +72,9 @@ export function SpaceView({
       ];
   const validInitial = tabs.some((t) => t.id === initialTab) ? initialTab : "expenses";
   const [tab, setTab] = useState<SpaceTab>(validInitial);
+  // Picks up expenses and settlements added elsewhere (other members, other
+  // tabs) without reloading the page.
+  useLiveRefresh(ctx);
   const [linesOpen, setLinesOpen] = useState(true);
 
   return (
@@ -116,12 +121,9 @@ export function SpaceView({
         ) : null}
 
         <div>
-          <Link
-            href={`/add?ctx=${encodeURIComponent(ctx)}`}
-            className="btn-primary px-3 py-1.5 text-sm"
-          >
+          <AddExpenseButton ctx={ctx} lock className="btn-primary px-3 py-1.5 text-sm">
             + Add expense
-          </Link>
+          </AddExpenseButton>
         </div>
       </div>
 

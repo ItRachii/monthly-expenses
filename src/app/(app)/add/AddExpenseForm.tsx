@@ -23,6 +23,8 @@ export function AddExpenseForm({
   defaultSplit,
   memberCount,
   offlineOwner,
+  bare = false,
+  onSaved,
 }: {
   ctx: string;
   isPersonal: boolean;
@@ -34,6 +36,10 @@ export function AddExpenseForm({
   memberCount: number;
   /** Opaque per-user tag scoping the offline queue (no PII). */
   offlineOwner: string;
+  /** Render without the card chrome (inside the add-expense overlay). */
+  bare?: boolean;
+  /** Called after a successful save; the overlay closes and shows a toast. */
+  onSaved?: (saved: { item: string; amount: number; offline: boolean }) => void;
 }) {
   const [date, setDate] = useState(todayISO());
   const [category, setCategory] = useState(categories[0]);
@@ -71,6 +77,10 @@ export function AddExpenseForm({
     // OfflineSync replays it through the same server action on reconnect.
     function saveOffline() {
       if (enqueueExpense(offlineOwner, input)) {
+        if (onSaved) {
+          onSaved({ item: input.item, amount: amt, offline: true });
+          return;
+        }
         setMessage({
           ok: true,
           text: `Saved offline: ${input.item} — ₹${amt.toFixed(2)}`,
@@ -103,6 +113,13 @@ export function AddExpenseForm({
         return;
       }
       if (res.ok) {
+        // Soft refresh: re-renders the server data behind the form in place,
+        // no page reload, so the new expense shows up immediately.
+        router.refresh();
+        if (onSaved) {
+          onSaved({ item: input.item, amount: amt, offline: false });
+          return;
+        }
         let info: string | undefined;
         if (!isPersonal && split === SPLIT_EQUAL && memberCount > 0) {
           info = `Each of the ${memberCount} members owes ₹${(amt / memberCount).toFixed(2)}`;
@@ -114,7 +131,6 @@ export function AddExpenseForm({
         });
         setItem("");
         setAmount("");
-        router.refresh();
       } else {
         setMessage({ ok: false, text: res.error ?? "Something went wrong." });
       }
@@ -171,7 +187,7 @@ export function AddExpenseForm({
   );
 
   return (
-    <form onSubmit={submit} className="card space-y-4">
+    <form onSubmit={submit} className={bare ? "space-y-4" : "card space-y-4"}>
       {isPersonal ? (
         // Personal: flat 2x2 grid — Date, Category, Item, Amount.
         <div className="grid gap-4 sm:grid-cols-2">
