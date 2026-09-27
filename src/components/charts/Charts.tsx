@@ -155,8 +155,8 @@ export function StatCard({
   history: number[];
   /** Last month's value, or null when there is no earlier month. */
   previous: number | null;
-  /** "spend": up is red, down is green. "neutral": direction only. */
-  tone: "spend" | "neutral";
+  /** "spend": up is red, down is green. "gain": the reverse. "neutral": direction only. */
+  tone: "spend" | "gain" | "neutral";
   money?: boolean;
 }) {
   const [whole, frac] = (money ? inr.format(value) : String(value)).split(".");
@@ -167,7 +167,7 @@ export function StatCard({
       ? MUTED
       : tone === "neutral"
         ? MUTED
-        : up
+        : up === (tone === "spend")
           ? "#f87171"
           : "#34d399";
   const Arrow = up ? TrendingUpIcon : TrendingDownIcon;

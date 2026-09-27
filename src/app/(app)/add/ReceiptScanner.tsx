@@ -7,7 +7,7 @@ import { ocrImages, type OcrProgress } from "@/lib/ocr";
 import { parseReceipt } from "@/lib/receipt/parse";
 import { addReceiptAction } from "@/lib/actions/receipts";
 import { CategorySelect } from "@/components/CategorySelect";
-import { SPLIT_EQUAL } from "@/lib/constants";
+import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR, todayISO } from "@/lib/format";
 
 interface Opt {
@@ -330,7 +330,8 @@ export function ReceiptScanner({
               <div>
                 <label className="label">Split</label>
                 <select className="select" value={split} onChange={(e) => setSplit(e.target.value)}>
-                  {splitOptions.map((o) => (
+                  {/* Unequal amounts are per expense; a whole receipt splits one way. */}
+                  {splitOptions.filter((o) => o.value !== SPLIT_CUSTOM).map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>

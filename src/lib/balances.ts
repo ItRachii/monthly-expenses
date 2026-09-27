@@ -11,6 +11,7 @@ import {
   SETTLE_EPS,
   applyPayments,
   computeNets,
+  parseShares,
   round2,
   simplifyDebts,
   type ExpenseLike,
@@ -48,7 +49,7 @@ export async function getOutstandingAllMonths(
   const [expenses, settlements] = await Promise.all([
     prisma.expense.findMany({
       where: { groupId },
-      select: { date: true, payer: true, split: true, amount: true },
+      select: { date: true, payer: true, split: true, amount: true, shares: true },
     }),
     prisma.settlement.findMany({
       where: { groupId },
@@ -59,9 +60,10 @@ export async function getOutstandingAllMonths(
   const byMonth = new Map<string, ExpenseLike[]>();
   for (const e of expenses) {
     const m = monthKey(e.date);
+    const row = { ...e, shares: parseShares(e.shares) };
     const list = byMonth.get(m);
-    if (list) list.push(e);
-    else byMonth.set(m, [e]);
+    if (list) list.push(row);
+    else byMonth.set(m, [row]);
   }
 
   const remaining: Transfer[] = [];

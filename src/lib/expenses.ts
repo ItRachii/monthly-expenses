@@ -1,6 +1,8 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { formatDate, formatINR } from "./format";
-import { SPLIT_EQUAL, canonicalCategory, mergeCategories } from "./constants";
+import { SPLIT_CUSTOM, SPLIT_EQUAL, canonicalCategory, mergeCategories } from "./constants";
+import { parseShares, type Shares } from "./settlementMath";
 import type { Context } from "./context";
 
 export interface ExpenseDTO {
@@ -11,6 +13,8 @@ export interface ExpenseDTO {
   amount: number;
   payer: string;
   split: string;
+  /** Per-participant amounts when split = SPLIT_CUSTOM, else null. */
+  shares: Shares | null;
   // Receipt-scan metadata (null for manually added expenses).
   receiptId: string | null;
   receiptMerchant: string | null;
@@ -64,6 +68,7 @@ export async function getExpenses(
     amount: r.amount,
     payer: r.payer,
     split: r.split,
+    shares: r.split === SPLIT_CUSTOM ? parseShares(r.shares) : null,
     receiptId: r.receiptId,
     receiptMerchant: r.receipt?.merchant ?? null,
     gstRate: r.gstRate,
@@ -78,6 +83,7 @@ export async function createExpense(data: {
   amount: number;
   payer: string;
   split: string;
+  shares: Shares | null;
   ownerEmail: string | null;
   groupId: string | null;
 }) {
@@ -89,6 +95,7 @@ export async function createExpense(data: {
       amount: data.amount,
       payer: data.payer,
       split: data.split,
+      shares: data.shares ?? Prisma.DbNull,
       ownerEmail: data.ownerEmail,
       groupId: data.groupId,
     },
@@ -104,6 +111,7 @@ export async function updateExpense(
     amount: number;
     payer: string;
     split: string;
+    shares: Shares | null;
   },
 ) {
   await prisma.expense.update({
@@ -115,6 +123,7 @@ export async function updateExpense(
       amount: data.amount,
       payer: data.payer,
       split: data.split,
+      shares: data.shares ?? Prisma.DbNull,
     },
   });
 }
@@ -143,6 +152,7 @@ type ExpenseRowJson = {
   amount: number;
   payer: string;
   split: string;
+  shares?: unknown;
   owner_email: string | null;
   group_id: string | null;
 };
@@ -174,7 +184,8 @@ function changeSummary(
   nameMap: Record<string, string>,
 ): { item: string; summary: string } {
   const nm = (v: string) => nameMap[v] ?? v;
-  const splitLabel = (v: string) => (v === SPLIT_EQUAL ? "Equal Split" : nm(v));
+  const splitLabel = (v: string) =>
+    v === SPLIT_EQUAL ? "Equal Split" : v === SPLIT_CUSTOM ? "Unequal split" : nm(v);
 
   if (op === "INSERT" && newRow) {
     return {
@@ -202,6 +213,11 @@ function changeSummary(
       parts.push(`payer ${nm(oldRow.payer)} → ${nm(newRow.payer)}`);
     if (oldRow.split !== newRow.split)
       parts.push(`split ${splitLabel(oldRow.split)} → ${splitLabel(newRow.split)}`);
+    else if (
+      newRow.split === SPLIT_CUSTOM &&
+      JSON.stringify(oldRow.shares ?? null) !== JSON.stringify(newRow.shares ?? null)
+    )
+      parts.push("unequal shares changed");
     return {
       item: newRow.item,
       summary: parts.length

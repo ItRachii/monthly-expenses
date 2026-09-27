@@ -8,20 +8,30 @@ import {
   getPersonalMonthSpend,
 } from "@/lib/balances";
 import { SETTLE_EPS } from "@/lib/settlementMath";
-import { formatINR } from "@/lib/format";
+import { formatINR, monthKey } from "@/lib/format";
 import { PlusIcon } from "@/components/Icons";
 import { AddExpenseButton } from "@/components/AddExpense";
+import { getGroupSharesByMonth, getIncomeHistory } from "@/lib/income";
+import { incomeForMonth, monthFinance } from "@/lib/incomeMath";
 
 // Splitwise-style dashboard: overall position, one card per group with
 // per-member balances, a Personal card, and the Add-expense FAB.
 export default async function HomePage() {
   const user = await requireUser();
-  const [pending, balances, personal] = await Promise.all([
+  const thisMonth = monthKey(new Date());
+  const [pending, balances, personal, incomeHistory, groupShares] = await Promise.all([
     getPendingInvitesForUser(user.email),
     getGroupBalancesForUser(user.email),
     getPersonalMonthSpend(user.email),
+    getIncomeHistory(user.email),
+    getGroupSharesByMonth(user.email, thisMonth),
   ]);
   const { overall, groups } = balances;
+  const month = monthFinance(
+    incomeForMonth(incomeHistory, thisMonth),
+    personal.total,
+    groupShares[thisMonth] ?? 0,
+  );
 
   return (
     <div className="space-y-6 pb-24">
@@ -72,6 +82,24 @@ export default async function HomePage() {
             </>
           ) : (
             "Nothing spent this month yet"
+          )}
+        </div>
+        <div className="mt-1 text-sm text-muted">
+          {month.savings === null ? (
+            "Add your monthly income on your profile to track savings"
+          ) : (
+            <>
+              Income {formatINR(month.income ?? 0)} · with {formatINR(month.groups)} in groups,{" "}
+              {month.savings < 0 ? (
+                <span className="font-medium text-red-400">
+                  overspent {formatINR(-month.savings)}
+                </span>
+              ) : (
+                <span className="font-medium text-emerald-400">
+                  saved {formatINR(month.savings)}
+                </span>
+              )}
+            </>
           )}
         </div>
       </Link>

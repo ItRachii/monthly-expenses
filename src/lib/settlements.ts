@@ -3,6 +3,7 @@ import type { Context } from "./context";
 import {
   applyPayments,
   computeNets,
+  parseShares,
   simplifyDebts,
   type Transfer,
 } from "./settlementMath";
@@ -76,7 +77,7 @@ export async function getOutstandingTransfers(
   const [expenses, settlements] = await Promise.all([
     prisma.expense.findMany({
       where: { groupId, date: { gte: start, lt: end } },
-      select: { payer: true, split: true, amount: true },
+      select: { payer: true, split: true, amount: true, shares: true },
     }),
     prisma.settlement.findMany({
       where: { groupId, month },
@@ -84,7 +85,12 @@ export async function getOutstandingTransfers(
     }),
   ]);
 
-  const transfers = simplifyDebts(computeNets(expenses, memberEmails));
+  const transfers = simplifyDebts(
+    computeNets(
+      expenses.map((e) => ({ ...e, shares: parseShares(e.shares) })),
+      memberEmails,
+    ),
+  );
   return applyPayments(
     transfers,
     settlements.map((s) => ({

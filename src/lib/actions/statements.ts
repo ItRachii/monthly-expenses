@@ -70,6 +70,7 @@ export async function importStatementAction(input: {
       amount: rows[i].amount,
       payer: email,
       split: SPLIT_EQUAL,
+      shares: null,
       ownerEmail,
       groupId,
     });

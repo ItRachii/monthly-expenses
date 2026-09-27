@@ -5,30 +5,40 @@ import { useRouter } from "next/navigation";
 import { saveProfileAction } from "@/lib/actions/profile";
 import { UserAvatar } from "@/components/UserAvatar";
 import { PencilIcon } from "@/components/Icons";
+import { formatINR } from "@/lib/format";
 
 export function ProfileForm({
   email,
   firstName,
   lastName,
+  monthlyIncome,
   image,
 }: {
   email: string;
   firstName: string;
   lastName: string | null;
+  /** This month's fixed income; null until the user sets it. */
+  monthlyIncome: number | null;
   image: string | null;
 }) {
-  const [editing, setEditing] = useState(false);
+  const incomeText = monthlyIncome === null ? "" : String(monthlyIncome);
+  // Income is required: without it, open straight into the form.
+  const [editing, setEditing] = useState(monthlyIncome === null);
   const [first, setFirst] = useState(firstName);
   const [last, setLast] = useState(lastName ?? "");
+  const [income, setIncome] = useState(incomeText);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
+  // The just-saved value covers the moment before the refreshed prop lands.
+  const shownIncome = monthlyIncome ?? (income.trim() ? Number(income) : null);
   const displayName = [firstName, lastName ?? ""].map((s) => s.trim()).filter(Boolean).join(" ");
 
   function startEdit() {
     setFirst(firstName);
     setLast(lastName ?? "");
+    setIncome(incomeText);
     setMessage(null);
     setEditing(true);
   }
@@ -37,12 +47,13 @@ export function ProfileForm({
     setEditing(false);
     setFirst(firstName);
     setLast(lastName ?? "");
+    setIncome(incomeText);
   }
 
   function save(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await saveProfileAction(first, last);
+      const res = await saveProfileAction(first, last, income);
       if (res.ok) {
         setMessage({ ok: true, text: res.message ?? "Saved." });
         setEditing(false);
@@ -74,6 +85,10 @@ export function ProfileForm({
 
         {message ? (
           <div className={message.ok ? "alert-success" : "alert-error"}>{message.text}</div>
+        ) : monthlyIncome === null ? (
+          <div className="alert-info">
+            Add your monthly income to see what you save each month on your Personal page.
+          </div>
         ) : null}
 
         <dl className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
@@ -101,6 +116,33 @@ export function ProfileForm({
               />
             ) : (
               lastName?.trim() || <span className="text-muted">Not set</span>
+            )}
+          </Field>
+          <Field label="Monthly income (₹)">
+            {editing ? (
+              <>
+                <input
+                  className="input mt-1"
+                  type="text"
+                  inputMode="decimal"
+                  value={income}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "" || /^\d*\.?\d{0,2}$/.test(v)) setIncome(v);
+                  }}
+                  placeholder="e.g. 50000"
+                  required
+                  aria-required="true"
+                />
+                <p className="mt-1 text-xs font-normal text-muted">
+                  Required. Your fixed take-home pay each month. A change applies from this month
+                  on; earlier months keep their amount.
+                </p>
+              </>
+            ) : shownIncome !== null ? (
+              formatINR(shownIncome)
+            ) : (
+              <span className="text-red-400">Not set</span>
             )}
           </Field>
           <Field label="Email address">

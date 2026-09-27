@@ -36,6 +36,10 @@ model Expense {
   gstRate   Float?   @map("gst_rate")
   gstAmount Float?   @map("gst_amount")
 
+  // Unequal split: when split = "custom", each participant's share of the
+  // amount as { userId: rupees }. Null for every other split.
+  shares Json?
+
   @@index([receiptId], map: "expenses_receipt_idx")
   @@map("expenses")
 }
@@ -169,6 +173,22 @@ model Notification {
 
   @@index([recipientEmail, isRead, createdAt(sort: Desc)], map: "notifications_recipient_idx")
   @@map("notifications")
+}
+
+// Fixed monthly income, one row per month it changed. The amount for a month
+// is the row with the latest effective_month on or before it (the earliest
+// row also covers months before it), so a raise never rewrites old savings.
+model UserIncome {
+  userEmail      String   @map("user_email")
+  /**
+   * YYYY-MM the amount applies from.
+   */
+  effectiveMonth String   @map("effective_month")
+  amount         Float
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([userEmail, effectiveMonth])
+  @@map("user_incomes")
 }
 
 // Records one-time data migrations run by the app (see src/lib/piiMigration.ts).

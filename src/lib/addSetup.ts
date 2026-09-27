@@ -1,6 +1,6 @@
 import { resolveContext } from "./resolveContext";
 import { getUsedCategories } from "./expenses";
-import { SPLIT_EQUAL, mergeCategories } from "./constants";
+import { SPLIT_CUSTOM, SPLIT_EQUAL, mergeCategories } from "./constants";
 
 interface Opt {
   value: string;
@@ -34,6 +34,7 @@ export async function buildAddSetup(
   const payerOptions = r.wire.members.map((m) => ({ value: m.key, label: m.displayName }));
   const splitOptions = [
     { value: SPLIT_EQUAL, label: "Equal Split" },
+    { value: SPLIT_CUSTOM, label: "Unequal split" },
     ...r.wire.members.map((m) => ({ value: m.key, label: m.displayName })),
   ];
   return {

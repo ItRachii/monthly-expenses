@@ -4,8 +4,7 @@ import { PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
-import { SPLIT_EQUAL } from "@/lib/constants";
-import { SETTLE_EPS, round2 } from "@/lib/settlementMath";
+import { SETTLE_EPS, round2, shareFor } from "@/lib/settlementMath";
 import { formatINR } from "@/lib/format";
 import { deleteExpenseAction } from "@/lib/actions/expenses";
 import { EditExpenseModal } from "../../log/ExpenseLog";
@@ -37,14 +36,7 @@ function involvement(
   memberCount: number,
 ): { label: string; amount: number | null; tone: "lent" | "borrowed" | "muted" } {
   // "you paid" with nothing lent means the whole cost was yours: no balance.
-  const share =
-    r.split === SPLIT_EQUAL
-      ? memberCount > 0
-        ? r.amount / memberCount
-        : 0
-      : r.split === selfKey
-      ? r.amount
-      : 0;
+  const share = shareFor(r, selfKey, memberCount);
   if (r.payer === selfKey) {
     const lent = round2(r.amount - share);
     return lent > SETTLE_EPS

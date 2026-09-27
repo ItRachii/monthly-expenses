@@ -6,9 +6,11 @@ import { getExpenses, getUsedCategories } from "@/lib/expenses";
 import { getSettlements } from "@/lib/settlements";
 import { maskExpenses, maskSettlements } from "@/lib/wire";
 import { getOutstandingAllMonths, linesForUser } from "@/lib/balances";
-import { SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
+import { SPLIT_CUSTOM, SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
 import { getUserGroups } from "@/lib/groups";
 import { buildGroupView, type GroupView } from "@/lib/groupView";
+import { getGroupSharesByMonth, getIncomeHistory } from "@/lib/income";
+import { monthKey } from "@/lib/format";
 import { SpaceView, type SpaceTab } from "./SpaceView";
 
 // One screen per context ("personal" or a group id): hero + Expenses /
@@ -38,10 +40,20 @@ export default async function SpacePage({
     );
   }
 
-  const [rowsRaw, settlementsRaw, usedCategories] = await Promise.all([
+  const [rowsRaw, settlementsRaw, usedCategories, finance] = await Promise.all([
     getExpenses(r.context, "desc"),
     getSettlements(r.context),
     getUsedCategories(r.context),
+    // Personal only: income and your share of group spending, for savings.
+    r.isPersonal
+      ? Promise.all([getIncomeHistory(user.email), getGroupSharesByMonth(user.email)]).then(
+          ([incomeHistory, groupShares]) => ({
+            incomeHistory,
+            groupShares,
+            currentMonth: monthKey(new Date()),
+          }),
+        )
+      : Promise.resolve(null),
   ]);
   const rows = maskExpenses(rowsRaw, r.wire);
   const settlements = maskSettlements(settlementsRaw, r.wire);
@@ -50,6 +62,7 @@ export default async function SpacePage({
   const payerOptions = r.wire.members.map((m) => ({ value: m.key, label: m.displayName }));
   const splitOptions = [
     { value: SPLIT_EQUAL, label: "Equal Split" },
+    { value: SPLIT_CUSTOM, label: "Unequal split" },
     ...r.wire.members.map((m) => ({ value: m.key, label: m.displayName })),
   ];
 
@@ -102,6 +115,7 @@ export default async function SpacePage({
       splitOptions={splitOptions}
       selfKey={selfKey}
       settings={settings}
+      finance={finance}
     />
   );
 }
