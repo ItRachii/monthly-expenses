@@ -1,16 +1,19 @@
 "use client";
 
-import { XIcon } from "@/components/Icons";
 import { useMemo, useState } from "react";
+import { ChevronDownIcon, XIcon } from "@/components/Icons";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { SPLIT_EQUAL } from "@/lib/constants";
-import { formatINR } from "@/lib/format";
-import { Metric } from "@/components/Metric";
 import { MonthSelect } from "@/components/MonthSelect";
 import {
-  CategoryBar,
-  CategoryPie,
+  CategoryBars,
+  CategoryDonut,
   MonthlyTrend,
+  OTHER,
+  StatCard,
+  buildPalette,
+  categoryName,
+  monthShort,
 } from "@/components/charts/Charts";
 
 interface Member {
@@ -19,21 +22,18 @@ interface Member {
   displayName: string;
 }
 
-function byCategory(rows: ExpenseDTO[]) {
-  const m = new Map<string, number>();
-  for (const r of rows) m.set(r.category, (m.get(r.category) ?? 0) + r.amount);
-  return Array.from(m, ([category, amount]) => ({ category, amount }));
+
+/** Months present in the data, oldest first, up to and including `end`. */
+function monthsUpTo(all: string[], end: string, count: number): string[] {
+  return [...all].reverse().filter((m) => m <= end).slice(-count);
 }
 
-function byMonth(rows: ExpenseDTO[]) {
-  const m = new Map<string, number>();
-  for (const r of rows) {
-    const k = r.date.slice(0, 7);
-    m.set(k, (m.get(k) ?? 0) + r.amount);
-  }
-  return Array.from(m, ([month, amount]) => ({ month, amount })).sort((a, b) =>
-    a.month.localeCompare(b.month),
-  );
+function daysIn(month: string): number {
+  const [y, m] = month.split("-").map(Number);
+  const today = new Date();
+  const isCurrent = today.getFullYear() === y && today.getMonth() + 1 === m;
+  // The current month only counts the days that have happened so far.
+  return isCurrent ? today.getDate() : new Date(y, m, 0).getDate();
 }
 
 export function Summary({
@@ -51,35 +51,43 @@ export function Summary({
     const set = new Set(rows.map((r) => r.date.slice(0, 7)));
     return Array.from(set).sort().reverse();
   }, [rows]);
+  const palette = useMemo(() => buildPalette(rows), [rows]);
 
   const [month, setMonth] = useState(months[0] ?? "");
-  const [tab, setTab] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   if (rows.length === 0) {
-    return (
-      <div className="alert-info">No expenses recorded yet.</div>
-    );
+    return <div className="alert-info">No expenses recorded yet.</div>;
   }
 
   const selectedMonth = months.includes(month) ? month : months[0];
   const monthRows = rows.filter((r) => r.date.slice(0, 7) === selectedMonth);
-  const total = monthRows.reduce((s, r) => s + r.amount, 0);
 
-  const categoryData = byCategory(monthRows);
-  const trendData = byMonth(rows);
-  // Clicking a pie slice filters the detail table to that category.
-  const detailRows = selectedCategory
-    ? monthRows.filter((r) => r.category === selectedCategory)
-    : monthRows;
+  // Per-month series for the cards: the six months up to the selected one.
+  const spark = monthsUpTo(months, selectedMonth, 6);
+  const prevMonth = months[months.indexOf(selectedMonth) + 1] ?? null;
+  const sumWhere = (m: string, pred: (r: ExpenseDTO) => boolean = () => true) =>
+    rows.filter((r) => r.date.slice(0, 7) === m && pred(r)).reduce((s, r) => s + r.amount, 0);
+  const series = (pred?: (r: ExpenseDTO) => boolean) => ({
+    value: sumWhere(selectedMonth, pred),
+    history: spark.map((m) => sumWhere(m, pred)),
+    previous: prevMonth ? sumWhere(prevMonth, pred) : null,
+  });
+  const countIn = (m: string) => rows.filter((r) => r.date.slice(0, 7) === m).length;
+  const dailyAvg = (m: string) => sumWhere(m) / daysIn(m);
 
-  const tabs = ["Category (Pie)", "Category (Bar)", "Monthly Trend"];
+  // A donut/legend selection filters the detail; "Other" means every
+  // category outside the named seven.
+  const matches = (r: ExpenseDTO) =>
+    !selectedCategory || palette.bucket(r.category) === selectedCategory;
+  const detailRows = monthRows.filter(matches);
 
   const payerLabel = (v: string) => nameMap[v] ?? v;
   const splitLabel = (v: string) => (v === SPLIT_EQUAL ? "Equal Split" : nameMap[v] ?? v);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="section-title">Overview</h2>
         <MonthSelect
@@ -92,129 +100,122 @@ export function Summary({
         />
       </div>
 
-      {isPersonal ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Metric label="Total Spent" value={formatINR(total)} />
-          <Metric label="Expenses" value={String(monthRows.length)} />
-        </div>
-      ) : (
-        <div className="card overflow-x-auto p-0">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="text-center">Total Spent</th>
-                {members.map((m) => (
-                  <th key={m.key} className="text-center">
-                    {m.displayName}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="text-center font-semibold">{formatINR(total)}</td>
-                {members.map((m) => {
-                  const paid = monthRows
-                    .filter((r) => r.payer === m.key)
-                    .reduce((s, r) => s + r.amount, 0);
-                  return (
-                    <td key={m.key} className="text-center">
-                      {formatINR(paid)}
-                    </td>
-                  );
-                })}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Charts */}
-      <div className="space-y-3">
-        <h2 className="section-title">Spending Breakdown</h2>
-        <div className="flex flex-wrap gap-2">
-          {tabs.map((t, i) => (
-            <button
-              key={t}
-              onClick={() => setTab(i)}
-              className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                tab === i ? "bg-primary/20 font-semibold text-ink" : "text-muted hover:bg-white/5"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-        <div className="card">
-          {tabs[tab] === "Category (Pie)" && (
-            <CategoryPie
-              data={categoryData}
-              selected={selectedCategory}
-              onSelect={(c) =>
-                setSelectedCategory((prev) => (prev === c ? null : c))
-              }
+      {/* Quick summary cards */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard title="Total spent" tone="spend" {...series()} />
+        {isPersonal ? (
+          <>
+            <StatCard
+              title="Daily average"
+              tone="spend"
+              value={dailyAvg(selectedMonth)}
+              history={spark.map(dailyAvg)}
+              previous={prevMonth ? dailyAvg(prevMonth) : null}
             />
-          )}
-          {tabs[tab] === "Category (Bar)" && <CategoryBar data={categoryData} />}
-          {tabs[tab] === "Monthly Trend" && <MonthlyTrend data={trendData} />}
-        </div>
-        {tabs[tab] === "Category (Pie)" ? (
-          <p className="text-xs text-muted">
-            Click a slice to filter the expense detail below.
-          </p>
-        ) : null}
+            <StatCard
+              title="Expenses"
+              tone="neutral"
+              money={false}
+              value={countIn(selectedMonth)}
+              history={spark.map(countIn)}
+              previous={prevMonth ? countIn(prevMonth) : null}
+            />
+          </>
+        ) : (
+          members.map((m) => (
+            <StatCard
+              key={m.key}
+              title={`${m.displayName} paid`}
+              tone="neutral"
+              {...series((r) => r.payer === m.key)}
+            />
+          ))
+        )}
       </div>
 
-      {/* Detail table */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="section-title">
-            Expense Detail{selectedCategory ? ` — ${selectedCategory}` : ""}
-          </h2>
+      {/* All charts at once: trend full width, then donut + bars. */}
+      <MonthlyTrend rows={rows} palette={palette} />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <CategoryDonut
+          rows={monthRows}
+          palette={palette}
+          selected={selectedCategory}
+          onSelect={(c) => {
+            const next = selectedCategory === c ? null : c;
+            setSelectedCategory(next);
+            // Picking a category is a request to see those expenses.
+            if (next) setDetailOpen(true);
+          }}
+        />
+        <CategoryBars rows={monthRows} palette={palette} />
+      </div>
+
+      {/* Expense detail: collapsed until asked for. */}
+      <section className="card p-0">
+        <div className="flex items-center gap-2 px-4 py-3">
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            aria-expanded={detailOpen}
+            onClick={() => setDetailOpen((v) => !v)}
+          >
+            <ChevronDownIcon
+              className={`h-4 w-4 shrink-0 text-muted transition-transform ${detailOpen ? "" : "-rotate-90"}`}
+            />
+            <span className="truncate font-semibold">
+              Expense detail
+              {selectedCategory ? `: ${selectedCategory}` : ""}
+            </span>
+            <span className="shrink-0 text-sm text-muted">
+              {detailRows.length} in {monthShort(selectedMonth)}
+            </span>
+          </button>
           {selectedCategory ? (
             <button
               type="button"
               onClick={() => setSelectedCategory(null)}
-              className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
+              className="inline-flex shrink-0 items-center gap-1 text-sm text-muted hover:text-ink"
             >
               Clear filter <XIcon className="h-4 w-4" />
             </button>
           ) : null}
         </div>
-        <div className="card overflow-x-auto p-0">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Category</th>
-                <th>Item</th>
-                <th className="text-right">Amount (₹)</th>
-                <th>Payer</th>
-                <th>Split</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detailRows.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.date}</td>
-                  <td>{r.category}</td>
-                  <td>{r.item}</td>
-                  <td className="text-right">{r.amount.toFixed(2)}</td>
-                  <td>{payerLabel(r.payer)}</td>
-                  <td>{splitLabel(r.split)}</td>
-                </tr>
-              ))}
-              {detailRows.length === 0 ? (
+        {detailOpen ? (
+          <div className="overflow-x-auto border-t border-white/10">
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <td colSpan={6} className="text-center text-muted">
-                    No expenses in this category.
-                  </td>
+                  <th>Date</th>
+                  <th>Category</th>
+                  <th>Item</th>
+                  <th className="text-right">Amount (₹)</th>
+                  <th>Payer</th>
+                  <th>Split</th>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              </thead>
+              <tbody>
+                {detailRows.map((r) => (
+                  <tr key={r.id}>
+                    <td className="whitespace-nowrap">{r.date}</td>
+                    <td>{categoryName(r.category)}</td>
+                    <td>{r.item}</td>
+                    <td className="text-right tabular-nums">{r.amount.toFixed(2)}</td>
+                    <td>{payerLabel(r.payer)}</td>
+                    <td>{splitLabel(r.split)}</td>
+                  </tr>
+                ))}
+                {detailRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center text-muted">
+                      No expenses in {selectedCategory === OTHER ? "other categories" : "this category"}.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }

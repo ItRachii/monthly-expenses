@@ -201,3 +201,21 @@ export function ChevronDownIcon(p: IconProps) {
     </Base>
   );
 }
+
+export function TrendingUpIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </Base>
+  );
+}
+
+export function TrendingDownIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <polyline points="22 17 13.5 8.5 8.5 13.5 2 7" />
+      <polyline points="16 17 22 17 22 11" />
+    </Base>
+  );
+}
