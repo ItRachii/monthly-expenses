@@ -9,6 +9,8 @@ import { useState } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
 import type { SettlementDTO } from "@/lib/settlements";
 import type { BalanceLine } from "@/lib/balances";
+import type { GroupView } from "@/lib/groupView";
+import { GroupSettingsOverlay } from "@/components/GroupSettings";
 import { ExpenseFeed } from "./ExpenseFeed";
 import { Settlement } from "../../settlement/Settlement";
 import { Summary } from "../../summary/Summary";
@@ -42,6 +44,7 @@ export function SpaceView({
   payerOptions,
   splitOptions,
   selfKey,
+  settings,
 }: {
   ctx: string;
   name: string;
@@ -59,6 +62,8 @@ export function SpaceView({
   payerOptions: Opt[];
   splitOptions: Opt[];
   selfKey: string;
+  /** Group settings for the gear overlay; null for Personal. */
+  settings: GroupView | null;
 }) {
   const tabs: { id: SpaceTab; label: string }[] = isPersonal
     ? [
@@ -76,6 +81,7 @@ export function SpaceView({
   // tabs) without reloading the page.
   useLiveRefresh(ctx);
   const [linesOpen, setLinesOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <div className="space-y-5">
@@ -87,15 +93,17 @@ export function SpaceView({
             <ArrowLeftIcon />
           </Link>
           <h1 className="min-w-0 flex-1 truncate text-2xl font-semibold">{name}</h1>
-          {!isPersonal ? (
-            <Link
-              href="/groups"
+          {settings ? (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
               aria-label="Group settings"
               title="Group settings"
+              aria-haspopup="dialog"
               className="icon-btn"
             >
               <SettingsIcon />
-            </Link>
+            </button>
           ) : null}
         </div>
 
@@ -179,6 +187,10 @@ export function SpaceView({
           nameMap={nameMap}
           members={members}
         />
+      ) : null}
+
+      {settings && settingsOpen ? (
+        <GroupSettingsOverlay group={settings} onClose={() => setSettingsOpen(false)} />
       ) : null}
     </div>
   );

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import * as groups from "@/lib/groups";
@@ -135,12 +136,14 @@ export async function removeMemberAction(groupId: string, targetKey: string) {
   return { ok: true };
 }
 
+// Leave and delete run from the group screen, which stops existing for the
+// user afterwards: the redirect lands them home in the same round trip.
 export async function leaveGroupAction(groupId: string) {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
   await groups.removeMember(groupId, email);
   revalidateGroupViews();
-  return { ok: true };
+  redirect("/");
 }
 
 export async function deleteGroupAction(groupId: string) {
@@ -151,7 +154,7 @@ export async function deleteGroupAction(groupId: string) {
     return { ok: false, error: "Only the creator can delete this group." };
   await groups.deleteGroup(groupId);
   revalidateGroupViews();
-  return { ok: true };
+  redirect("/");
 }
 
 export async function cancelInviteAction(groupId: string, inviteId: number) {

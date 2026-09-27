@@ -7,6 +7,8 @@ import { getSettlements } from "@/lib/settlements";
 import { maskExpenses, maskSettlements } from "@/lib/wire";
 import { getOutstandingAllMonths, linesForUser } from "@/lib/balances";
 import { SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
+import { getUserGroups } from "@/lib/groups";
+import { buildGroupView, type GroupView } from "@/lib/groupView";
 import { SpaceView, type SpaceTab } from "./SpaceView";
 
 // One screen per context ("personal" or a group id): hero + Expenses /
@@ -54,14 +56,21 @@ export default async function SpacePage({
   // All-months outstanding balance for the hero (groups only).
   let heroNet = 0;
   let heroLines: ReturnType<typeof linesForUser>["lines"] = [];
+  // Feeds the settings overlay behind the gear icon (groups only).
+  let settings: GroupView | null = null;
   if (!r.isPersonal) {
-    const transfers = await getOutstandingAllMonths(
-      r.ctxValue,
-      r.members.map((m) => m.email),
-    );
+    const [transfers, groups] = await Promise.all([
+      getOutstandingAllMonths(
+        r.ctxValue,
+        r.members.map((m) => m.email),
+      ),
+      getUserGroups(user.email),
+    ]);
     const rel = linesForUser(transfers, user.email, r.wire);
     heroNet = rel.net;
     heroLines = rel.lines;
+    const group = groups.find((g) => g.id === r.ctxValue);
+    if (group) settings = await buildGroupView(group, user.email);
   }
 
   const name = r.isPersonal
@@ -92,6 +101,7 @@ export default async function SpacePage({
       payerOptions={payerOptions}
       splitOptions={splitOptions}
       selfKey={selfKey}
+      settings={settings}
     />
   );
 }
