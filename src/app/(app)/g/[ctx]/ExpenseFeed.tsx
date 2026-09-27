@@ -90,7 +90,10 @@ export function ExpenseFeed({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState<ExpenseDTO | null>(null);
-  const [actionsFor, setActionsFor] = useState<ExpenseDTO | null>(null);
+  const [actionsFor, setActionsFor] = useState<{ expense: ExpenseDTO; confirm: boolean } | null>(
+    null,
+  );
+  const isDesktop = useIsDesktop();
   // Months the user explicitly toggled; anything untouched follows the
   // default of "latest month open, the rest minimised".
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
@@ -139,7 +142,7 @@ export function ExpenseFeed({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted">Press and hold an expense to edit or delete it.</p>
+      <p className="text-xs text-muted md:hidden">Press and hold an expense to edit or delete it.</p>
       {sections.map((sec) => (
         <section key={sec.key} className="space-y-1">
           <button
@@ -183,7 +186,11 @@ export function ExpenseFeed({
                     paidBy={isPersonal ? null : payerLabel(r.payer)}
                     category={r.category || "Uncategorised"}
                     inv={inv}
-                    onOpenActions={() => setActionsFor(r)}
+                    isDesktop={isDesktop}
+                    pending={pending}
+                    onOpenActions={() => setActionsFor({ expense: r, confirm: false })}
+                    onEdit={() => setEditing(r)}
+                    onDelete={() => setActionsFor({ expense: r, confirm: true })}
                   />
                 );
               })}
@@ -196,13 +203,14 @@ export function ExpenseFeed({
 
       {actionsFor ? (
         <ExpenseActions
-          expense={actionsFor}
+          expense={actionsFor.expense}
+          startConfirming={actionsFor.confirm}
           pending={pending}
           onEdit={() => {
-            setEditing(actionsFor);
+            setEditing(actionsFor.expense);
             setActionsFor(null);
           }}
-          onDelete={() => remove(actionsFor.id)}
+          onDelete={() => remove(actionsFor.expense.id)}
           onClose={() => setActionsFor(null)}
         />
       ) : null}
@@ -225,11 +233,30 @@ export function ExpenseFeed({
 
 const LONG_PRESS_MS = 450;
 const MOVE_TOLERANCE_PX = 10;
+// Same breakpoint as the app shell (Tailwind md): below it the phone layout
+// and bottom nav show, at or above it the desktop sidebar does.
+const DESKTOP_QUERY = "(min-width: 768px)";
+
+/** True on desktop widths. False during SSR and the first client render. */
+function useIsDesktop(): boolean {
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_QUERY);
+    const update = () => setDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return desktop;
+}
 
 /**
- * One expense row. The amount paid sits under the item name; your share of
- * it is on the right. Press and hold (touch or mouse), right-click, or the
- * keyboard (Enter, Space, the Menu key, Shift+F10) opens the edit/delete sheet.
+ * One expense row, two layouts:
+ * - Phone: the amount paid sits under the item name, your share on the right.
+ *   Press and hold (or the keyboard: Enter, Space, the Menu key, Shift+F10)
+ *   opens the edit/delete sheet.
+ * - Desktop: "X paid" + amount and your share as two aligned columns, with
+ *   edit and delete icons at the end of the row. No long press.
  */
 function ExpenseRow({
   item,
@@ -240,7 +267,11 @@ function ExpenseRow({
   paidBy,
   category,
   inv,
+  isDesktop,
+  pending,
   onOpenActions,
+  onEdit,
+  onDelete,
 }: {
   item: string;
   receiptMerchant: string | null;
@@ -251,7 +282,11 @@ function ExpenseRow({
   paidBy: string | null;
   category: string;
   inv: ReturnType<typeof involvement> | null;
+  isDesktop: boolean;
+  pending: boolean;
   onOpenActions: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const timer = useRef<number | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
@@ -263,15 +298,16 @@ function ExpenseRow({
     origin.current = null;
   }
   useEffect(() => cancel, []);
+  useEffect(() => {
+    if (isDesktop) cancel();
+  }, [isDesktop]);
 
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-haspopup="dialog"
-      aria-label={`${item}, ${formatINR(amount)}. Press and hold for edit or delete.`}
-      className="flex cursor-default touch-pan-y select-none items-center gap-3 px-3 py-2.5 outline-none transition [-webkit-touch-callout:none] focus-visible:bg-white/5 active:bg-white/5"
-      onPointerDown={(e) => {
+  const pressable = {
+    role: "button",
+    tabIndex: 0,
+    "aria-haspopup": "dialog" as const,
+    "aria-label": `${item}, ${formatINR(amount)}. Press and hold for edit or delete.`,
+    onPointerDown: (e: React.PointerEvent) => {
         if (e.pointerType === "mouse" && e.button !== 0) return;
         fired.current = false;
         origin.current = { x: e.clientX, y: e.clientY };
@@ -281,32 +317,42 @@ function ExpenseRow({
           navigator.vibrate?.(10);
           onOpenActions();
         }, LONG_PRESS_MS);
-      }}
-      onPointerMove={(e) => {
-        const o = origin.current;
-        if (o && Math.hypot(e.clientX - o.x, e.clientY - o.y) > MOVE_TOLERANCE_PX) cancel();
-      }}
-      onPointerUp={cancel}
-      onPointerCancel={cancel}
-      onPointerLeave={cancel}
-      onContextMenu={(e) => {
-        // Right-click on desktop; Android also fires this on long press, so
-        // skip it when the timer already opened the sheet.
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const o = origin.current;
+      if (o && Math.hypot(e.clientX - o.x, e.clientY - o.y) > MOVE_TOLERANCE_PX) cancel();
+    },
+    onPointerUp: cancel,
+    onPointerCancel: cancel,
+    onPointerLeave: cancel,
+    onContextMenu: (e: React.MouseEvent) => {
+      // Android fires this on long press too; skip it when the timer already
+      // opened the sheet.
+      e.preventDefault();
+      cancel();
+      if (!fired.current) onOpenActions();
+    },
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (
+        e.key === "Enter" ||
+        e.key === " " ||
+        e.key === "ContextMenu" ||
+        (e.shiftKey && e.key === "F10")
+      ) {
         e.preventDefault();
-        cancel();
-        if (!fired.current) onOpenActions();
-      }}
-      onKeyDown={(e) => {
-        if (
-          e.key === "Enter" ||
-          e.key === " " ||
-          e.key === "ContextMenu" ||
-          (e.shiftKey && e.key === "F10")
-        ) {
-          e.preventDefault();
-          onOpenActions();
-        }
-      }}
+        onOpenActions();
+      }
+    },
+  };
+
+  return (
+    <div
+      {...(isDesktop ? {} : pressable)}
+      className={`flex items-center gap-3 px-3 py-2.5 ${
+        isDesktop
+          ? ""
+          : "cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-white/5 active:bg-white/5"
+      }`}
     >
       <div className="w-9 shrink-0 text-center leading-tight">
         <div className="text-[10px] uppercase text-muted">{month}</div>
@@ -325,19 +371,50 @@ function ExpenseRow({
           ) : null}
         </div>
         <div className="mt-0.5 truncate text-xs text-muted">
-          {paidBy ? `${paidBy} paid ` : null}
-          <span className="text-sm font-semibold text-ink">{formatINR(amount)}</span>
-          {` · ${category}`}
+          <span className="md:hidden">
+            {paidBy ? `${paidBy} paid ` : null}
+            <span className="text-sm font-semibold text-ink">{formatINR(amount)}</span>
+            {" · "}
+          </span>
+          {category}
         </div>
       </div>
+      {/* Desktop only: who paid and the full amount as its own column. */}
+      <div className="hidden w-28 shrink-0 text-right md:block">
+        <div className="truncate text-[11px] text-muted">{paidBy ? `${paidBy} paid` : "spent"}</div>
+        <div className="text-sm font-semibold text-ink">{formatINR(amount)}</div>
+      </div>
       {inv ? (
-        <div className="w-24 shrink-0 text-right">
+        <div className="w-24 shrink-0 text-right md:w-28">
           <div className={`truncate text-[11px] ${TONE[inv.tone]}`}>{inv.label}</div>
           <div className={`text-sm font-semibold ${TONE[inv.tone]}`}>
             {formatINR(inv.amount ?? 0)}
           </div>
         </div>
       ) : null}
+      {/* Desktop only: inline edit/delete. Phones use the long-press sheet. */}
+      <div className="hidden shrink-0 items-center gap-1 md:flex">
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={onEdit}
+          disabled={pending}
+          aria-label={`Edit ${item}`}
+          title="Edit"
+        >
+          <PencilIcon />
+        </button>
+        <button
+          type="button"
+          className="icon-btn text-red-400 hover:text-red-300"
+          onClick={onDelete}
+          disabled={pending}
+          aria-label={`Delete ${item}`}
+          title="Delete"
+        >
+          <TrashIcon />
+        </button>
+      </div>
     </div>
   );
 }
@@ -345,18 +422,21 @@ function ExpenseRow({
 /** Bottom sheet (centred dialog on desktop) with Edit and a confirmed Delete. */
 function ExpenseActions({
   expense,
+  startConfirming = false,
   pending,
   onEdit,
   onDelete,
   onClose,
 }: {
   expense: ExpenseDTO;
+  /** Open directly on the delete confirmation (desktop trash icon). */
+  startConfirming?: boolean;
   pending: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState(startConfirming);
   const first = useRef<HTMLButtonElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -430,7 +510,7 @@ function ExpenseActions({
                 type="button"
                 className="btn-secondary flex-1"
                 disabled={pending}
-                onClick={() => setConfirming(false)}
+                onClick={() => (startConfirming ? onClose() : setConfirming(false))}
               >
                 Keep it
               </button>
