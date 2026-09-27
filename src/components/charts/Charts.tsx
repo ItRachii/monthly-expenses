@@ -70,6 +70,9 @@ export function monthShort(key: string): string {
   return `${MONTHS[Number(m) - 1] ?? m} '${y.slice(2)}`;
 }
 
+/** Exact rupees with Indian grouping: ₹1,23,456.78. */
+export const exactINR = (n: number) => `₹${inr.format(n)}`;
+
 /** ₹1.2k / ₹15k / ₹1.1L: short enough for axis ticks and caps. */
 function compactINR(n: number): string {
   if (n >= 100000) return `₹${(n / 100000).toFixed(n >= 1000000 ? 0 : 1)}L`;
@@ -413,9 +416,21 @@ export function MonthlyTrend({
 // Donut: this month by category, same colours as the trend. Categories
 // outside the named seven fold into one "Other" slice.
 
-const DONUT_INNER = 50;
-const DONUT_OUTER = 72;
+// The hole is wide enough for an exact six-figure total (₹1,23,456.78).
+const DONUT_INNER = 66;
+const DONUT_OUTER = 88;
 const RAD = Math.PI / 180;
+const CALLOUT_FONT = `600 13px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+/** Rendered width of callout text, so it can be kept inside the chart box. */
+function textWidth(text: string): number {
+  if (typeof document === "undefined") return text.length * 7.5;
+  measureCtx ??= document.createElement("canvas").getContext("2d");
+  if (!measureCtx) return text.length * 7.5;
+  measureCtx.font = CALLOUT_FONT;
+  return measureCtx.measureText(text).width;
+}
 
 interface CalloutProps {
   cx: number;
@@ -428,8 +443,12 @@ interface CalloutProps {
 
 /**
  * Value callout for one slice, drawn outside the ring: a leader line from the
- * slice's middle, then the amount (ink) over its share (muted). Rendered only
- * for the slice being hovered or selected.
+ * slice's middle, then the exact amount (ink) over its share (muted).
+ * Rendered only for the slice being hovered or selected. It sits beside the
+ * ring when the text fits in the chart box; otherwise (narrow phones, slices
+ * near 3 or 9 o'clock) the leader bends up or down to the nearest empty corner
+ * of the box, above or below the ring, and the text sits there against the
+ * box edge, so it neither overlaps the ring nor gets clipped.
  */
 function DonutCallout({
   cx,
@@ -443,6 +462,10 @@ function DonutCallout({
   percent,
 }: CalloutProps & { shown: number | null; colour: string; percent: number }) {
   if (index !== shown) return <g />;
+  const amount = exactINR(value);
+  const share = `${percent.toFixed(percent < 10 ? 1 : 0)}%`;
+  const width = Math.max(textWidth(amount), textWidth(share));
+  const boxW = cx * 2;
   const cos = Math.cos(-midAngle * RAD);
   const sin = Math.sin(-midAngle * RAD);
   const right = cos >= 0;
@@ -452,16 +475,42 @@ function DonutCallout({
   const my = cy + (outerRadius + 14) * sin;
   const ex = mx + (right ? 10 : -10);
   const tx = ex + (right ? 5 : -5);
-  const anchor = right ? "start" : "end";
+  const fitsBeside = right ? tx + width <= boxW - 2 : tx - width >= 2;
+
+  if (fitsBeside) {
+    const anchor = right ? "start" : "end";
+    return (
+      <g pointerEvents="none">
+        <path d={`M${sx},${sy}L${mx},${my}L${ex},${my}`} stroke={colour} strokeWidth={1.5} fill="none" />
+        <circle cx={ex} cy={my} r={2.5} fill={colour} />
+        <text x={tx} y={my} dy={-2} textAnchor={anchor} fill={INK} fontSize={13} fontWeight={600}>
+          {amount}
+        </text>
+        <text x={tx} y={my} dy={13} textAnchor={anchor} fill={MUTED} fontSize={11}>
+          {share}
+        </text>
+      </g>
+    );
+  }
+
+  // Corner placement: out from the slice, then up (top half) or down
+  // (bottom half) to the ring's top or bottom edge, where the box corners are
+  // empty; the text stacks beyond that point, flush with the box edge.
+  const up = sin < 0;
+  const kx = cx + (outerRadius + 10) * cos;
+  const ky = cy + (outerRadius + 10) * sin;
+  const dotY = up ? cy - outerRadius + 4 : cy + outerRadius - 4;
+  const edgeX = right ? boxW - 2 : 2;
+  const anchor = right ? "end" : "start";
   return (
     <g pointerEvents="none">
-      <path d={`M${sx},${sy}L${mx},${my}L${ex},${my}`} stroke={colour} strokeWidth={1.5} fill="none" />
-      <circle cx={ex} cy={my} r={2.5} fill={colour} />
-      <text x={tx} y={my} dy={-2} textAnchor={anchor} fill={INK} fontSize={13} fontWeight={600}>
-        {compactINR(value)}
+      <path d={`M${sx},${sy}L${kx},${ky}L${kx},${dotY}`} stroke={colour} strokeWidth={1.5} fill="none" />
+      <circle cx={kx} cy={dotY} r={2.5} fill={colour} />
+      <text x={edgeX} y={dotY} dy={up ? -22 : 20} textAnchor={anchor} fill={INK} fontSize={13} fontWeight={600}>
+        {amount}
       </text>
-      <text x={tx} y={my} dy={13} textAnchor={anchor} fill={MUTED} fontSize={11}>
-        {percent.toFixed(percent < 10 ? 1 : 0)}%
+      <text x={edgeX} y={dotY} dy={up ? -8 : 34} textAnchor={anchor} fill={MUTED} fontSize={11}>
+        {share}
       </text>
     </g>
   );
@@ -506,7 +555,7 @@ export function CategoryDonut({
         {/* The ring is drawn smaller than the box so the hover callout has
             room outside it instead of covering the centre. */}
         <div
-          className="relative h-64 w-80 max-w-full shrink-0"
+          className="relative h-72 w-full max-w-[26rem] shrink-0"
           // A click anywhere in the chart that is not on a slice (the hole,
           // the space around the ring) removes the filter.
           onClick={(e) => {
@@ -551,7 +600,7 @@ export function CategoryDonut({
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-xs text-muted">Total</span>
-            <span className="text-lg font-semibold tabular-nums">{compactINR(total)}</span>
+            <span className="text-[15px] font-semibold tabular-nums">{exactINR(total)}</span>
           </div>
         </div>
 
@@ -575,7 +624,7 @@ export function CategoryDonut({
                   <Swatch colour={palette.colourOf(d.category)} />
                   <span className="min-w-0 flex-1 truncate">{d.category}</span>
                   <span className="tabular-nums text-muted">{pct(d.amount).toFixed(0)}%</span>
-                  <span className="w-14 text-right font-semibold tabular-nums">{compactINR(d.amount)}</span>
+                  <span className="w-28 shrink-0 text-right font-semibold tabular-nums">{exactINR(d.amount)}</span>
                 </button>
               </li>
             );
