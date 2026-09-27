@@ -34,7 +34,7 @@ export default async function HomePage() {
           ) : overall < -SETTLE_EPS ? (
             <>
               Overall, you owe{" "}
-              <span className="text-orange-400">{formatINR(Math.abs(overall))}</span>
+              <span className="text-red-400">{formatINR(Math.abs(overall))}</span>
             </>
           ) : (
             "You are all settled up"
