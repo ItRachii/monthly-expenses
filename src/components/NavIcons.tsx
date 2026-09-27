@@ -214,6 +214,30 @@ export function ProfileIcon() {
 // Client components only: a server component must import the named icon
 // (e.g. ProfileIcon) because a client module's record cannot be indexed on
 // the server and comes back undefined.
+function StatementsIcon() {
+  const u = useId().replace(/:/g, "");
+  return (
+    <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+      <defs>
+        <linearGradient id={`${u}a`} gradientUnits="userSpaceOnUse" x1="5" y1="3" x2="19" y2="21">
+          <stop offset="0%" stopColor="#3B82F6" />
+          <stop offset="100%" stopColor="#2BD4B0" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M6.5 2.8 H14.2 L19.2 7.8 V20.2 A1 1 0 0 1 18.2 21.2 H6.5 A1 1 0 0 1 5.5 20.2 V3.8 A1 1 0 0 1 6.5 2.8 Z"
+        fill={`url(#${u}a)`}
+      />
+      <path d="M14.2 2.8 V7.8 H19.2 Z" fill="#FFFFFF" fillOpacity="0.35" />
+      <g stroke="#FFFFFF" strokeWidth="1.3" strokeLinecap="round" opacity="0.9">
+        <path d="M8.3 11 H16.4" />
+        <path d="M8.3 14 H16.4" />
+        <path d="M8.3 17 H13" />
+      </g>
+    </svg>
+  );
+}
+
 export const NAV_ICONS: Record<string, FC> = {
   "/": HomeIcon,
   "/add": AddIcon,
@@ -223,4 +247,5 @@ export const NAV_ICONS: Record<string, FC> = {
   "/notifications": NotificationsIcon,
   "/groups": GroupsIcon,
   "/profile": ProfileIcon,
+  "/statements": StatementsIcon,
 };

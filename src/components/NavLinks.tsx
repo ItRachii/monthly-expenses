@@ -19,6 +19,13 @@ const MAIN_ITEMS: NavItem[] = [
   { href: "/groups", label: "Groups", icon: "👥" },
 ];
 
+// Card statement import. Shown only where the feature flag is on.
+export const STATEMENTS_ITEM: NavItem = { href: "/statements", label: "Statements", icon: "📄" };
+
+export function mainItems(statements: boolean): NavItem[] {
+  return statements ? [...MAIN_ITEMS, STATEMENTS_ITEM] : MAIN_ITEMS;
+}
+
 // "Account" section under the main nav: where the user edits their profile.
 export const ACCOUNT_ITEMS: NavItem[] = [
   { href: "/profile", label: "Edit Profile", icon: "👤" },

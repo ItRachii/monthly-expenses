@@ -17,18 +17,66 @@ The previous Streamlit version is preserved under [`legacy-streamlit/`](./legacy
 
 ## Local development
 
+Needs Node 20 or newer and a Postgres you can write to. Never point a local
+run at the production database: local runs are allowed to migrate data.
+
 ```bash
-cp .env.example .env        # then fill in the values
+cp .env.example .env        # then fill in the values (see below)
 npm install                 # also runs `prisma generate`
+npm run db:setup-local      # creates the tables, the change-log trigger and the PII columns
 npm run dev                 # http://localhost:3000
 ```
 
+On Windows, `copy .env.example .env` replaces the first line; the rest is the same
+in PowerShell or the Command Prompt.
+
+### A local database
+
+The quickest is Docker:
+
+```bash
+docker run --name ledger-pg -e POSTGRES_PASSWORD=ledger -p 5432:5432 -d postgres:16
+```
+
+Then in `.env`:
+
+```
+DATABASE_URL="postgresql://postgres:ledger@localhost:5432/postgres"
+DIRECT_URL="postgresql://postgres:ledger@localhost:5432/postgres"
+```
+
+A free second Supabase project works too: use its pooler URLs as in
+`.env.example`. `npm run db:setup-local` is safe to re-run.
+
 ### Environment variables
 
-See [`.env.example`](./.env.example). Required: `DATABASE_URL`, `AUTH_SECRET`,
-`AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`. SMTP vars are optional (invite emails).
+See [`.env.example`](./.env.example). Required: `DATABASE_URL`, `DIRECT_URL`,
+`AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `PII_SECRET`. SMTP vars
+are optional (invite emails).
 
-Generate a secret: `openssl rand -base64 32`.
+Generate a secret with `openssl rand -base64 32`, or in PowerShell:
+
+```powershell
+$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+```
+
+Use a different `PII_SECRET` locally than in production. The local database
+holds only your test data, so it can be anything.
+
+### Signing in locally
+
+Sign-in is Google only. In Google Cloud Console → Credentials → your OAuth
+client, add `http://localhost:3000/api/auth/callback/google` to the authorized
+redirect URIs (the production URI stays). The same client id and secret then
+work locally.
+
+### Card statement import
+
+`/statements` reads an HDFC or ICICI credit card PDF on the device, drops the
+personal details, and lists EMI, domestic and international rows with GST and
+forex markup folded in. It is on in local development and hidden in
+production until `STATEMENTS_ENABLED=1` is set. To try it, sign in locally and
+open **Statements** in the sidebar (**Import** in the phone bottom bar).
 
 ## Database
 
