@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { createExpense, updateExpense, deleteExpense } from "@/lib/expenses";
+import {
+  canonicalCategoriesFor,
+  createExpense,
+  updateExpense,
+  deleteExpense,
+} from "@/lib/expenses";
 import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
@@ -66,7 +71,7 @@ export async function addExpenseAction(input: {
 
   const checked = validateExpenseInput(input);
   if ("error" in checked) return { ok: false, error: checked.error };
-  const { item, category } = checked;
+  const { item } = checked;
 
   let ownerEmail: string | null = null;
   let groupId: string | null = null;
@@ -94,6 +99,11 @@ export async function addExpenseAction(input: {
         ? SPLIT_EQUAL
         : emailForKey(input.ctx, participants, input.split) ?? SPLIT_EQUAL;
   }
+
+  const [category] = await canonicalCategoriesFor(
+    groupId ? { kind: "group", groupId } : { kind: "personal", email },
+    [checked.category],
+  );
 
   await createExpense({
     date: input.date,
@@ -143,7 +153,7 @@ export async function updateExpenseAction(
 
   const checked = validateExpenseInput(input);
   if ("error" in checked) return { ok: false, error: checked.error };
-  const { item, category } = checked;
+  const { item } = checked;
 
   const exp = await prisma.expense.findUnique({ where: { id } });
   if (!exp) return { ok: false, error: "Expense not found." };
@@ -170,6 +180,14 @@ export async function updateExpenseAction(
     // Legacy row with neither owner nor group: nobody may edit it blindly.
     return { ok: false, error: "Not authorized." };
   }
+
+  // Same context the authorization above resolved: owner first, then group.
+  const [category] = await canonicalCategoriesFor(
+    exp.ownerEmail
+      ? { kind: "personal", email: exp.ownerEmail }
+      : { kind: "group", groupId: exp.groupId! },
+    [checked.category],
+  );
 
   // The Postgres trigger records this update in expense_changes (CDC).
   await updateExpense(id, {

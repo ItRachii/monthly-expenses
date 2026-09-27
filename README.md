@@ -50,7 +50,9 @@ Schema changes since the Streamlit era live as SQL files in [`db/`](./db).
 Apply them once, in date order, to an existing database (Supabase SQL editor
 or `psql`). `2026_09_group_name_history.sql` adds the table that keeps every past
 group name with the dates it was in use; `2026_09_app_users_last_name.sql`
-adds the editable last name and folds old nicknames into the first name.
+adds the editable last name and folds old nicknames into the first name;
+`2026_09_category_dedupe.sql` merges categories that differ only by case,
+spacing or a plural "s" into one spelling.
 
 ## Google OAuth setup
 

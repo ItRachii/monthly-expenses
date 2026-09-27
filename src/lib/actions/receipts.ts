@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createReceiptWithItems, type NewReceiptItem } from "@/lib/receipts";
+import { canonicalCategoriesFor } from "@/lib/expenses";
 import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
@@ -91,6 +92,12 @@ export async function addReceiptAction(input: {
         ? SPLIT_EQUAL
         : emailForKey(input.ctx, participants, input.split) ?? SPLIT_EQUAL;
   }
+
+  const categories = await canonicalCategoriesFor(
+    groupId ? { kind: "group", groupId } : { kind: "personal", email },
+    items.map((it) => it.category),
+  );
+  items.forEach((it, i) => (it.category = categories[i]));
 
   await createReceiptWithItems({
     merchant,
