@@ -210,3 +210,47 @@ model PiiMigration {
 
   @@map("pii_migrations")
 }
+
+// A credit card the user has imported statements for. Identified by the last
+// four digits only: no more of the number is ever stored.
+model Card {
+  id         String          @id @default(uuid())
+  ownerEmail String          @map("owner_email")
+  bank       String
+  last4      String
+  product    String?
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  statements CardStatement[]
+
+  @@unique([ownerEmail, bank, last4], map: "cards_owner_bank_last4_key")
+  @@map("cards")
+}
+
+// One statement's summary box for a card. Money figures only; no lines.
+model CardStatement {
+  id                 Int       @id @default(autoincrement())
+  cardId             String    @map("card_id")
+  /**
+   * YYYY-MM the statement is for.
+   */
+  period             String
+  statementDate      DateTime? @map("statement_date") @db.Date
+  dueDate            DateTime? @map("due_date") @db.Date
+  previousDues       Float?    @map("previous_dues")
+  paymentsCredits    Float?    @map("payments_credits")
+  purchases          Float?
+  financeCharges     Float?    @map("finance_charges")
+  totalDue           Float?    @map("total_due")
+  minimumDue         Float?    @map("minimum_due")
+  creditLimit        Float?    @map("credit_limit")
+  availableCredit    Float?    @map("available_credit")
+  availableCash      Float?    @map("available_cash")
+  domesticTotal      Float?    @map("domestic_total")
+  internationalTotal Float?    @map("international_total")
+  emiTotal           Float?    @map("emi_total")
+  importedAt         DateTime  @default(now()) @map("imported_at") @db.Timestamptz(6)
+  card               Card      @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, period], map: "card_statements_card_period_key")
+  @@map("card_statements")
+}

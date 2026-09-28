@@ -42,8 +42,34 @@ export interface StatementRow {
   page: number;
 }
 
+/** The statement's summary box. Every figure is optional: layouts differ. */
+export interface StatementSummary {
+  previousDues: number | null;
+  paymentsCredits: number | null;
+  purchases: number | null;
+  financeCharges: number | null;
+  totalDue: number | null;
+  minimumDue: number | null;
+  creditLimit: number | null;
+  availableCredit: number | null;
+  availableCash: number | null;
+  /** YYYY-MM-DD */
+  statementDate: string | null;
+  /** YYYY-MM-DD */
+  dueDate: string | null;
+}
+
+export interface CardIdentity {
+  /** The last four digits only. Nothing more of the number is ever kept. */
+  last4: string;
+  /** "Millennia", "Coral", … when the statement names it. */
+  product: string | null;
+}
+
 export interface ParsedStatement {
   bank: Bank;
+  summary: StatementSummary | null;
+  card: CardIdentity | null;
   /** YYYY-MM-DD, when the statement prints one. */
   statementDate: string | null;
   /** YYYY-MM the statement covers. */

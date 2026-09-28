@@ -12,12 +12,9 @@
 
 import { categorize } from "@/lib/receipt/categorize";
 import { cleanDescription, isDateLed, isHeading, keepLine, makeRefTagger, redactLine } from "./redact";
+import { readDate } from "./dates";
+import { cardIdentity, parseSummary } from "./summary";
 import type { Bank, ForeignInfo, ParsedStatement, RowKind, RowPart, StatementRow } from "./types";
-
-const MONTHS: Record<string, number> = {
-  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
-  jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
-};
 
 const CURRENCIES = new Set([
   "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD", "JPY", "CHF", "THB", "MYR",
@@ -27,60 +24,13 @@ const CURRENCIES = new Set([
 ]);
 
 const AMOUNT = /^(?:₹|Rs\.?|INR)?\(?(\d{1,3}(?:,\d{2,3})+|\d+)(?:\.(\d{1,2}))?\)?$/;
+
 const CREDIT_MARK = /^(cr|dr)\.?$/i;
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function iso(y: number, m: number, d: number): string | null {
-  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
-  const year = y < 100 ? 2000 + y : y;
-  return `${year}-${pad(m)}-${pad(d)}`;
-}
-
-/** Reads a date at tokens[i]. Returns the ISO date and how many tokens it used. */
-function readDate(tokens: string[], i: number): { date: string; used: number } | null {
-  const t = tokens[i];
-  if (!t) return null;
-  let m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
-  if (m) {
-    const d = iso(+m[3], +m[2], +m[1]);
-    return d ? { date: d, used: 1 } : null;
-  }
-  m = t.match(/^(\d{1,2})[\/\-.]?([A-Za-z]{3})[A-Za-z]*[\/\-.,]?(\d{2,4})?$/);
-  if (m && MONTHS[m[2].toLowerCase()]) {
-    if (m[3]) {
-      const d = iso(+m[3], MONTHS[m[2].toLowerCase()], +m[1]);
-      return d ? { date: d, used: 1 } : null;
-    }
-    // "12 Aug 2025" or "12-Aug 2025": the year is the next token.
-    const y = tokens[i + 1]?.match(/^(\d{4}),?$/);
-    if (y) {
-      const d = iso(+y[1], MONTHS[m[2].toLowerCase()], +m[1]);
-      return d ? { date: d, used: 2 } : null;
-    }
-    return null;
-  }
-  const mon = tokens[i + 1]?.replace(/[,.]$/, "").toLowerCase();
-  const year = tokens[i + 2]?.match(/^(\d{4}),?$/);
-  if (/^\d{1,2},?$/.test(t) && mon && MONTHS[mon] && year) {
-    const d = iso(+year[1], MONTHS[mon], parseInt(t, 10));
-    return d ? { date: d, used: 3 } : null;
-  }
-  // "August 12, 2026"
-  const monthFirst = MONTHS[t.toLowerCase().slice(0, 3)];
-  const day = tokens[i + 1]?.match(/^(\d{1,2}),?$/);
-  if (monthFirst && /^[A-Za-z]{3,9}$/.test(t) && day && year) {
-    const d = iso(+year[1], monthFirst, +day[1]);
-    return d ? { date: d, used: 3 } : null;
-  }
-  return null;
-}
 
 function readAmount(tok: string): { amount: number; credit: boolean } | null {
   let credit = false;
@@ -312,7 +262,7 @@ function statementDateOf(lines: string[]): string | null {
  * Parses a statement. `pages` holds the raw lines of each page; redaction
  * happens here first, so callers can pass PDF text straight in.
  */
-export function parseStatement(pages: string[][]): ParsedStatement {
+export function parseStatement(pages: string[][], opts: { filename?: string } = {}): ParsedStatement {
   const redactedLines: string[] = [];
   const lines: Line[] = [];
   const unparsed: { page: number; text: string }[] = [];
@@ -462,14 +412,23 @@ export function parseStatement(pages: string[][]): ParsedStatement {
     }
   }
 
-  const statementDate = statementDateOf(pages.flat().map((l) => redactLine(l)));
+  const allRedacted = pages.flat().map((l) => redactLine(l));
+  const { summary, notes } = parseSummary(allRedacted);
+  const statementDate = summary?.statementDate ?? statementDateOf(allRedacted);
+  if (summary && !summary.statementDate) summary.statementDate = statementDate;
   const period = statementDate?.slice(0, 7) ?? commonMonth(rows);
+  const identity = cardIdentity(pages.flat(), opts.filename);
+  const card = identity ? { last4: identity.last4, product: identity.product } : null;
+  if (notes.length > 0) redactedLines.push("## summary", ...notes);
+  redactedLines.push(`## card: ${identity ? `last4 from ${identity.source}${identity.product ? `, ${identity.product}` : ""}` : "not found"}`);
+  if (!summary) warnings.push("No summary figures (dues, limits, due date) were found, so nothing can be saved for the card.");
+  if (!card) warnings.push("No card number found, so the summary cannot be filed under a card.");
   if (rows.length === 0) warnings.push("No transactions were found. The statement may be a scanned image or an unsupported layout.");
   if (unparsed.length > 0) warnings.push(`${unparsed.length} line(s) looked like transactions but could not be read.`);
   if (bank === "unknown") warnings.push("Could not tell whether this is an HDFC or ICICI statement; parsed with the generic rules.");
   if (headings.length === 0 && rows.length > 0) warnings.push("No section headings found; domestic and international were told apart by currency only.");
 
-  return { bank, statementDate, period, rows, unparsed, redactedLines, warnings };
+  return { bank, summary, card, statementDate, period, rows, unparsed, redactedLines, warnings };
 }
 
 /** The international purchase a markup line belongs to. */

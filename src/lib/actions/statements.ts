@@ -10,6 +10,7 @@ import { displayNameFor } from "@/lib/users";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { statementsEnabled } from "@/lib/features";
+import { saveCardStatement, validateSaveInput, type SaveStatementInput } from "@/lib/cards";
 
 export interface ImportRow {
   date: string;
@@ -29,7 +30,9 @@ const MAX_ROWS = 500;
 export async function importStatementAction(input: {
   ctx: string;
   rows: ImportRow[];
-}): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  /** The statement's summary, filed under the user's card in the same go. */
+  summary?: SaveStatementInput;
+}): Promise<{ ok: true; count: number; summarySaved: boolean } | { ok: false; error: string }> {
   if (!statementsEnabled()) return { ok: false, error: "Statement import is not enabled." };
   const session = await auth();
   const email = session?.user?.email;
@@ -90,6 +93,12 @@ export async function importStatementAction(input: {
     }
   }
 
+  let summarySaved = false;
+  if (input.summary && !validateSaveInput(input.summary)) {
+    await saveCardStatement(email, input.summary);
+    summarySaved = true;
+  }
+
   revalidatePath("/", "layout");
-  return { ok: true, count: rows.length };
+  return { ok: true, count: rows.length, summarySaved };
 }

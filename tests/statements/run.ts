@@ -156,6 +156,36 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   const t2 = parseStatement([twoLoans]);
   check("two loans: tokens differ between uploads", t.redactedLines.join() !== t2.redactedLines.join());
 
+  // Summary box and card identity
+  check("hdfc: summary limits/dues", !!h.summary && h.summary.creditLimit === 300000 && h.summary.availableCredit === 252681.58 && h.summary.availableCash === 60000 && h.summary.totalDue === 47318.42 && h.summary.minimumDue === 2365.92, JSON.stringify(h.summary));
+  check("hdfc: summary dates", h.summary?.statementDate === "2026-08-12" && h.summary?.dueDate === "2026-09-01", JSON.stringify([h.summary?.statementDate, h.summary?.dueDate]));
+  check("hdfc: card last4 1234 from masked number, nothing more", h.card?.last4 === "1234" && JSON.stringify(h.card).length < 60, JSON.stringify(h.card));
+  check("hdfc: Swiggy transaction is not taken as the card product", h.card?.product === null, String(h.card?.product));
+  check("hdfc: PAYMENT RECEIVED transaction is not read as the payments figure", h.summary?.paymentsCredits === null, String(h.summary?.paymentsCredits));
+  check("icici: summary total due and dates", c.summary?.totalDue === 33691.6 && c.summary?.statementDate === "2026-08-12" && c.summary?.dueDate === "2026-09-01", JSON.stringify(c.summary));
+  check("icici: card last4 9012", c.card?.last4 === "9012", JSON.stringify(c.card));
+
+  // HDFC 2026 blue box: label rows, continuation rows, then figure rows.
+  const box = [
+    "HDFC Bank Millennia Credit Card Statement",
+    "PREVIOUS STATEMENT DUES PAYMENTS/CREDITS PURCHASES/DEBIT FINANCE CHARGES TOTAL AMOUNT DUE",
+    "RECEIVED (Current Billing Cycle)",
+    "C 63,817.22 − C 63,817.00 + C 27,235.51 + C 0.00 = C 27,236.00",
+    "TOTAL CREDIT LIMIT AVAILABLE CREDIT LIMIT AVAILABLE CASH LIMIT MINIMUM DUE DUE DATE",
+    "(Including Cash)",
+    "C 2,77,000 C 2,38,992 C 1,10,800 C 2,473.00 12 Oct, 2026",
+    "Past Dues OVER LIMIT 3 MONTHS + 2 MONTHS 1 MONTH CURRENT DUES MINIMUM DUES",
+    "(if any) C 0.00 C 0.00 C 0.00 C 0.00 C 2,473.00 C 2,473.00",
+    "Domestic Transactions",
+    "02/09/2026| 01:25 NETFLIXMUMBAI C 199.00 l",
+  ];
+  const b = parseStatement([box], { filename: "Sep2026_BilledStatements_7043_24-09-26_15.51.pdf" });
+  check("hdfc2026 box: all nine figures", !!b.summary && b.summary.previousDues === 63817.22 && b.summary.paymentsCredits === 63817 && b.summary.purchases === 27235.51 && b.summary.financeCharges === 0 && b.summary.totalDue === 27236 && b.summary.creditLimit === 277000 && b.summary.availableCredit === 238992 && b.summary.availableCash === 110800 && b.summary.minimumDue === 2473, JSON.stringify(b.summary));
+  check("hdfc2026 box: due date 12 Oct 2026", b.summary?.dueDate === "2026-10-12", String(b.summary?.dueDate));
+  check("hdfc2026 box: card 7043 from the file name, product Millennia", b.card?.last4 === "7043" && b.card?.product === "Millennia", JSON.stringify(b.card));
+  check("hdfc2026 box: period from the rows", b.period === "2026-09", String(b.period));
+  check("hdfc2026 box: anonymised text carries labels and figures only", b.redactedLines.some((l) => l.startsWith("## summary")) && !b.redactedLines.some((l) => /Millennia Credit Card Statement/.test(l)), b.redactedLines.join(" | "));
+
   // Password-protected copy
   let needed = false;
   let wrong = false;

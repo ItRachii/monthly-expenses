@@ -7,6 +7,8 @@ import { PdfPasswordError, readPdfLines } from "@/lib/statements/pdf";
 import { parseStatement } from "@/lib/statements/parse";
 import type { ParsedStatement, RowKind, StatementRow } from "@/lib/statements/types";
 import { importStatementAction } from "@/lib/actions/statements";
+import { saveStatementSummaryAction } from "@/lib/actions/cards";
+import type { SaveStatementInput } from "@/lib/cards";
 import { getAddSetupAction } from "@/lib/actions/expenses";
 import { CategorySelect } from "@/components/CategorySelect";
 import { ChevronDownIcon, ReceiptIcon, XIcon } from "@/components/Icons";
@@ -62,6 +64,8 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
   const [importing, startImport] = useTransition();
   const [result, setResult] = useState<{ count: number; ctx: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [summarySaved, setSummarySaved] = useState(false);
+  const [savingSummary, startSaveSummary] = useTransition();
 
   // Categories already used in the chosen destination, so the picker offers them.
   useEffect(() => {
@@ -81,7 +85,8 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
     setPhase("reading");
     try {
       const pages = await readPdfLines(f, pw || undefined);
-      const p = parseStatement(pages);
+      const p = parseStatement(pages, { filename: f.name });
+      setSummarySaved(false);
       setParsed(p);
       setSelected(new Set(p.rows.filter((r) => !r.credit).map((r) => r.id)));
       setAdded(new Set());
@@ -136,6 +141,35 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
     [ctxCategories, categories],
   );
   const ctxLabel = contexts.find((c) => c.value === ctx)?.label ?? "Personal";
+  const summaryInput: SaveStatementInput | null =
+    parsed?.summary && parsed.card && parsed.period
+      ? {
+          bank: parsed.bank,
+          last4: parsed.card.last4,
+          product: parsed.card.product,
+          period: parsed.period,
+          summary: parsed.summary,
+          totals: {
+            domestic: rows.filter((r) => r.kind === "domestic" && !r.credit).reduce((s, r) => s + r.total, 0),
+            international: rows.filter((r) => r.kind === "international" && !r.credit).reduce((s, r) => s + r.total, 0),
+            emi: rows.filter((r) => r.kind === "emi" && !r.credit).reduce((s, r) => s + r.total, 0),
+          },
+        }
+      : null;
+
+  function saveSummary() {
+    if (!summaryInput) return;
+    setError(null);
+    startSaveSummary(async () => {
+      const res = await saveStatementSummaryAction(summaryInput);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setSummarySaved(true);
+      router.refresh();
+    });
+  }
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -164,6 +198,7 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
     startImport(async () => {
       const res = await importStatementAction({
         ctx,
+        summary: summaryInput && !summarySaved ? summaryInput : undefined,
         rows: selectedRows.map((r) => ({
           date: r.date,
           item: r.description,
@@ -178,6 +213,7 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
       setAdded((a) => new Set([...a, ...selectedRows.map((r) => r.id)]));
       setSelected(new Set());
       setResult({ count: res.count, ctx });
+      if (res.summarySaved) setSummarySaved(true);
       router.refresh();
     });
   }
@@ -311,6 +347,31 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
             {error ? <div className="alert-error">{error}</div> : null}
           </section>
 
+          {parsed.summary ? (
+            <section className="card space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="section-title">Statement summary</h2>
+                  <p className="text-sm text-muted">
+                    {parsed.card
+                      ? `${BANK_LABEL[parsed.bank]} •••• ${parsed.card.last4}${parsed.card.product ? ` · ${parsed.card.product}` : ""}`
+                      : "Card number not found in this statement, so the summary cannot be filed."}
+                  </p>
+                </div>
+                {summaryInput ? (
+                  summarySaved ? (
+                    <span className="pill">Saved to your cards</span>
+                  ) : (
+                    <button type="button" className="btn-secondary px-3 py-1.5 text-sm" disabled={savingSummary} onClick={saveSummary}>
+                      {savingSummary ? "Saving…" : "Save to my cards"}
+                    </button>
+                  )
+                ) : null}
+              </div>
+              <SummaryGrid summary={parsed.summary} />
+            </section>
+          ) : null}
+
           <section className="card space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <div className="flex overflow-x-auto border-b border-white/10" role="tablist">
@@ -423,6 +484,37 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
           </details>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function SummaryGrid({ summary }: { summary: NonNullable<ParsedStatement["summary"]> }) {
+  const money = (n: number | null) => (n === null ? "not printed" : formatINR(n));
+  const date = (iso: string | null) => {
+    if (!iso) return "not printed";
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+  };
+  const cells: [string, string, boolean?][] = [
+    ["Total amount due", money(summary.totalDue), true],
+    ["Minimum due", money(summary.minimumDue)],
+    ["Due date", date(summary.dueDate)],
+    ["Previous dues", money(summary.previousDues)],
+    ["Payments and credits", money(summary.paymentsCredits)],
+    ["Purchases and debits", money(summary.purchases)],
+    ["Finance charges", money(summary.financeCharges)],
+    ["Credit limit", money(summary.creditLimit)],
+    ["Available credit", money(summary.availableCredit)],
+    ["Available cash", money(summary.availableCash)],
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-5">
+      {cells.map(([label, value, strong]) => (
+        <div key={label} className="rounded-lg bg-white/5 p-3">
+          <div className="truncate text-xs uppercase tracking-wide text-muted">{label}</div>
+          <div className={strong ? "text-base font-semibold" : "font-medium"}>{value}</div>
+        </div>
+      ))}
     </div>
   );
 }
