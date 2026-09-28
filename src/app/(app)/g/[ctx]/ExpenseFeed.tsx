@@ -1,6 +1,7 @@
 "use client";
 
 import { PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
+import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
@@ -193,6 +194,7 @@ export function ExpenseFeed({
                     key={r.id}
                     item={r.item}
                     receiptMerchant={r.receiptMerchant}
+                    flag={r.flag}
                     month={MONTH_SHORT[(m ?? 1) - 1]}
                     day={String(d).padStart(2, "0")}
                     amount={r.amount}
@@ -275,6 +277,7 @@ function useIsDesktop(): boolean {
 function ExpenseRow({
   item,
   receiptMerchant,
+  flag,
   month,
   day,
   amount,
@@ -290,6 +293,8 @@ function ExpenseRow({
 }: {
   item: string;
   receiptMerchant: string | null;
+  /** Why the row needs attention, shown behind a warning icon; null when nothing is pending. */
+  flag: string | null;
   month: string;
   day: string;
   amount: number;
@@ -305,6 +310,7 @@ function ExpenseRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const [flagOpen, setFlagOpen] = useState(false);
   const timer = useRef<number | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
   const fired = useRef(false);
@@ -388,7 +394,9 @@ function ExpenseRow({
               <ReceiptIcon className="inline h-3 w-3 align-[-1px]" />
             </span>
           ) : null}
+          {flag ? <PendingFlagButton reason={flag} open={flagOpen} onToggle={() => setFlagOpen((o) => !o)} /> : null}
         </div>
+        {flag && flagOpen ? <PendingFlagNote reason={flag} /> : null}
         <div className="mt-0.5 truncate text-xs text-muted">
           <span className="md:hidden">
             {paidBy ? `${paidBy} paid ` : null}

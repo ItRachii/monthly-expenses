@@ -88,6 +88,13 @@ So:
    instalment. Missing earlier instalments are also listed from the
    instalment number: `NB:02` with no #1 on record asks for the statement
    one month before.
+   The charge can still be added. It is stored as an ordinary expense plus
+   a `gst_pending` row holding the reference's key, and the expense shows a
+   warning icon with the reason. Uploading the August statement later
+   records instalment #1 with the same reference key, which traces the
+   pending charge: instalment #1 gets `gst = 34.74`, the expense is renamed
+   `GST on EMI #1 interest (loan …8470, Aug 2026)`, the icon goes. The
+   September statement, uploaded first, is never re-imported.
 4. A traced GST row is imported as its own expense, named
    `GST on EMI #1 interest (loan …8470, Aug 2026)`, so a friend who took
    the EMI on this card can be charged principal + interest + GST over

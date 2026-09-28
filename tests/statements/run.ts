@@ -9,7 +9,7 @@ import { join } from "path";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { itemsToLines, type PositionedText } from "../../src/lib/statements/lines";
 import { parseStatement } from "../../src/lib/statements/parse";
-import { applyKeys, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
+import { applyKeys, gstLineageName, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
 
 const dir = join(__dirname, "fixtures");
 let failures = 0;
@@ -229,6 +229,7 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("sep: no record -> untraced 1, missing #1 for Aug 2026", bare.untraced.length === 1 && bare.missing.length === 1 && bare.missing[0].instalmentNo === 1 && bare.missing[0].period === "2026-08" && bare.missing[0].loanLast4 === "8470", JSON.stringify(bare.missing));
   const warn = lineageWarnings(bare);
   check("sep: warnings ask for the Aug 2026 statement and name the charge", warn.length === 2 && /Loan …8470: instalment #1 is not on record\. Upload the Aug 2026 statement/.test(warn[0]) && /₹34\.74 on 22\/08/.test(warn[1]), JSON.stringify(warn));
+  check("sep: the untraced warning says the charge can be added now and traced later", /You can also add it now: the expense carries a warning until that statement is uploaded/.test(warn[1]), warn[1]);
 
   // With August on record: exact join by reference.
   const known: KnownInstalment[] = augPayload.instalments.map((i) => ({ ...i }));
@@ -236,6 +237,7 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   await applyKeys(s2, SALT);
   const res = resolveLineage(s2.rows, known);
   const gstRow = s2.rows.find((r) => r.gstFor);
+  check("sep: the traced description is the name the server gives a pending charge once resolved", gstRow?.description === gstLineageName({ instalmentNo: 1, loanLast4: "8470", period: "2026-08" }) && gstRow?.description === "GST on EMI #1 interest (loan …8470, Aug 2026)", gstRow?.description);
   check("sep: IGST 34.74 traced to instalment #1 by reference", res.matched === 1 && res.byRef === 1 && res.untraced.length === 0 && res.missing.length === 0 && gstRow?.gstFor?.instalmentNo === 1 && gstRow.gstFor.matchedBy === "ref" && gstRow.gstFor.date === "2026-08-22", JSON.stringify(gstRow?.gstFor));
   check("sep: traced row renamed with the lineage", gstRow?.description === "GST on EMI #1 interest (loan …8470, Aug 2026)", gstRow?.description);
   const payload = lineagePayload(s2.rows, "2026-09")!;

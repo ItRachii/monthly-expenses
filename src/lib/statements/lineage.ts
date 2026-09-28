@@ -129,9 +129,15 @@ function close(a: number, b: number, tolerance: number): boolean {
   return b > 0 && Math.abs(a - b) / b <= tolerance;
 }
 
-function monthLabel(period: string): string {
+/** "Aug 2026" for "2026-08". */
+export function monthLabel(period: string): string {
   const [y, m] = period.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+/** The expense name of a GST charge traced to an instalment. */
+export function gstLineageName(inst: { instalmentNo: number | null; loanLast4: string | null; period: string }): string {
+  return `GST on EMI${inst.instalmentNo ? ` #${inst.instalmentNo}` : ""} interest (loan …${inst.loanLast4 ?? "?"}, ${monthLabel(inst.period)})`;
 }
 
 /** YYYY-MM of a date moved back by n months. */
@@ -156,7 +162,7 @@ export function resolveLineage(rows: StatementRow[], known: KnownInstalment[]): 
     r.untraced = false;
     r.gstFor = { loanKey: k.loanKey, loanLast4: k.loanLast4, instalmentNo: k.instalmentNo, date: k.date, period: k.period, matchedBy };
     r.parts[0].label = "GST on EMI interest";
-    r.description = `GST on EMI${k.instalmentNo ? ` #${k.instalmentNo}` : ""} interest (loan …${k.loanLast4 ?? "?"}, ${monthLabel(k.period)})`;
+    r.description = gstLineageName(k);
     matched++;
     if (matchedBy === "ref") byRef++;
   };
@@ -220,7 +226,7 @@ export function lineageWarnings(result: LineageResult): string[] {
   if (result.untraced.length > 0) {
     const list = result.untraced.map((r) => `₹${r.total.toFixed(2)} on ${r.date.slice(8)}/${r.date.slice(5, 7)}`).join(", ");
     out.push(
-      `${result.untraced.length} GST charge${result.untraced.length === 1 ? "" : "s"} (${list}) cite${result.untraced.length === 1 ? "s" : ""} a reference that is not on record. If it is GST on an EMI's interest, upload the statement that billed that instalment.`,
+      `${result.untraced.length} GST charge${result.untraced.length === 1 ? "" : "s"} (${list}) cite${result.untraced.length === 1 ? "s" : ""} a reference that is not on record. If it is GST on an EMI's interest, upload the statement that billed that instalment. You can also add ${result.untraced.length === 1 ? "it" : "them"} now: the expense carries a warning until that statement is uploaded, and is then traced by the reference.`,
     );
   }
   out.push(...result.amountMismatch);

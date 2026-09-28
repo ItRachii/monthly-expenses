@@ -36,7 +36,8 @@ export async function saveStatementSummaryAction(input: SaveStatementInput, line
     if (bad) return { ok: false, error: bad };
     await saveLineage(email, cardId, lineage);
   }
-  revalidatePath("/statements");
+  // Tracing a pending GST charge renames an expense and clears its warning.
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 

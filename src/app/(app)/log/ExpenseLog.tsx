@@ -1,6 +1,7 @@
 "use client";
 
 import { PencilIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/Icons";
+import { PendingFlag } from "@/components/PendingFlag";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
@@ -193,6 +194,7 @@ export function ExpenseLog({
                   {r.gstRate ? (
                     <span className="ml-1 text-xs text-muted">GST {r.gstRate}%</span>
                   ) : null}
+                  {r.flag ? <PendingFlag reason={r.flag} /> : null}
                 </td>
                 <td className="text-right">{r.amount.toFixed(2)}</td>
                 <td>{payerLabel(r.payer)}</td>

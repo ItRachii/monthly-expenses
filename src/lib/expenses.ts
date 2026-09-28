@@ -4,6 +4,7 @@ import { formatDate, formatINR } from "./format";
 import { SPLIT_CUSTOM, SPLIT_EQUAL, canonicalCategory, mergeCategories } from "./constants";
 import { parseShares, type Shares } from "./settlementMath";
 import type { Context } from "./context";
+import { pendingFlagsFor } from "./loans";
 
 export interface ExpenseDTO {
   id: number;
@@ -20,6 +21,11 @@ export interface ExpenseDTO {
   receiptMerchant: string | null;
   gstRate: number | null;
   gstAmount: number | null;
+  /**
+   * Why the row needs attention, in plain words, or null. Set while a GST
+   * charge from a card statement cites an instalment not yet on record.
+   */
+  flag: string | null;
 }
 
 function whereForContext(ctx: Context) {
@@ -60,6 +66,7 @@ export async function getExpenses(
     orderBy: [{ date: order }, { id: order }],
     include: { receipt: { select: { merchant: true } } },
   });
+  const flags = await pendingFlagsFor(rows.map((r) => r.id));
   return rows.map((r) => ({
     id: r.id,
     date: formatDate(r.date),
@@ -73,6 +80,7 @@ export async function getExpenses(
     receiptMerchant: r.receipt?.merchant ?? null,
     gstRate: r.gstRate,
     gstAmount: r.gstAmount,
+    flag: flags.get(r.id) ?? null,
   }));
 }
 
@@ -86,8 +94,9 @@ export async function createExpense(data: {
   shares: Shares | null;
   ownerEmail: string | null;
   groupId: string | null;
-}) {
-  await prisma.expense.create({
+}): Promise<{ id: number }> {
+  return prisma.expense.create({
+    select: { id: true },
     data: {
       date: new Date(`${data.date}T00:00:00.000Z`),
       category: data.category,
