@@ -74,8 +74,11 @@ work locally.
 
 `/statements` reads an HDFC or ICICI credit card PDF on the device, drops the
 personal details, and lists EMI, domestic and international rows with GST and
-forex markup folded in. It is on in local development and hidden in
-production until `STATEMENTS_ENABLED=1` is set. To try it, sign in locally and
+forex markup folded in. The statement's summary (dues, payments, limits, due
+date) can be saved under the card, known by its last four digits only, and
+every saved statement is listed under **Your cards** on the same page. It is
+on in local development and hidden in production until `STATEMENTS_ENABLED=1`
+is set. To try it, sign in locally and
 open **Statements** in the sidebar (**Import** in the phone bottom bar).
 
 ## Database
@@ -105,6 +108,8 @@ spacing or a plural "s" into one spelling;
 group splits, the `user_incomes` table behind the monthly income and
 savings figures, and the `app_users` columns that drive the income
 onboarding step and popup. Deploy the code only after it has run.
+`2026_09_cards.sql` adds the `cards` and `card_statements` tables that hold
+the statement summaries saved from the statement import.
 
 ## Google OAuth setup
 
