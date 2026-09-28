@@ -45,7 +45,9 @@ PDF ──pdf.js──▶ positioned text items ──lines.ts──▶ lines pe
 
 pdf.js gives text items with coordinates in drawing order. Items are
 grouped into rows by their y position (tolerance 35% of the font size) and
-joined by x gaps. The legacy pdf.js build is used in the browser because
+joined by x gaps. Each row also keeps where every item sits on the page
+(`itemsToPage`), which the summary reader uses to pair figures with the
+label printed above them; nothing else uses positions. The legacy pdf.js build is used in the browser because
 its encrypted-file path needs `Map.prototype.getOrInsertComputed`, which
 older phone browsers lack.
 
@@ -91,7 +93,10 @@ Rows are then built:
   international rows the printed and effective exchange rates.
 
 The summary box is read from labels and figures only (`summary.ts`): on
-one line, or a label row followed by a figure row. The card is identified
+one line, or a label row followed by a figure row. With positions, a label
+takes the first figure below it in its own column, which is what HDFC's
+2026 box needs (see hdfc.md); from lines alone, figures follow labels in
+reading order. The card is identified
 by its last four digits, from the masked number or from HDFC's file name,
 never more.
 

@@ -14,6 +14,7 @@ import { categorize } from "@/lib/receipt/categorize";
 import { cleanDescription, isDateLed, isHeading, keepLine, makeRefTagger, redactLine } from "./redact";
 import { readDate } from "./dates";
 import { cardIdentity, parseSummary } from "./summary";
+import type { PageText } from "./lines";
 import type { Bank, ForeignInfo, ParsedStatement, RowKind, RowPart, StatementRow } from "./types";
 
 const CURRENCIES = new Set([
@@ -281,7 +282,11 @@ function statementDateOf(lines: string[]): string | null {
  * Parses a statement. `pages` holds the raw lines of each page; redaction
  * happens here first, so callers can pass PDF text straight in.
  */
-export function parseStatement(pages: string[][], opts: { filename?: string } = {}): ParsedStatement {
+export function parseStatement(input: (string[] | PageText)[], opts: { filename?: string } = {}): ParsedStatement {
+  // Plain lines, or lines with positions. Positions are used only to read
+  // the summary box, whose labels and figures are laid out in columns.
+  const pages = input.map((p) => (Array.isArray(p) ? p : p.lines));
+  const rowPages = input.flatMap((p) => (Array.isArray(p) ? [] : [p.rows]));
   const redactedLines: string[] = [];
   const lines: Line[] = [];
   const unparsed: { page: number; text: string }[] = [];
@@ -466,7 +471,7 @@ export function parseStatement(pages: string[][], opts: { filename?: string } = 
   }
 
   const allRedacted = pages.flat().map((l) => redactLine(l));
-  const { summary, notes } = parseSummary(allRedacted);
+  const { summary, notes } = parseSummary(allRedacted, rowPages);
   const statementDate = summary?.statementDate ?? statementDateOf(allRedacted);
   if (summary && !summary.statementDate) summary.statementDate = statementDate;
   const period = statementDate?.slice(0, 7) ?? commonMonth(rows);

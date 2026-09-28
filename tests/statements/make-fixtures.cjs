@@ -110,20 +110,35 @@ const icici = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</s
 function hdfc2026(month, rows, box) {
   const tr = (r) => `<tr><td>${r[0]}</td><td>${r[1] ? '<span style="background:#2ecc71;color:#fff;border-radius:8px;padding:0 5px;margin-right:6px">EMI</span>' : ""}${r[2]}</td><td class="r">${r[3]}</td><td>${r[4] || ""}</td></tr>`;
   return `<!doctype html><html><head><meta charset="utf-8"><style>${css}
-  .box { background:#1f4e9c; color:#fff; padding:10px; border-radius:8px; }
-  .box table td, .box table th { color:#fff; border:none; }
+  /* The 2026 blue box as HDFC prints it: labels vertically centred in
+     fixed-height cells, so a two-line label sits above and below the
+     height of a one-line one; the total due in its own taller box. */
+  .box2 { display:flex; gap:12px; background:#1f4e9c; color:#fff; padding:10px; border-radius:8px; font-size:9.5px; }
+  .left { flex:3; } .right { flex:1; padding:6px 8px; }
+  .hdr, .fig { display:flex; align-items:center; text-align:center; }
+  .hdr > div { flex:1; height:30px; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+  .fig > div { flex:1; height:22px; display:flex; align-items:center; justify-content:center; }
+  .fig > div.op { flex:0 0 14px; }
+  .right .lbl { font-weight:bold; height:30px; display:flex; align-items:center; }
+  .right .big { font-size:24px; font-weight:bold; height:22px; display:flex; align-items:center; margin-bottom:8px; }
+  .two { display:flex; gap:16px; } .two .val { height:18px; display:flex; align-items:center; }
   </style></head><body>
 <h1>HDFC Bank Millennia Credit Card Statement</h1>
 <div class="cols"><div><div>MR RACHIT AWASTHI</div><div>Flat 12, Sunrise Residency, Indiranagar, Bengaluru 560038</div></div>
 <div><div><b>Statement Date:</b> ${month.statementDate}</div></div></div>
-<div class="box"><table>
-<tr><th>PREVIOUS STATEMENT DUES</th><th>PAYMENTS/CREDITS</th><th>PURCHASES/DEBIT</th><th>FINANCE CHARGES</th><th>TOTAL AMOUNT DUE</th></tr>
-<tr><td></td><td>RECEIVED</td><td>(Current Billing Cycle)</td><td></td><td></td></tr>
-<tr><td>₹${box.prev}</td><td>₹${box.paid}</td><td>₹${box.purchases}</td><td>₹0.00</td><td>₹${box.due}</td></tr>
-<tr><th>TOTAL CREDIT LIMIT</th><th>AVAILABLE CREDIT LIMIT</th><th>AVAILABLE CASH LIMIT</th><th>MINIMUM DUE</th><th>DUE DATE</th></tr>
-<tr><td>(Including Cash)</td><td></td><td></td><td></td><td></td></tr>
-<tr><td>₹2,77,000</td><td>₹${box.avail}</td><td>₹1,10,800</td><td>₹${box.min}</td><td>${box.dueDate}</td></tr>
-</table></div>
+<div class="box2">
+<div class="left">
+<div class="hdr"><div>PREVIOUS STATEMENT DUES</div><div>PAYMENTS/CREDITS<br>RECEIVED</div><div>PURCHASES/DEBIT<br>(Current Billing Cycle)</div><div>FINANCE CHARGES</div></div>
+<div class="fig"><div>₹${box.prev}</div><div class="op">−</div><div>₹${box.paid}</div><div class="op">+</div><div>₹${box.purchases}</div><div class="op">+</div><div>₹0.00</div><div class="op">=</div></div>
+<div class="hdr"><div>TOTAL CREDIT LIMIT<br>(Including Cash)</div><div>AVAILABLE CREDIT LIMIT</div><div>AVAILABLE CASH LIMIT</div></div>
+<div class="fig"><div>₹2,77,000</div><div>₹${box.avail}</div><div>₹1,10,800</div></div>
+</div>
+<div class="right">
+<div class="lbl">TOTAL AMOUNT DUE</div>
+<div class="big">₹${box.due}</div>
+<div class="two"><div><div class="lbl">MINIMUM DUE</div><div class="val">₹${box.min}</div></div><div><div class="lbl">DUE DATE</div><div class="val">${box.dueDate}</div></div></div>
+</div>
+</div>
 <h2>Domestic Transactions</h2>
 <table><tr><th>DATE &amp; TIME</th><th>TRANSACTION DESCRIPTION</th><th class="r">AMOUNT</th><th>PI</th></tr>
 <tr><td></td><td>RACHIT AWASTHI [CKYC ID : 20096929017763 ]</td><td></td><td></td></tr>

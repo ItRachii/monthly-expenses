@@ -3,7 +3,7 @@
 // the page. The library and its worker load lazily on first use, so the
 // main bundle does not carry them.
 
-import { itemsToLines, type PositionedText } from "./lines";
+import { itemsToPage, type PageText, type PositionedText } from "./lines";
 
 export class PdfPasswordError extends Error {
   constructor(public readonly wrong: boolean) {
@@ -11,8 +11,8 @@ export class PdfPasswordError extends Error {
   }
 }
 
-/** Lines per page, in reading order. */
-export async function readPdfLines(file: File, password?: string): Promise<string[][]> {
+/** Each page's lines in reading order, with their positions. */
+export async function readPdfPages(file: File, password?: string): Promise<PageText[]> {
   // The legacy build carries polyfills for the newest JavaScript methods
   // pdf.js uses (its encrypted-file path needs Map.getOrInsertComputed),
   // so it works on phone browsers and older desktops too.
@@ -26,12 +26,12 @@ export async function readPdfLines(file: File, password?: string): Promise<strin
   const task = pdfjs.getDocument({ data, password });
   try {
     const doc = await task.promise;
-    const pages: string[][] = [];
+    const pages: PageText[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
       const items = content.items.filter((it): it is PositionedText & typeof it => "str" in it);
-      pages.push(itemsToLines(items));
+      pages.push(itemsToPage(items));
       page.cleanup();
     }
     return pages;
