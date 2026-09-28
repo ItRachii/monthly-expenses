@@ -12,6 +12,10 @@ export interface RowPart {
   kind: PartKind;
   label: string;
   amount: number;
+  /** Per-parse token of the line's "(Ref# …)" transaction reference. */
+  ref?: string | null;
+  /** Stable keyed hash of that reference for this user. Set in the browser. */
+  refKey?: string | null;
 }
 
 export interface ForeignInfo {
@@ -37,9 +41,41 @@ export interface StatementRow {
   foreign: ForeignInfo | null;
   /** "3 of 12" when the statement says so. */
   installment: string | null;
+  /** The loan an EMI row belongs to. Null for other rows. */
+  loan: LoanRef | null;
+  /** For a GST charge matched to an instalment billed in an earlier statement. */
+  gstFor: GstLineage | null;
+  /** A lone GST charge that matched nothing, in this statement or on record. */
+  untraced: boolean;
+  /** For a GST charge: the token of the reference it cites, and its stable key. */
+  taxRef: string | null;
+  taxRefKey: string | null;
   /** Suggested app category. */
   category: string;
   page: number;
+}
+
+export interface LoanRef {
+  /** Per-parse pseudonym of the loan number (see redact.makeRefTagger). */
+  token: string | null;
+  /** Stable keyed hash of the loan number for this user. Set in the browser. */
+  key: string | null;
+  /** Last four digits of the loan number, for display only. */
+  last4: string | null;
+  /** Instalment number when the statement prints one. */
+  instalmentNo: number | null;
+}
+
+export interface GstLineage {
+  loanKey: string;
+  loanLast4: string | null;
+  instalmentNo: number | null;
+  /** Date the instalment was billed. */
+  date: string;
+  /** Statement month that billed the instalment. */
+  period: string;
+  /** "ref": the GST cites the instalment's own reference. "amount": date and 18% only. */
+  matchedBy: "ref" | "amount";
 }
 
 /** The statement's summary box. Every figure is optional: layouts differ. */
@@ -77,6 +113,12 @@ export interface ParsedStatement {
   rows: StatementRow[];
   /** Redacted date-led lines the parser could not read. */
   unparsed: { page: number; text: string }[];
+  /**
+   * Browser only. The digits behind each loan and reference token, kept just
+   * long enough to compute their stable keys, then cleared. Never shown,
+   * stored or sent.
+   */
+  tokenDigits: Record<string, string>;
   /**
    * Every line the parser worked from, after redaction: section headings and
    * date-led lines only. Safe to share when a statement does not parse.

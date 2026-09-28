@@ -103,10 +103,65 @@ const icici = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</s
 <p class="small">Contact 18001080 or customer.care@icicibank.com. Reference: 4375 1234 5678 9012.</p>
 </body></html>`;
 
+// HDFC's 2026 layout: date|time column, "(Ref# …)" on every line, an "EMI"
+// badge on purchases eligible for conversion, OFFUS EMI PRIN/INT instalment
+// lines, and the IGST on an instalment's interest billed a month later,
+// citing the interest line's own reference. Two consecutive months.
+function hdfc2026(month, rows, box) {
+  const tr = (r) => `<tr><td>${r[0]}</td><td>${r[1] ? '<span style="background:#2ecc71;color:#fff;border-radius:8px;padding:0 5px;margin-right:6px">EMI</span>' : ""}${r[2]}</td><td class="r">${r[3]}</td><td>${r[4] || ""}</td></tr>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${css}
+  .box { background:#1f4e9c; color:#fff; padding:10px; border-radius:8px; }
+  .box table td, .box table th { color:#fff; border:none; }
+  </style></head><body>
+<h1>HDFC Bank Millennia Credit Card Statement</h1>
+<div class="cols"><div><div>MR RACHIT AWASTHI</div><div>Flat 12, Sunrise Residency, Indiranagar, Bengaluru 560038</div></div>
+<div><div><b>Statement Date:</b> ${month.statementDate}</div></div></div>
+<div class="box"><table>
+<tr><th>PREVIOUS STATEMENT DUES</th><th>PAYMENTS/CREDITS</th><th>PURCHASES/DEBIT</th><th>FINANCE CHARGES</th><th>TOTAL AMOUNT DUE</th></tr>
+<tr><td></td><td>RECEIVED</td><td>(Current Billing Cycle)</td><td></td><td></td></tr>
+<tr><td>₹${box.prev}</td><td>₹${box.paid}</td><td>₹${box.purchases}</td><td>₹0.00</td><td>₹${box.due}</td></tr>
+<tr><th>TOTAL CREDIT LIMIT</th><th>AVAILABLE CREDIT LIMIT</th><th>AVAILABLE CASH LIMIT</th><th>MINIMUM DUE</th><th>DUE DATE</th></tr>
+<tr><td>(Including Cash)</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>₹2,77,000</td><td>₹${box.avail}</td><td>₹1,10,800</td><td>₹${box.min}</td><td>${box.dueDate}</td></tr>
+</table></div>
+<h2>Domestic Transactions</h2>
+<table><tr><th>DATE &amp; TIME</th><th>TRANSACTION DESCRIPTION</th><th class="r">AMOUNT</th><th>PI</th></tr>
+<tr><td></td><td>RACHIT AWASTHI [CKYC ID : 20096929017763 ]</td><td></td><td></td></tr>
+${rows.map(tr).join("\n")}
+</table>
+<p class="small">*Transaction time captured in IST Zone.</p>
+</body></html>`;
+}
+
+const aug2026 = hdfc2026(
+  { statementDate: "24/08/2026" },
+  [
+    ["11/08/2026| 00:00", false, "OFFUS EMI,PROCNG FEE,00000000001441 (Ref# 09999999980811000848011)", "₹ 299.00"],
+    ["11/08/2026| 00:00", false, "IGST-VPS2722433500047-RATE 18.0 -23 (Ref# 09999999980811000848011)", "₹ 53.82"],
+    ["14/08/2026| 01:00", true, "INDIGO AIRLINEGURGAON", "₹ 5,859.00", "●"],
+    ["15/08/2026| 01:12", true, "INDIGO AIRLINEGURGAON", "₹ 6,133.00", "●"],
+    ["22/08/2026| 00:00", false, "OFFUS EMI,PRIN NB:01,00000144148470 (Ref# 09999999980822004044671)", "₹ 982.00"],
+    ["22/08/2026| 00:00", false, "OFFUS EMI,INT NBR:01,00000144148470 (Ref# 09999999980822004044689)", "₹ 193.00"],
+  ],
+  { prev: "12,400.00", paid: "12,400.00", purchases: "13,519.82", due: "13,520.00", avail: "2,52,681", min: "1,229.00", dueDate: "12 Sep, 2026" },
+);
+const sep2026 = hdfc2026(
+  { statementDate: "24/09/2026" },
+  [
+    ["22/08/2026| 00:00", false, "IGST-VPS2723574016786-RATE 18.0 -23 (Ref# 09999999980822004044689)", "₹ 34.74"],
+    ["02/09/2026| 01:25", false, "NETFLIXMUMBAI", "₹ 199.00", "●"],
+    ["04/09/2026| 08:32", false, "CREDIT CARD PAYMENTNet Banking (Ref# 00000000000904016163381)", "+ ₹ 13,520.00"],
+    ["13/09/2026| 08:05", true, "RAZ*IRCTChttps://www.", "₹ 14,074.55", "●"],
+    ["22/09/2026| 00:00", false, "OFFUS EMI,PRIN NB:02,00000144148470 (Ref# 09999999980922004049488)", "₹ 996.00"],
+    ["22/09/2026| 00:00", false, "OFFUS EMI,INT NBR:02,00000144148470 (Ref# 09999999980922004049496)", "₹ 167.00"],
+  ],
+  { prev: "13,520.00", paid: "13,520.00", purchases: "15,471.29", due: "15,471.00", avail: "2,38,992", min: "1,406.00", dueDate: "12 Oct, 2026" },
+);
+
 (async () => {
   const b = await chromium.launch();
   const p = await b.newPage();
-  for (const [name, html] of [["hdfc", hdfc], ["icici", icici]]) {
+  for (const [name, html] of [["hdfc", hdfc], ["icici", icici], ["Aug2026_BilledStatements_7043_24-08-26", aug2026], ["Sep2026_BilledStatements_7043_24-09-26", sep2026]]) {
     await p.setContent(html);
     await p.pdf({ path: `${out}/${name}.pdf`, format: "A4", printBackground: false });
     console.log("wrote", `${out}/${name}.pdf`, fs.statSync(`${out}/${name}.pdf`).size, "bytes");

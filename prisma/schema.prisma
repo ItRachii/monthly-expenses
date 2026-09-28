@@ -214,13 +214,14 @@ model PiiMigration {
 // A credit card the user has imported statements for. Identified by the last
 // four digits only: no more of the number is ever stored.
 model Card {
-  id         String          @id @default(uuid())
-  ownerEmail String          @map("owner_email")
-  bank       String
-  last4      String
-  product    String?
-  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  statements CardStatement[]
+  id          String          @id @default(uuid())
+  ownerEmail  String          @map("owner_email")
+  bank        String
+  last4       String
+  product     String?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  statements  CardStatement[]
+  instalments EmiInstalment[]
 
   @@unique([ownerEmail, bank, last4], map: "cards_owner_bank_last4_key")
   @@map("cards")
@@ -253,4 +254,40 @@ model CardStatement {
 
   @@unique([cardId, period], map: "card_statements_card_period_key")
   @@map("card_statements")
+}
+
+// One EMI instalment as a statement billed it, so the GST that HDFC bills a
+// month later can be traced back to it. The loan is known by a keyed hash
+// computed in the browser and its last four digits; the number itself is
+// never stored.
+model EmiInstalment {
+  id           Int      @id @default(autoincrement())
+  ownerEmail   String   @map("owner_email")
+  cardId       String?  @map("card_id")
+  loanKey      String   @map("loan_key")
+  loanLast4    String?  @map("loan_last4")
+  instalmentNo Int?     @map("instalment_no")
+  date         DateTime @db.Date
+  principal    Float
+  interest     Float
+  refKey       String?  @map("ref_key")
+  /**
+   * GST on the interest, once a statement billed it.
+   */
+  gst          Float?
+  /**
+   * Statement month that billed the GST.
+   */
+  gstPeriod    String?  @map("gst_period")
+  /**
+   * Statement month that billed the instalment.
+   */
+  period       String
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  card         Card?    @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  @@unique([ownerEmail, loanKey, date], map: "emi_instalments_owner_loan_date_key")
+  @@index([ownerEmail, loanKey], map: "emi_instalments_owner_loan_idx")
+  @@index([ownerEmail, refKey], map: "emi_instalments_owner_ref_idx")
+  @@map("emi_instalments")
 }
