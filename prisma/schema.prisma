@@ -40,6 +40,9 @@ model Expense {
   // amount as { userId: rupees }. Null for every other split.
   shares Json?
 
+  // GST charges imported before the instalment they tax was on record.
+  gstPending GstPending[]
+
   @@index([receiptId], map: "expenses_receipt_idx")
   @@map("expenses")
 }
@@ -290,4 +293,29 @@ model EmiInstalment {
   @@index([ownerEmail, loanKey], map: "emi_instalments_owner_loan_idx")
   @@index([ownerEmail, refKey], map: "emi_instalments_owner_ref_idx")
   @@map("emi_instalments")
+}
+
+// A GST charge imported before the instalment it taxes was on record. The
+// cited reference's keyed hash is kept so that, once the earlier statement
+// is uploaded, the charge is traced to its instalment, the expense renamed
+// and the warning on it cleared.
+model GstPending {
+  id                   Int       @id @default(autoincrement())
+  ownerEmail           String    @map("owner_email")
+  expenseId            Int       @map("expense_id")
+  refKey               String    @map("ref_key")
+  amount               Float
+  date                 DateTime  @db.Date
+  /**
+   * Statement month that billed the GST.
+   */
+  period               String
+  resolvedAt           DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolvedInstalmentId Int?      @map("resolved_instalment_id")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expense              Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([ownerEmail, refKey], map: "gst_pending_owner_ref_idx")
+  @@index([expenseId], map: "gst_pending_expense_idx")
+  @@map("gst_pending")
 }

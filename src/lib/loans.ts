@@ -5,7 +5,7 @@ import { createHmac } from "crypto";
 import { prisma } from "./prisma";
 import { formatDate } from "./format";
 import { piiSecret } from "./piiCrypto";
-import type { KnownInstalment, LineagePayload } from "./statements/lineage";
+import { gstLineageName, monthLabel, type KnownInstalment, type LineagePayload } from "./statements/lineage";
 
 /**
  * The salt the browser uses to key loan numbers for this user. Derived from
@@ -77,6 +77,71 @@ export async function saveLineage(ownerEmail: string, cardId: string | null, p: 
     const where = g.matchedBy === "ref" && g.refKey ? { ownerEmail, refKey: g.refKey } : { ownerEmail, loanKey: g.loanKey, date: toDate(g.date) };
     await prisma.emiInstalment.updateMany({ where, data: { gst: g.gst, gstPeriod: g.gstPeriod } });
   }
+  await resolvePendingGst(ownerEmail, p.instalments.map((i) => i.refKey).filter((k): k is string => !!k));
+}
+
+// ---- GST added before its instalment was on record ---------------------
+// A lone GST line cites the reference of the interest line it taxes. When
+// that line's statement has not been uploaded yet, the user can still add
+// the charge. It is remembered here by the reference's key, flagged on the
+// expense, and traced the moment the earlier statement is uploaded.
+
+export interface PendingGstInput {
+  expenseId: number;
+  refKey: string;
+  amount: number;
+  /** YYYY-MM-DD printed on the GST line, normally the instalment's own date. */
+  date: string;
+  /** Statement month that billed the GST, YYYY-MM. */
+  period: string;
+}
+
+export async function recordPendingGst(ownerEmail: string, input: PendingGstInput): Promise<void> {
+  await prisma.gstPending.create({
+    data: { ownerEmail, expenseId: input.expenseId, refKey: input.refKey, amount: input.amount, date: toDate(input.date), period: input.period },
+  });
+}
+
+/** The reason shown on the expense while its GST charge is untraced. */
+export function pendingGstReason(p: { amount: number; date: Date }): string {
+  const iso = formatDate(p.date);
+  const day = new Date(p.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  return (
+    `This GST charge of ₹${p.amount.toFixed(2)} dated ${day} cites a reference that is not on record. ` +
+    `It is most likely GST on an EMI instalment billed in the ${monthLabel(iso.slice(0, 7))} statement. ` +
+    `Upload that statement on the Statements page and this charge will be traced to its instalment by the reference and renamed.`
+  );
+}
+
+/** Reasons for the expenses that still carry an untraced GST charge. */
+export async function pendingFlagsFor(expenseIds: number[]): Promise<Map<number, string>> {
+  const flags = new Map<number, string>();
+  if (expenseIds.length === 0) return flags;
+  const rows = await prisma.gstPending.findMany({ where: { expenseId: { in: expenseIds }, resolvedAt: null } });
+  for (const r of rows) flags.set(r.expenseId, pendingGstReason(r));
+  return flags;
+}
+
+/**
+ * Traces every pending GST charge whose cited reference is now on record:
+ * the instalment gets its GST, the expense its lineage name, and the flag
+ * is cleared. Returns how many were traced.
+ */
+export async function resolvePendingGst(ownerEmail: string, refKeys: string[]): Promise<number> {
+  if (refKeys.length === 0) return 0;
+  const pending = await prisma.gstPending.findMany({ where: { ownerEmail, resolvedAt: null, refKey: { in: refKeys } } });
+  let traced = 0;
+  for (const p of pending) {
+    const inst = await prisma.emiInstalment.findFirst({ where: { ownerEmail, refKey: p.refKey } });
+    if (!inst) continue;
+    await prisma.$transaction([
+      prisma.emiInstalment.update({ where: { id: inst.id }, data: { gst: p.amount, gstPeriod: p.period } }),
+      prisma.expense.updateMany({ where: { id: p.expenseId }, data: { item: gstLineageName(inst) } }),
+      prisma.gstPending.update({ where: { id: p.id }, data: { resolvedAt: new Date(), resolvedInstalmentId: inst.id } }),
+    ]);
+    traced++;
+  }
+  return traced;
 }
 
 /** Every instalment on record, for the browser to trace GST charges against. */

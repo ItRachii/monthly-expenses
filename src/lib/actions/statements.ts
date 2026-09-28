@@ -11,7 +11,7 @@ import { SPLIT_EQUAL } from "@/lib/constants";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { statementsEnabled } from "@/lib/features";
 import { saveCardStatement, validateSaveInput, type SaveStatementInput } from "@/lib/cards";
-import { saveLineage, validateLineage } from "@/lib/loans";
+import { recordPendingGst, saveLineage, validateLineage } from "@/lib/loans";
 import type { LineagePayload } from "@/lib/statements/lineage";
 
 export interface ImportRow {
@@ -19,9 +19,16 @@ export interface ImportRow {
   item: string;
   amount: number;
   category: string;
+  /**
+   * For a lone GST charge citing a reference not on record: the keyed hash
+   * of that reference, so the charge can be traced once the statement that
+   * billed the instalment is uploaded. Null or absent otherwise.
+   */
+  untracedRefKey?: string | null;
 }
 
 const MAX_ROWS = 500;
+const REF_KEY = /^r_[A-Za-z0-9_-]{16,64}$/;
 
 /**
  * Adds rows parsed from a card statement as expenses paid by the signed-in
@@ -51,7 +58,10 @@ export async function importStatementAction(input: {
     if (!item) return { ok: false, error: "A row has no description." };
     if (!isValidDateISO(r.date)) return { ok: false, error: `Invalid date on "${item}".` };
     if (!isValidAmount(r.amount)) return { ok: false, error: `Invalid amount on "${item}".` };
-    rows.push({ date: r.date, item, amount: r.amount, category: cleanText(String(r.category ?? ""), 50) });
+    const untracedRefKey = r.untracedRefKey ?? null;
+    if (untracedRefKey !== null && (typeof untracedRefKey !== "string" || !REF_KEY.test(untracedRefKey)))
+      return { ok: false, error: `Malformed reference key on "${item}".` };
+    rows.push({ date: r.date, item, amount: r.amount, category: cleanText(String(r.category ?? ""), 50), untracedRefKey });
   }
 
   let ownerEmail: string | null = null;
@@ -69,8 +79,9 @@ export async function importStatementAction(input: {
     rows.map((r) => r.category),
   );
 
+  const period = input.summary?.period ?? input.lineage?.instalments[0]?.period ?? null;
   for (let i = 0; i < rows.length; i++) {
-    await createExpense({
+    const created = await createExpense({
       date: rows[i].date,
       category: categories[i],
       item: rows[i].item,
@@ -81,6 +92,15 @@ export async function importStatementAction(input: {
       ownerEmail,
       groupId,
     });
+    if (rows[i].untracedRefKey) {
+      await recordPendingGst(email, {
+        expenseId: created.id,
+        refKey: rows[i].untracedRefKey!,
+        amount: rows[i].amount,
+        date: rows[i].date,
+        period: period && /^\d{4}-\d{2}$/.test(period) ? period : rows[i].date.slice(0, 7),
+      });
+    }
   }
 
   if (groupId) {

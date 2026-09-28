@@ -222,6 +222,7 @@ export function StatementImport({
           item: r.description,
           amount: r.total,
           category: categories[r.id] ?? r.category,
+          untracedRefKey: r.untraced && r.taxRefKey ? r.taxRefKey : null,
         })),
       });
       if (!res.ok) {
@@ -590,7 +591,7 @@ function RowView({
               </span>
             ) : null}
             {row.untraced ? (
-              <span className="pill border-amber-400/40 text-amber-300" title="Cites a reference that is not on record">
+              <span className="pill border-amber-400/40 text-amber-300" title="Cites a reference that is not on record. Can be added now; it is traced once that statement is uploaded.">
                 untraced
               </span>
             ) : null}
@@ -658,7 +659,8 @@ function RowView({
                 ) : null}
                 {row.untraced ? (
                   <div className="mt-2 text-xs text-amber-300">
-                    Cites a reference that is not on record. Upload the statement that billed the charge it taxes.
+                    Cites a reference that is not on record. Upload the statement that billed the charge it taxes. You can add this row now: the
+                    expense carries a warning until that statement is uploaded, and is then traced to its instalment by the reference and renamed.
                   </div>
                 ) : null}
               </div>

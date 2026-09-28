@@ -104,6 +104,14 @@ never more.
   reference is printed and exactly one instalment fits.
 - Earlier instalments not on record are reported, with the statement month
   to upload, derived from the instalment number and date.
+- A GST charge that stays untraced can still be added. The import sends the
+  cited reference's key with it (`untracedRefKey`), the server records it in
+  `gst_pending`, and the expense shows a warning icon whose hover text and
+  tap note say what is missing and which statement to upload. When that
+  statement is uploaded, `saveLineage` ends with `resolvePendingGst`: the
+  instalment whose reference key matches gets its GST, the expense is renamed
+  to the lineage name (`GST on EMI #1 interest (loan …8470, Aug 2026)`) and
+  the warning is cleared. Statements can therefore be uploaded in any order.
 
 ### 5. Storage
 
@@ -112,6 +120,7 @@ never more.
 | `expenses` | Imported rows, paid by the user, split equally |
 | `cards`, `card_statements` | One card per (user, bank, last four); one summary per (card, month) |
 | `emi_instalments` | One row per (user, loan key, date): principal, interest, interest reference key, GST once billed, statement months |
+| `gst_pending` | GST charges added before their instalment was on record: expense, reference key, amount, date, statement month; `resolved_at` and the instalment once traced. Deleted with the expense |
 
 Saving the same month again replaces it. Everything is filed under the
 user's own id, never a group.
@@ -127,4 +136,8 @@ user's own id, never a group.
   in the header.
 - Credits are shown but cannot be imported: expenses are positive.
 - Importing the same statement twice creates the rows twice. Not solved.
+  A pending GST charge imported twice is traced twice, to the same
+  instalment, and both expenses are renamed.
+- Tracing a pending GST charge renames the expense even if its description
+  was edited in between. The amount, date and category are never touched.
 - Scanned (image) PDFs are not read.
