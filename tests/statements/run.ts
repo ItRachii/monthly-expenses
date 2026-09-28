@@ -93,6 +93,45 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("icici: Apollo categorised Healthcare", c.rows.find((r) => /APOLLO/.test(r.description))?.category === "Healthcare");
   piiScan("icici", c);
 
+  // HDFC 2026 layout ("Millennia"), from a real statement's anonymised text:
+  // date|time column, rupee sign printed as "C" with a trailing "l", a "+"
+  // column for credits, "EMI" offer badges, and OFFUS EMI PRIN/INT lines.
+  const hdfc2026 = [
+    "Domestic Transactions",
+    "22/08/2026| 00:00 IGST-VPS[ref]-RATE 18.0 -23 (Ref# [ref]) C 34.74 l",
+    "02/09/2026| 01:25 NETFLIXMUMBAI C 199.00 l",
+    "04/09/2026| 08:32 CREDIT CARD PAYMENTNet Banking (Ref# [ref]) + C 63,817.00 l",
+    "13/09/2026| 08:05 EMI RAZ*IRCTChttps://www. C 14,074.55 l",
+    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,[ref] (Ref# [ref]) C 996.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,[ref] (Ref# [ref]) C 167.00 l",
+    "International Transactions",
+    "23/08/2026 | 03:51 EMI ANTHROPIC* CLAUDE SUBSAN FRANCISC USD 118.00 C 11,297.62 l",
+    "24/08/2026 | 00:00 IGST-VPS[ref]-RATE 18.0 -23 (Ref# MT[ref]) C 71.18 l",
+    "22/09/2026 | 00:00 CONSOLIDATED FCY MARKUP FEE (Ref# MT[ref]) C 395.42 l",
+  ];
+  const m = parseStatement([hdfc2026]);
+  console.log("\n== HDFC 2026 ==");
+  m.rows.forEach((r) => console.log(fmt(r)));
+  console.log("warnings:", m.warnings, "| unparsed:", m.unparsed);
+  check("hdfc2026: no unparsed lines", m.unparsed.length === 0, JSON.stringify(m.unparsed));
+  check("hdfc2026: 6 rows", m.rows.length === 6, String(m.rows.length));
+  check("hdfc2026: period Sept", m.period === "2026-09", String(m.period));
+  const mpay = m.rows.find((r) => /CREDIT CARD PAYMENT/.test(r.description));
+  check("hdfc2026: payment is a credit of 63817 via the + column", !!mpay && mpay.credit && mpay.total === 63817);
+  const irctc = m.rows.find((r) => /IRCTC/.test(r.description));
+  check("hdfc2026: EMI badge dropped: IRCTC is a domestic purchase, Travel", irctc?.kind === "domestic" && irctc.total === 14074.55 && irctc.category === "Travel" && !/^EMI/.test(irctc.description), JSON.stringify(irctc));
+  const memi = m.rows.filter((r) => r.kind === "emi");
+  check("hdfc2026: one EMI row: principal 996 + interest 167, #2", memi.length === 1 && memi[0].total === 1163 && memi[0].parts.length === 2 && memi[0].installment === "#2", JSON.stringify(memi.map((e) => [e.parts, e.total, e.installment, e.description])));
+  check("hdfc2026: EMI description has no empty (Ref# )", !!memi[0] && !/\(|,$/.test(memi[0].description), memi[0]?.description);
+  const anth = m.rows.find((r) => /ANTHROPIC/.test(r.description));
+  check("hdfc2026: Anthropic intl USD 118, base 11297.62, markup 395.42, GST 71.18, total 11764.22", !!anth && anth.kind === "international" && anth.foreign?.amount === 118 && anth.parts.length === 3 && anth.total === 11764.22, JSON.stringify(anth?.parts));
+  check("hdfc2026: rates 95.74 / 99.70", anth?.foreign?.rate === 95.74 && anth?.foreign?.effectiveRate === 99.7, JSON.stringify(anth?.foreign));
+  const netflix = m.rows.find((r) => /NETFLIX/.test(r.description));
+  check("hdfc2026: Netflix 199 Subscriptions", netflix?.total === 199 && netflix.category === "Subscriptions");
+  const debits = m.rows.filter((r) => !r.credit).reduce((s, r) => s + r.total, 0);
+  check("hdfc2026: debits sum to the statement's Purchases/Debit 27235.51", Math.abs(debits - 27235.51) < 0.005, debits.toFixed(2));
+  check("hdfc2026: standalone IGST row kept as GST 34.74", m.rows.some((r) => r.kind === "domestic" && r.total === 34.74 && r.parts[0].kind === "gst"));
+
   // Password-protected copy
   let needed = false;
   let wrong = false;

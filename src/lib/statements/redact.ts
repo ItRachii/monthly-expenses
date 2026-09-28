@@ -57,7 +57,15 @@ export function keepLine(line: string): boolean {
   return isDateLed(line) || isHeading(line);
 }
 
-/** Description text for display and storage: placeholders removed. */
+/**
+ * Description text for display and storage: placeholders removed, along with
+ * the empty "(Ref# )" and dangling commas they leave behind.
+ */
 export function cleanDescription(desc: string): string {
-  return desc.replace(PLACEHOLDER, "").replace(/\s+/g, " ").trim();
+  return desc
+    .replace(PLACEHOLDER, "")
+    .replace(/\(\s*ref\s*#?\s*[A-Z]{0,3}\s*\)/gi, "")
+    .replace(/,\s*(?=,|\)|$)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
