@@ -20,20 +20,53 @@ Two layouts are handled. The 2026 layout is what current statements use
 
 ### Summary box
 
-Label rows, a continuation row, then a figure row:
+What the eye sees:
 
 ```
-PREVIOUS STATEMENT DUES  PAYMENTS/CREDITS  PURCHASES/DEBIT  FINANCE CHARGES  TOTAL AMOUNT DUE
-                         RECEIVED          (Current Billing Cycle)
+PREVIOUS STATEMENT DUES  PAYMENTS/CREDITS  PURCHASES/DEBIT          FINANCE CHARGES | TOTAL AMOUNT DUE
+                         RECEIVED          (Current Billing Cycle)                  | ₹27,236.00
+₹63,817.22 − ₹63,817.00 + ₹27,235.51 + ₹0.00 =                                      |
+TOTAL CREDIT LIMIT  AVAILABLE CREDIT LIMIT  AVAILABLE CASH LIMIT                    | MINIMUM DUE  DUE DATE
+(Including Cash)                                                                    | ₹2,473.00    12 Oct, 2026
+₹2,77,000           ₹2,38,992               ₹1,10,800                               |
+```
+
+What the text layer delivers, as rows grouped by y position. Labels are
+vertically centred in their cells, so a two-line label sits above and
+below the height of a one-line label next to it, and the labels of one
+visual row arrive as three text rows. The big total is a row of its own,
+and the right-hand box's figures land between the left-hand rows:
+
+```
+PAYMENTS/CREDITS PURCHASES/DEBIT
+PREVIOUS STATEMENT DUES FINANCE CHARGES TOTAL AMOUNT DUE
+RECEIVED (Current Billing Cycle)
 ₹63,817.22 − ₹63,817.00 + ₹27,235.51 + ₹0.00 = ₹27,236.00
-TOTAL CREDIT LIMIT  AVAILABLE CREDIT LIMIT  AVAILABLE CASH LIMIT  MINIMUM DUE  DUE DATE
+TOTAL CREDIT LIMIT
+AVAILABLE CREDIT LIMIT AVAILABLE CASH LIMIT MINIMUM DUE DUE DATE
 (Including Cash)
-₹2,77,000 ₹2,38,992 ₹1,10,800 ₹2,473.00 12 Oct, 2026
+₹2,473.00 12 Oct, 2026
+₹2,77,000 ₹2,38,992 ₹1,10,800
 ```
 
-Figures map to labels in order. The `Past Dues` row also says "MINIMUM
-DUES", which must not overwrite the minimum due: the first occurrence wins
-and the label regex refuses the plural.
+Pairing figures with labels by reading order gets this wrong (previous
+dues right, then finance charges = 63,817.00, total due = 27,235.51,
+available credit = 2,473.00, the rest missing). So the summary is read by
+column (`readRows` in `summary.ts`): each label takes the first figure
+printed below it whose x range overlaps the label's, skipping continuation
+rows and rows of other columns. The positions come from pdf.js through
+`itemsToPage` (`lines.ts`); the anonymised lines shown on the screen are
+unchanged. From lines alone, as in the tests' pasted statements, the
+reading-order pairing is still used.
+
+Edge cases in the box:
+
+- In a narrow column "PREVIOUS STATEMENT" wraps over "DUES"; the label is
+  recognised from "PREVIOUS STATEMENT" alone.
+- The `Past Dues` table says "MINIMUM DUES", which is refused as a label
+  (plural), so it can never fill the minimum due when the box did not.
+- The operators `−`, `+`, `=` are text items between the figures and are
+  ignored.
 
 ### Transaction lines
 

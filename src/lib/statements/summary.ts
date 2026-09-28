@@ -6,6 +6,7 @@
 
 import { readDate } from "./dates";
 import { isDateLed } from "./redact";
+import { xAt, type TextRow } from "./lines";
 import type { StatementSummary } from "./types";
 
 type AmountKey = Exclude<keyof StatementSummary, "dueDate" | "statementDate">;
@@ -20,12 +21,14 @@ const LABELS: Label[] = [
   { key: "availableCredit", kind: "amount", re: /available credit(?: limit)?/gi },
   { key: "availableCash", kind: "amount", re: /available cash(?: limit)?/gi },
   { key: "creditLimit", kind: "amount", re: /(?:total )?credit limit/gi },
-  { key: "previousDues", kind: "amount", re: /previous (?:statement )?(?:dues?|balance)|opening balance/gi },
+  // "PREVIOUS STATEMENT" alone: the label wraps onto two rows in a narrow column.
+  { key: "previousDues", kind: "amount", re: /previous (?:statement )?(?:dues?|balance)|previous statement(?! date)|opening balance/gi },
   { key: "paymentsCredits", kind: "amount", re: /payments?\s*\/\s*credits?|payments? received|credits? received|payments?\s*&\s*credits?/gi },
   { key: "purchases", kind: "amount", re: /purchases?\s*\/\s*(?:debits?|charges?)|purchases?\s*(?:&|and) other debits|new purchases|other debits|purchases? \(current/gi },
   { key: "financeCharges", kind: "amount", re: /finance charges?|interest charged/gi },
   { key: "totalDue", kind: "amount", re: /total (?:amount |payment )?dues?|amount payable/gi },
-  { key: "minimumDue", kind: "amount", re: /minimum (?:amount |payment )?due|min\.? (?:amount )?due/gi },
+  // "due" not "dues": HDFC's Past Dues table says "MINIMUM DUES".
+  { key: "minimumDue", kind: "amount", re: /minimum (?:amount |payment )?due(?!s)|min\.? (?:amount )?due(?!s)/gi },
   { key: "statementDate", kind: "date", re: /statement date/gi },
   { key: "dueDate", kind: "date", re: /(?:payment )?due date/gi },
 ];
@@ -77,21 +80,29 @@ function tokensOf(line: string): Token[] {
   return out;
 }
 
+interface Value<T> {
+  value: T;
+  /** Character range in the line. */
+  at: number;
+  end: number;
+}
+
 /** Amounts and dates in a line, with their character positions. */
-function valuesIn(line: string): { amounts: { value: number; at: number }[]; dates: { value: string; at: number }[]; wordy: boolean } {
+function valuesIn(line: string): { amounts: Value<number>[]; dates: Value<string>[]; wordy: boolean } {
   const toks = tokensOf(line);
   const texts = toks.map((t) => t.text);
   const used = new Set<number>();
-  const dates: { value: string; at: number }[] = [];
+  const dates: Value<string>[] = [];
   for (let i = 0; i < toks.length; i++) {
     if (used.has(i)) continue;
     const d = readDate(texts, i);
     if (d) {
-      dates.push({ value: d.date, at: toks[i].at });
+      const last = toks[i + d.used - 1];
+      dates.push({ value: d.date, at: toks[i].at, end: last.at + last.text.length });
       for (let k = 0; k < d.used; k++) used.add(i + k);
     }
   }
-  const amounts: { value: number; at: number }[] = [];
+  const amounts: Value<number>[] = [];
   let wordy = false;
   for (let i = 0; i < toks.length; i++) {
     if (used.has(i)) continue;
@@ -99,7 +110,7 @@ function valuesIn(line: string): { amounts: { value: number; at: number }[]; dat
     if (/%$/.test(t)) continue;
     const a = amountOf(t);
     if (a !== null) {
-      amounts.push({ value: a, at: toks[i].at });
+      amounts.push({ value: a, at: toks[i].at, end: toks[i].at + t.length });
       continue;
     }
     if (!CURRENCY.test(t) && !OPERATOR.test(t)) wordy = true;
@@ -107,11 +118,78 @@ function valuesIn(line: string): { amounts: { value: number; at: number }[]; dat
   return { amounts, dates, wordy };
 }
 
+type Setter = (f: Found, v: number | string) => void;
+
 /**
- * Reads the summary figures out of a statement's lines. Returns null when no
- * figure at all was found.
+ * Column-aware reading of positioned rows. In HDFC's 2026 box a two-line
+ * label ("PAYMENTS/CREDITS" over "RECEIVED") sits above and below the
+ * height of a one-line label next to it, so the labels of one visual row
+ * arrive as two or three text rows, and the big total due is a row of its
+ * own. Reading order alone then pairs figures with the wrong labels. Here
+ * a label takes the first figure printed below it in its own column.
  */
-export function parseSummary(lines: string[]): { summary: StatementSummary | null; notes: string[] } {
+function readRows(pages: TextRow[][], set: Setter, notes: string[]): boolean {
+  let any = false;
+  for (const rows of pages) {
+    const claimed = new Set<string>();
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (isDateLed(row.text)) continue;
+      const labels = labelsIn(row.text);
+      if (labels.length === 0) continue;
+      any = true;
+      const own = valuesIn(row.text);
+      const pending: (Found & { x0: number; x1: number })[] = [];
+      labels.forEach((l, k) => {
+        const limit = labels[k + 1]?.at ?? Number.POSITIVE_INFINITY;
+        const pool: Value<number | string>[] = l.kind === "amount" ? own.amounts : own.dates;
+        const hit = pool.find((v) => v.at > l.at && v.at < limit);
+        if (hit) {
+          set(l, hit.value);
+          notes.push(`${l.key} = ${hit.value} (same line)`);
+        } else pending.push({ ...l, x0: xAt(row, l.at), x1: xAt(row, l.end - 1) });
+      });
+      // A figure belongs to the label above it: same column, nearest row.
+      for (const l of pending) {
+        const pad = Math.max(4, row.h * 0.6);
+        for (let j = i + 1; j < rows.length && j <= i + 8; j++) {
+          const r = rows[j];
+          if (row.y - r.y > row.h * 12 || isDateLed(r.text)) break;
+          const v = valuesIn(r.text);
+          const pool: Value<number | string>[] = l.kind === "amount" ? v.amounts : v.dates;
+          let best: { id: string; value: number | string } | null = null;
+          let bestDistance = Number.POSITIVE_INFINITY;
+          for (const c of pool) {
+            const id = `${j}:${c.at}`;
+            if (claimed.has(id)) continue;
+            const cx0 = xAt(r, c.at);
+            const cx1 = xAt(r, c.end - 1);
+            if (cx1 < l.x0 - pad || cx0 > l.x1 + pad) continue;
+            const distance = Math.abs((cx0 + cx1) / 2 - (l.x0 + l.x1) / 2);
+            if (distance < bestDistance) {
+              best = { id, value: c.value };
+              bestDistance = distance;
+            }
+          }
+          if (best) {
+            claimed.add(best.id);
+            set(l, best.value);
+            notes.push(`${l.key} = ${best.value} (column below)`);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return any;
+}
+
+/**
+ * Reads the summary figures out of a statement's lines. With positioned
+ * rows the figures are paired to labels by column; from lines alone, by
+ * reading order. Returns null when no figure at all was found.
+ */
+export function parseSummary(lines: string[], rowPages: TextRow[][] = []): { summary: StatementSummary | null; notes: string[] } {
   const s: StatementSummary = {
     previousDues: null,
     paymentsCredits: null,
@@ -126,10 +204,15 @@ export function parseSummary(lines: string[]): { summary: StatementSummary | nul
     dueDate: null,
   };
   const notes: string[] = [];
-  const set = (f: Found, v: number | string) => {
+  const set: Setter = (f, v) => {
     if (f.kind === "amount" && typeof v === "number" && s[f.key as AmountKey] === null) s[f.key as AmountKey] = v;
     if (f.kind === "date" && typeof v === "string" && s[f.key as "dueDate" | "statementDate"] === null) s[f.key as "dueDate" | "statementDate"] = v;
   };
+
+  if (readRows(rowPages, set, notes)) {
+    const any = Object.values(s).some((v) => v !== null);
+    return { summary: any ? s : null, notes };
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];

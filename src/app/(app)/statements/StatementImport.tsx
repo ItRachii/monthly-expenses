@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PdfPasswordError, readPdfLines } from "@/lib/statements/pdf";
+import { PdfPasswordError, readPdfPages } from "@/lib/statements/pdf";
 import { parseStatement } from "@/lib/statements/parse";
 import type { ParsedStatement, RowKind, StatementRow } from "@/lib/statements/types";
 import { importStatementAction } from "@/lib/actions/statements";
@@ -95,7 +95,7 @@ export function StatementImport({
     setError(null);
     setPhase("reading");
     try {
-      const pages = await readPdfLines(f, pw || undefined);
+      const pages = await readPdfPages(f, pw || undefined);
       const p = parseStatement(pages, { filename: f.name });
       // Loan numbers and references become keyed hashes here; the digits
       // are forgotten before anything is shown or sent.

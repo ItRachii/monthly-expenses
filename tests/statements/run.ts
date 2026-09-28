@@ -7,7 +7,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
-import { itemsToLines, type PositionedText } from "../../src/lib/statements/lines";
+import { itemsToPage, type PageText, type PositionedText } from "../../src/lib/statements/lines";
 import { parseStatement } from "../../src/lib/statements/parse";
 import { applyKeys, gstLineageName, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
 
@@ -18,16 +18,16 @@ const check = (name: string, ok: boolean, detail = "") => {
   if (!ok) failures++;
 };
 
-async function pagesOf(path: string, password?: string): Promise<string[][]> {
+async function pagesOf(path: string, password?: string): Promise<PageText[]> {
   const data = new Uint8Array(readFileSync(path));
   const task = pdfjs.getDocument({ data, password });
   try {
     const doc = await task.promise;
-    const pages: string[][] = [];
+    const pages: PageText[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
-      pages.push(itemsToLines(content.items.filter((it): it is PositionedText & typeof it => "str" in it)));
+      pages.push(itemsToPage(content.items.filter((it): it is PositionedText & typeof it => "str" in it)));
     }
     return pages;
   } finally {
@@ -167,7 +167,42 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("icici: summary total due and dates", c.summary?.totalDue === 33691.6 && c.summary?.statementDate === "2026-08-12" && c.summary?.dueDate === "2026-09-01", JSON.stringify(c.summary));
   check("icici: card last4 9012", c.card?.last4 === "9012", JSON.stringify(c.card));
 
-  // HDFC 2026 blue box: label rows, continuation rows, then figure rows.
+  // HDFC 2026 blue box as the text layer really delivers it: positioned
+  // items. A two-line label ("PAYMENTS/CREDITS" over "RECEIVED") sits above
+  // and below the height of a one-line label, so the labels of one visual
+  // row arrive as three text rows, and the big total is a row of its own.
+  // Reading order pairs the figures with the wrong labels; columns do not.
+  const it = (str: string, x: number, y: number, h = 7.1): PositionedText => ({ str, transform: [h, 0, 0, h, x, y], width: str.length * h * 0.5, height: h });
+  const realBox = [
+    it("HDFC Bank Millennia Credit Card Statement", 21, 811, 12),
+    it("PAYMENTS/CREDITS", 138, 768.6), it("PURCHASES/DEBIT", 237, 768.6),
+    it("PREVIOUS STATEMENT DUES", 36, 764.1), it("FINANCE CHARGES", 334, 764.1), it("TOTAL AMOUNT DUE", 450, 764.5),
+    it("RECEIVED", 156, 760.4), it("(Current Billing Cycle)", 234, 760.4),
+    it("₹", 53.7, 744.6), it("63,817.22", 58.2, 744.6), it("−", 118, 744.6), it("₹", 151, 744.6), it("63,817.00", 155.4, 744.6), it("+", 215.5, 744.6),
+    it("₹", 248, 744.6), it("27,235.51", 252.6, 744.6), it("+", 312.7, 744.6), it("₹", 354, 744.6), it("0.00", 358.7, 744.6), it("=", 410, 744.6),
+    it("₹27,236.00", 450, 742, 18),
+    it("TOTAL CREDIT LIMIT", 57, 729.6), it("AVAILABLE CREDIT LIMIT", 150, 725), it("AVAILABLE CASH LIMIT", 260, 725), it("MINIMUM DUE", 450, 723.5), it("DUE DATE", 520, 723.5),
+    it("(Including Cash)", 65, 721.4),
+    it("₹2,473.00", 450, 706), it("12 Oct, 2026", 520, 706),
+    it("₹2,77,000", 60, 702), it("₹2,38,992", 165, 702), it("₹1,10,800", 275, 702),
+    it("Past Dues", 30, 680), it("OVER LIMIT", 90, 680), it("3 MONTHS +", 150, 680), it("2 MONTHS", 210, 680), it("1 MONTH", 270, 680), it("CURRENT DUES", 330, 680), it("MINIMUM DUES", 400, 680),
+    it("(if any)", 30, 668), it("₹0.00", 90, 668), it("₹0.00", 150, 668), it("₹0.00", 210, 668), it("₹0.00", 270, 668), it("₹2,473.00", 330, 668), it("₹2,473.00", 400, 668),
+    it("Domestic Transactions", 30, 640, 9),
+    it("02/09/2026| 01:25", 30, 620), it("NETFLIXMUMBAI", 120, 620), it("C", 400, 620), it("199.00", 410, 620), it("l", 440, 620),
+  ];
+  const rb = parseStatement([itemsToPage(realBox)], { filename: "Sep2026_BilledStatements_7043_24-09-26_15.51.pdf" });
+  check("real box: labels split over three text rows, all nine figures by column", !!rb.summary && rb.summary.previousDues === 63817.22 && rb.summary.paymentsCredits === 63817 && rb.summary.purchases === 27235.51 && rb.summary.financeCharges === 0 && rb.summary.totalDue === 27236 && rb.summary.creditLimit === 277000 && rb.summary.availableCredit === 238992 && rb.summary.availableCash === 110800 && rb.summary.minimumDue === 2473, JSON.stringify(rb.summary));
+  check("real box: due date 12 Oct 2026 from the right-hand box", rb.summary?.dueDate === "2026-10-12", String(rb.summary?.dueDate));
+  check("real box: rows text as reading order delivers it", itemsToPage(realBox).lines[1] === "PAYMENTS/CREDITS PURCHASES/DEBIT" && itemsToPage(realBox).lines[2] === "PREVIOUS STATEMENT DUES FINANCE CHARGES TOTAL AMOUNT DUE", JSON.stringify(itemsToPage(realBox).lines.slice(1, 4)));
+  check("real box: 'MINIMUM DUES' in the Past Dues table is not the minimum due", parseStatement([["Past Dues OVER LIMIT 3 MONTHS + 2 MONTHS 1 MONTH CURRENT DUES MINIMUM DUES", "C 0.00 C 0.00 C 0.00 C 0.00 C 2,025.00 C 2,025.00"]]).summary === null);
+  check("real box: 'PREVIOUS STATEMENT' wrapped over 'DUES' still labels the previous dues", parseStatement([["PREVIOUS STATEMENT", "DUES", "C 63,817.22 − C 63,817.00"]]).summary?.previousDues === 63817.22);
+  const sepPdf = parseStatement(await pagesOf(`${dir}/Sep2026_BilledStatements_7043_24-09-26.pdf`), { filename: "Sep2026_BilledStatements_7043_24-09-26.pdf" });
+  check("sep pdf: nine figures and due date from the printed box", !!sepPdf.summary && sepPdf.summary.previousDues === 13520 && sepPdf.summary.paymentsCredits === 13520 && sepPdf.summary.purchases === 15471.29 && sepPdf.summary.financeCharges === 0 && sepPdf.summary.totalDue === 15471 && sepPdf.summary.creditLimit === 277000 && sepPdf.summary.availableCredit === 238992 && sepPdf.summary.availableCash === 110800 && sepPdf.summary.minimumDue === 1406 && sepPdf.summary.dueDate === "2026-10-12", JSON.stringify(sepPdf.summary));
+  check("sep pdf: card 7043 from the file name, 5 rows", sepPdf.card?.last4 === "7043" && sepPdf.rows.length === 5, JSON.stringify([sepPdf.card, sepPdf.rows.length]));
+  const augPdf = parseStatement(await pagesOf(`${dir}/Aug2026_BilledStatements_7043_24-08-26.pdf`), { filename: "Aug2026_BilledStatements_7043_24-08-26.pdf" });
+  check("aug pdf: nine figures and due date from the printed box", !!augPdf.summary && augPdf.summary.previousDues === 12400 && augPdf.summary.paymentsCredits === 12400 && augPdf.summary.purchases === 13519.82 && augPdf.summary.financeCharges === 0 && augPdf.summary.totalDue === 13520 && augPdf.summary.creditLimit === 277000 && augPdf.summary.availableCredit === 252681 && augPdf.summary.availableCash === 110800 && augPdf.summary.minimumDue === 1229 && augPdf.summary.dueDate === "2026-09-12", JSON.stringify(augPdf.summary));
+
+  // HDFC 2026 blue box from lines alone: label rows, continuation rows, then figure rows.
   const box = [
     "HDFC Bank Millennia Credit Card Statement",
     "PREVIOUS STATEMENT DUES PAYMENTS/CREDITS PURCHASES/DEBIT FINANCE CHARGES TOTAL AMOUNT DUE",
