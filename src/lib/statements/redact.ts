@@ -9,7 +9,29 @@
 //  2. redactLine(): a deny-list applied to the survivors, for anything a
 //     merchant description might still carry.
 
-export const PLACEHOLDER = /\[(?:card|ref|phone|email|pan)\]/g;
+export const PLACEHOLDER = /\[(?:card|ref(?::[0-9a-f]{4})?|phone|email|pan)\]/g;
+
+/** Replaces a run of digits; see makeRefTagger. */
+export type RefTagger = (digits: string) => string;
+
+/**
+ * Pseudonyms for reference numbers within one statement. Equal numbers get
+ * the same "[ref:xxxx]" token, so lines that belong together (an EMI's
+ * principal and interest carry the same loan number) can still be paired.
+ * The token is a salted hash: it cannot be turned back into the number, and
+ * the salt is new for every parse, so tokens never match across uploads.
+ */
+export function makeRefTagger(): RefTagger {
+  const salt = `${Date.now()}:${Math.random()}`;
+  return (digits) => {
+    let h = 0x811c9dc5;
+    for (const ch of salt + digits) {
+      h ^= ch.charCodeAt(0);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return `[ref:${(h & 0xffff).toString(16).padStart(4, "0")}]`;
+  };
+}
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 // "4695 XXXX XXXX 1234", "4695XXXXXXXX1234", "XXXXXXXXXXXX1234", "**** 1234".
@@ -25,13 +47,13 @@ const LONG_DIGITS = /(?<!\d)\d{8,}(?!\d)/g;
 const PHONE = /(?:\+91[ -]?|\b0)?[6-9]\d{4}[ -]?\d{5}\b/g;
 const PAN = /\b[A-Z]{5}\d{4}[A-Z]\b/g;
 
-export function redactLine(line: string): string {
+export function redactLine(line: string, tagRef: RefTagger = () => "[ref]"): string {
   return line
     .replace(EMAIL, "[email]")
     .replace(MASKED_CARD, "[card]")
     .replace(SPACED_CARD, "[card]")
     .replace(PHONE, "[phone]")
-    .replace(LONG_DIGITS, "[ref]")
+    .replace(LONG_DIGITS, tagRef)
     .replace(PAN, "[pan]")
     .replace(/\s+/g, " ")
     .trim();
@@ -57,7 +79,15 @@ export function keepLine(line: string): boolean {
   return isDateLed(line) || isHeading(line);
 }
 
-/** Description text for display and storage: placeholders removed. */
+/**
+ * Description text for display and storage: placeholders removed, along with
+ * the empty "(Ref# )" and dangling commas they leave behind.
+ */
 export function cleanDescription(desc: string): string {
-  return desc.replace(PLACEHOLDER, "").replace(/\s+/g, " ").trim();
+  return desc
+    .replace(PLACEHOLDER, "")
+    .replace(/\(\s*ref\s*#?\s*[A-Z]{0,3}\s*\)/gi, "")
+    .replace(/,\s*(?=,|\)|$)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

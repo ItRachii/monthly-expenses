@@ -11,7 +11,7 @@
 // can run in the browser and in a Node test.
 
 import { categorize } from "@/lib/receipt/categorize";
-import { cleanDescription, isDateLed, isHeading, keepLine, redactLine } from "./redact";
+import { cleanDescription, isDateLed, isHeading, keepLine, makeRefTagger, redactLine } from "./redact";
 import type { Bank, ForeignInfo, ParsedStatement, RowKind, RowPart, StatementRow } from "./types";
 
 const MONTHS: Record<string, number> = {
@@ -137,10 +137,28 @@ type Section = "unknown" | "domestic" | "international" | "emi";
 /** One transaction line, or null when the line is not one. */
 export function parseLine(text: string): Omit<Line, "page" | "index" | "section" | "text"> | null {
   const tokens = text.trim().split(/\s+/);
+  // The date column may end with its separator: "22/08/2026|".
+  tokens[0] = tokens[0].replace(/\|+$/, "");
   const d = readDate(tokens, 0);
   if (!d) return null;
   const rest = tokens.slice(d.used);
+  // Column separators and a time-of-day column ("| 03:51") after the date.
+  while (rest.length && (rest[0] === "|" || /^\d{1,2}:\d{2}(?::\d{2})?$/.test(rest[0]))) rest.shift();
   if (rest.length < 2) return null;
+
+  // Stray glyphs after the amount: HDFC's font prints the rupee sign as "C"
+  // before the number and leaves an "l" after it.
+  let junk = 0;
+  while (
+    rest.length > 1 &&
+    junk < 2 &&
+    !readAmount(rest[rest.length - 1]) &&
+    !CREDIT_MARK.test(rest[rest.length - 1]) &&
+    /^[^\d₹]{1,2}$/.test(rest[rest.length - 1])
+  ) {
+    rest.pop();
+    junk++;
+  }
 
   let credit = false;
   if (CREDIT_MARK.test(rest[rest.length - 1])) {
@@ -150,6 +168,14 @@ export function parseLine(text: string): Omit<Line, "page" | "index" | "section"
   if (!amt) return null;
   rest.pop();
   credit = credit || amt.credit;
+  // A currency symbol printed as its own token, then a sign column.
+  if (rest.length && /^(?:₹|rs\.?|inr|c)$/i.test(rest[rest.length - 1])) rest.pop();
+  if (rest.length && rest[rest.length - 1] === "+") {
+    credit = true;
+    rest.pop();
+  } else if (rest.length && rest[rest.length - 1] === "-") {
+    rest.pop();
+  }
 
   const foreign = readForeign(rest);
   if (foreign) rest.splice(rest.length - foreign.used, foreign.used);
@@ -157,7 +183,12 @@ export function parseLine(text: string): Omit<Line, "page" | "index" | "section"
   // A trailing small integer is a reward-points column, not part of the name.
   if (rest.length >= 2 && /^-?\d{1,6}$/.test(rest[rest.length - 1])) rest.pop();
   // A leading reference is a serial number column (already redacted).
-  while (rest.length > 1 && /^(\[ref\]|\d{6,})$/.test(rest[0])) rest.shift();
+  while (rest.length > 1 && /^(\[ref(?::[0-9a-f]{4})?\]|\d{6,})$/.test(rest[0])) rest.shift();
+  // HDFC tags purchases that could be converted with an "EMI" badge. That is
+  // an offer, not an EMI: drop it unless the line really is an instalment.
+  if (rest.length > 1 && /^emi$/i.test(rest[0]) && !/^(?:prin|int|instal|amt|amount|i?gst|conv|proc|fee)/i.test(rest[1])) {
+    rest.shift();
+  }
 
   const description = rest.join(" ").replace(/^[-:|]+\s*/, "");
   if (!description) return null;
@@ -194,8 +225,9 @@ const GST_RE = /\b(?:i|c|s|ut)?gst\b/i;
 const MARKUP_RE = /mark[ -]?up|forex|\bfx\b|cross[ -]?currency|currency conv|\bdcc\b|intl\.? ?(?:txn|transaction)? ?fee|international (?:txn|transaction) fee/i;
 const FEE_RE = /\bfees?\b|\bcharges?\b|surcharge|late payment|over ?limit|finance charge|interest charge|annual membership|joining/i;
 const EMI_RE = /\bemi\b|instal?lment/i;
-const PRINCIPAL_RE = /principal/i;
-const INTEREST_RE = /interest/i;
+// "EMI PRINCIPAL AMT", "OFFUS EMI,PRIN NB:02", "EMI INTEREST", "EMI,INT NBR:02"
+const PRINCIPAL_RE = /\bprin(?:cipal)?\b/i;
+const INTEREST_RE = /\bint(?:erest)?\b/i;
 
 const MERCHANTS: [RegExp, string][] = [
   [/swiggy|zomato|domino|pizza|mcdonald|kfc|burger|starbucks|cafe|coffee|restaurant|eatsure|barbeque|biryani|dine/i, "Dining Out"],
@@ -219,16 +251,28 @@ function categoryFor(description: string, kind: RowKind): string {
 
 function installmentOf(description: string): string | null {
   const m = description.match(/\b(\d{1,2})\s*(?:of|\/)\s*(\d{1,3})\b/i);
-  return m ? `${m[1]} of ${m[2]}` : null;
+  if (m) return `${m[1]} of ${m[2]}`;
+  // HDFC: "NB:02" / "NBR:02" is the instalment number.
+  const n = description.match(/\bNBR?\s*:\s*0*(\d{1,2})\b/i);
+  return n ? `#${n[1]}` : null;
 }
 
 /** The description without the part words, so EMI lines can be grouped. */
 function emiStem(description: string): string {
   return description
-    .replace(/\b(principal|interest|amount|amt|igst|cgst|sgst|gst|on|emi)\b/gi, " ")
+    .replace(/\b(principal|prin|interest|int|amount|amt|igst|cgst|sgst|gst|on|emi|nbr?|ref)\b/gi, " ")
     .replace(/[^a-z0-9]+/gi, " ")
     .trim()
     .toLowerCase();
+}
+
+/**
+ * The loan number pseudonym on an EMI line: a reference token outside the
+ * "(Ref# …)" group, which holds the per-line transaction reference instead.
+ */
+function loanKeyOf(description: string): string | null {
+  const outside = description.replace(/\([^)]*\)/g, " ");
+  return outside.match(/\[ref:([0-9a-f]{4})\]/)?.[1] ?? null;
 }
 
 function ratioClose(a: number, b: number, tolerance: number): boolean {
@@ -276,12 +320,13 @@ export function parseStatement(pages: string[][]): ParsedStatement {
   const headings: string[] = [];
   let section: Section = "unknown";
   let index = 0;
+  const tagRef = makeRefTagger();
 
   pages.forEach((rawLines, p) => {
     const page = p + 1;
     for (const raw of rawLines) {
       if (!keepLine(raw)) continue;
-      const text = redactLine(raw);
+      const text = redactLine(raw, tagRef);
       if (!text) continue;
       const s = sectionOf(text);
       if (s) {
@@ -307,6 +352,9 @@ export function parseStatement(pages: string[][]): ParsedStatement {
   const rows: StatementRow[] = [];
   let emiRow: StatementRow | null = null;
   let emiStemKey = "";
+  // EMI rows by loan number pseudonym and instalment, for statements that
+  // print several loans' lines apart from each other.
+  const emiByLoan = new Map<string, StatementRow>();
   let lastIndex = -1;
 
   const closeEmi = () => {
@@ -336,16 +384,27 @@ export function parseStatement(pages: string[][]): ParsedStatement {
             : "base";
       const label =
         kind === "principal" ? "Principal" : kind === "interest" ? "Interest" : kind === "gst" ? "GST on interest" : "EMI";
-      const sameEmi =
-        emiRow && adjacent && (stem === emiStemKey || kind !== "base") && !emiRow.parts.some((x) => x.kind === kind);
-      if (sameEmi && emiRow) {
-        emiRow.parts.push({ kind, label, amount: line.amount });
+      const installment = installmentOf(desc);
+      const loan = loanKeyOf(desc);
+      const loanKey = loan ? `${loan}|${installment ?? ""}` : null;
+      const byLoan = loanKey ? emiByLoan.get(loanKey) : undefined;
+      if (byLoan && !byLoan.parts.some((x) => x.kind === kind)) {
+        // Same loan number and instalment: pair it, wherever it was printed.
+        byLoan.parts.push({ kind, label, amount: line.amount });
+        emiRow = byLoan;
       } else {
-        emiRow = newRow(line, "emi", { kind, label, amount: line.amount });
-        emiStemKey = stem;
-        rows.push(emiRow);
+        const sameEmi =
+          !loanKey && emiRow && adjacent && (stem === emiStemKey || kind !== "base") && !emiRow.parts.some((x) => x.kind === kind);
+        if (sameEmi && emiRow) {
+          emiRow.parts.push({ kind, label, amount: line.amount });
+        } else {
+          emiRow = newRow(line, "emi", { kind, label, amount: line.amount });
+          emiStemKey = stem;
+          rows.push(emiRow);
+          if (loanKey) emiByLoan.set(loanKey, emiRow);
+        }
       }
-      emiRow.installment ??= installmentOf(desc);
+      emiRow.installment ??= installment;
       continue;
     }
     if (isGst && emiRow && adjacent && emiRow.date === line.date && !emiRow.parts.some((x) => x.kind === "gst")) {
@@ -403,7 +462,7 @@ export function parseStatement(pages: string[][]): ParsedStatement {
     }
   }
 
-  const statementDate = statementDateOf(pages.flat().map(redactLine));
+  const statementDate = statementDateOf(pages.flat().map((l) => redactLine(l)));
   const period = statementDate?.slice(0, 7) ?? commonMonth(rows);
   if (rows.length === 0) warnings.push("No transactions were found. The statement may be a scanned image or an unsupported layout.");
   if (unparsed.length > 0) warnings.push(`${unparsed.length} line(s) looked like transactions but could not be read.`);
