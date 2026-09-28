@@ -132,6 +132,30 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("hdfc2026: debits sum to the statement's Purchases/Debit 27235.51", Math.abs(debits - 27235.51) < 0.005, debits.toFixed(2));
   check("hdfc2026: standalone IGST row kept as GST 34.74", m.rows.some((r) => r.kind === "domestic" && r.total === 34.74 && r.parts[0].kind === "gst"));
 
+  // Two loans whose lines are printed apart: pairing must follow the loan
+  // number, not adjacency. The numbers are pseudonymised per parse, so the
+  // same number still means the same loan within one statement.
+  const twoLoans = [
+    "HDFC Bank",
+    "Domestic Transactions",
+    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,00000144148470 (Ref# 09999999980922004049488) C 996.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:05,00000177777777 (Ref# 09999999980922004049490) C 2,500.00 l",
+    "02/09/2026| 01:25 NETFLIXMUMBAI C 199.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,00000144148470 (Ref# 09999999980922004049496) C 167.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,INT NBR:05,00000177777777 (Ref# 09999999980922004049497) C 310.00 l",
+  ];
+  const t = parseStatement([twoLoans]);
+  console.log("\n== two loans ==");
+  t.rows.forEach((r) => console.log(fmt(r)));
+  const temi = t.rows.filter((r) => r.kind === "emi").sort((a, b) => a.total - b.total);
+  check("two loans: two EMI rows paired by loan number: 1163 (#2) and 2810 (#5)", temi.length === 2 && temi[0].total === 1163 && temi[0].installment === "#2" && temi[1].total === 2810 && temi[1].installment === "#5", JSON.stringify(temi.map((e) => [e.total, e.installment, e.parts.map((p) => p.kind)])));
+  check("two loans: no loan number or token in descriptions", !t.rows.some((r) => /\d{8,}|\[ref/.test(r.description)), t.rows.map((r) => r.description).join(" | "));
+  const blob = JSON.stringify(t);
+  check("two loans: raw numbers absent from all output", !/00000144148470|00000177777777|0999999998/.test(blob));
+  check("two loans: same number gives the same token within the parse", (() => { const toks = t.redactedLines.map((l) => l.match(/NBR?:\d\d,(\[ref:[0-9a-f]{4}\])/)?.[1]).filter(Boolean); return toks.length === 4 && toks[0] === toks[2] && toks[1] === toks[3] && toks[0] !== toks[1]; })(), t.redactedLines.join(" || "));
+  const t2 = parseStatement([twoLoans]);
+  check("two loans: tokens differ between uploads", t.redactedLines.join() !== t2.redactedLines.join());
+
   // Password-protected copy
   let needed = false;
   let wrong = false;

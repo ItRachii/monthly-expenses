@@ -11,7 +11,7 @@
 // can run in the browser and in a Node test.
 
 import { categorize } from "@/lib/receipt/categorize";
-import { cleanDescription, isDateLed, isHeading, keepLine, redactLine } from "./redact";
+import { cleanDescription, isDateLed, isHeading, keepLine, makeRefTagger, redactLine } from "./redact";
 import type { Bank, ForeignInfo, ParsedStatement, RowKind, RowPart, StatementRow } from "./types";
 
 const MONTHS: Record<string, number> = {
@@ -183,7 +183,7 @@ export function parseLine(text: string): Omit<Line, "page" | "index" | "section"
   // A trailing small integer is a reward-points column, not part of the name.
   if (rest.length >= 2 && /^-?\d{1,6}$/.test(rest[rest.length - 1])) rest.pop();
   // A leading reference is a serial number column (already redacted).
-  while (rest.length > 1 && /^(\[ref\]|\d{6,})$/.test(rest[0])) rest.shift();
+  while (rest.length > 1 && /^(\[ref(?::[0-9a-f]{4})?\]|\d{6,})$/.test(rest[0])) rest.shift();
   // HDFC tags purchases that could be converted with an "EMI" badge. That is
   // an offer, not an EMI: drop it unless the line really is an instalment.
   if (rest.length > 1 && /^emi$/i.test(rest[0]) && !/^(?:prin|int|instal|amt|amount|i?gst|conv|proc|fee)/i.test(rest[1])) {
@@ -266,6 +266,15 @@ function emiStem(description: string): string {
     .toLowerCase();
 }
 
+/**
+ * The loan number pseudonym on an EMI line: a reference token outside the
+ * "(Ref# …)" group, which holds the per-line transaction reference instead.
+ */
+function loanKeyOf(description: string): string | null {
+  const outside = description.replace(/\([^)]*\)/g, " ");
+  return outside.match(/\[ref:([0-9a-f]{4})\]/)?.[1] ?? null;
+}
+
 function ratioClose(a: number, b: number, tolerance: number): boolean {
   if (a <= 0 || b <= 0) return false;
   return Math.abs(a - b) / b <= tolerance;
@@ -311,12 +320,13 @@ export function parseStatement(pages: string[][]): ParsedStatement {
   const headings: string[] = [];
   let section: Section = "unknown";
   let index = 0;
+  const tagRef = makeRefTagger();
 
   pages.forEach((rawLines, p) => {
     const page = p + 1;
     for (const raw of rawLines) {
       if (!keepLine(raw)) continue;
-      const text = redactLine(raw);
+      const text = redactLine(raw, tagRef);
       if (!text) continue;
       const s = sectionOf(text);
       if (s) {
@@ -342,6 +352,9 @@ export function parseStatement(pages: string[][]): ParsedStatement {
   const rows: StatementRow[] = [];
   let emiRow: StatementRow | null = null;
   let emiStemKey = "";
+  // EMI rows by loan number pseudonym and instalment, for statements that
+  // print several loans' lines apart from each other.
+  const emiByLoan = new Map<string, StatementRow>();
   let lastIndex = -1;
 
   const closeEmi = () => {
@@ -371,16 +384,27 @@ export function parseStatement(pages: string[][]): ParsedStatement {
             : "base";
       const label =
         kind === "principal" ? "Principal" : kind === "interest" ? "Interest" : kind === "gst" ? "GST on interest" : "EMI";
-      const sameEmi =
-        emiRow && adjacent && (stem === emiStemKey || kind !== "base") && !emiRow.parts.some((x) => x.kind === kind);
-      if (sameEmi && emiRow) {
-        emiRow.parts.push({ kind, label, amount: line.amount });
+      const installment = installmentOf(desc);
+      const loan = loanKeyOf(desc);
+      const loanKey = loan ? `${loan}|${installment ?? ""}` : null;
+      const byLoan = loanKey ? emiByLoan.get(loanKey) : undefined;
+      if (byLoan && !byLoan.parts.some((x) => x.kind === kind)) {
+        // Same loan number and instalment: pair it, wherever it was printed.
+        byLoan.parts.push({ kind, label, amount: line.amount });
+        emiRow = byLoan;
       } else {
-        emiRow = newRow(line, "emi", { kind, label, amount: line.amount });
-        emiStemKey = stem;
-        rows.push(emiRow);
+        const sameEmi =
+          !loanKey && emiRow && adjacent && (stem === emiStemKey || kind !== "base") && !emiRow.parts.some((x) => x.kind === kind);
+        if (sameEmi && emiRow) {
+          emiRow.parts.push({ kind, label, amount: line.amount });
+        } else {
+          emiRow = newRow(line, "emi", { kind, label, amount: line.amount });
+          emiStemKey = stem;
+          rows.push(emiRow);
+          if (loanKey) emiByLoan.set(loanKey, emiRow);
+        }
       }
-      emiRow.installment ??= installmentOf(desc);
+      emiRow.installment ??= installment;
       continue;
     }
     if (isGst && emiRow && adjacent && emiRow.date === line.date && !emiRow.parts.some((x) => x.kind === "gst")) {
@@ -438,7 +462,7 @@ export function parseStatement(pages: string[][]): ParsedStatement {
     }
   }
 
-  const statementDate = statementDateOf(pages.flat().map(redactLine));
+  const statementDate = statementDateOf(pages.flat().map((l) => redactLine(l)));
   const period = statementDate?.slice(0, 7) ?? commonMonth(rows);
   if (rows.length === 0) warnings.push("No transactions were found. The statement may be a scanned image or an unsupported layout.");
   if (unparsed.length > 0) warnings.push(`${unparsed.length} line(s) looked like transactions but could not be read.`);
