@@ -72,6 +72,9 @@ work locally.
 
 ### Card statement import
 
+How the import works, bank by bank, with every edge case seen so far:
+[`docs/statements/`](./docs/statements/README.md).
+
 `/statements` reads an HDFC or ICICI credit card PDF on the device, drops the
 personal details, and lists EMI, domestic and international rows with GST and
 forex markup folded in. The statement's summary (dues, payments, limits, due

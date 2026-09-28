@@ -14,6 +14,12 @@ export const PLACEHOLDER = /\[(?:card|ref(?::[0-9a-f]{4})?|phone|email|pan)\]/g;
 /** Replaces a run of digits; see makeRefTagger. */
 export type RefTagger = (digits: string) => string;
 
+export interface RefTagging {
+  tag: RefTagger;
+  /** The digits behind a token, for the loan key computed in the browser. */
+  digitsOf: (token: string) => string | undefined;
+}
+
 /**
  * Pseudonyms for reference numbers within one statement. Equal numbers get
  * the same "[ref:xxxx]" token, so lines that belong together (an EMI's
@@ -21,16 +27,20 @@ export type RefTagger = (digits: string) => string;
  * The token is a salted hash: it cannot be turned back into the number, and
  * the salt is new for every parse, so tokens never match across uploads.
  */
-export function makeRefTagger(): RefTagger {
+export function makeRefTagger(): RefTagging {
   const salt = `${Date.now()}:${Math.random()}`;
-  return (digits) => {
+  const digitsByToken = new Map<string, string>();
+  const tag: RefTagger = (digits) => {
     let h = 0x811c9dc5;
     for (const ch of salt + digits) {
       h ^= ch.charCodeAt(0);
       h = Math.imul(h, 0x01000193) >>> 0;
     }
-    return `[ref:${(h & 0xffff).toString(16).padStart(4, "0")}]`;
+    const token = `[ref:${(h & 0xffff).toString(16).padStart(4, "0")}]`;
+    digitsByToken.set(token, digits);
+    return token;
   };
+  return { tag, digitsOf: (token) => digitsByToken.get(token) };
 }
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;

@@ -11,6 +11,8 @@ import { SPLIT_EQUAL } from "@/lib/constants";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { statementsEnabled } from "@/lib/features";
 import { saveCardStatement, validateSaveInput, type SaveStatementInput } from "@/lib/cards";
+import { saveLineage, validateLineage } from "@/lib/loans";
+import type { LineagePayload } from "@/lib/statements/lineage";
 
 export interface ImportRow {
   date: string;
@@ -32,6 +34,8 @@ export async function importStatementAction(input: {
   rows: ImportRow[];
   /** The statement's summary, filed under the user's card in the same go. */
   summary?: SaveStatementInput;
+  /** EMI instalments billed here, and GST charges traced to earlier ones. */
+  lineage?: LineagePayload;
 }): Promise<{ ok: true; count: number; summarySaved: boolean } | { ok: false; error: string }> {
   if (!statementsEnabled()) return { ok: false, error: "Statement import is not enabled." };
   const session = await auth();
@@ -94,10 +98,12 @@ export async function importStatementAction(input: {
   }
 
   let summarySaved = false;
+  let cardId: string | null = null;
   if (input.summary && !validateSaveInput(input.summary)) {
-    await saveCardStatement(email, input.summary);
+    cardId = (await saveCardStatement(email, input.summary)).cardId;
     summarySaved = true;
   }
+  if (input.lineage && !validateLineage(input.lineage)) await saveLineage(email, cardId, input.lineage);
 
   revalidatePath("/", "layout");
   return { ok: true, count: rows.length, summarySaved };

@@ -75,6 +75,8 @@ interface Line {
   index: number;
   date: string;
   description: string;
+  /** Token of the "(Ref# …)" transaction reference printed on the line. */
+  ref: string | null;
   amount: number;
   credit: boolean;
   foreign: { currency: string; amount: number } | null;
@@ -142,9 +144,11 @@ export function parseLine(text: string): Omit<Line, "page" | "index" | "section"
 
   const description = rest.join(" ").replace(/^[-:|]+\s*/, "");
   if (!description) return null;
+  const ref = description.match(/\(\s*ref\s*#?\s*[A-Z]{0,3}\s*\[ref:([0-9a-f]{4})\]\s*\)/i)?.[1] ?? null;
   return {
     date: d.date,
     description,
+    ref,
     amount: amt.amount,
     credit,
     foreign: foreign ? { currency: foreign.currency, amount: foreign.amount } : null,
@@ -241,9 +245,24 @@ function newRow(line: Line, kind: RowKind, part: RowPart): StatementRow {
     parts: [part],
     foreign: null,
     installment: null,
+    loan: null,
+    gstFor: null,
+    untraced: false,
+    taxRef: null,
+    taxRefKey: null,
     category: "Other",
     page: line.page,
   };
+}
+
+/** The GST label for the part it taxes. */
+function gstLabelFor(kind: RowPart["kind"]): string {
+  return kind === "interest" ? "GST on interest" : kind === "markup" ? "GST on forex markup" : kind === "fee" ? "GST on fee" : "GST";
+}
+
+function instalmentNumber(installment: string | null): number | null {
+  const m = installment?.match(/^#?(\d{1,3})/);
+  return m ? Number(m[1]) : null;
 }
 
 function statementDateOf(lines: string[]): string | null {
@@ -270,13 +289,13 @@ export function parseStatement(pages: string[][], opts: { filename?: string } = 
   const headings: string[] = [];
   let section: Section = "unknown";
   let index = 0;
-  const tagRef = makeRefTagger();
+  const tagger = makeRefTagger();
 
   pages.forEach((rawLines, p) => {
     const page = p + 1;
     for (const raw of rawLines) {
       if (!keepLine(raw)) continue;
-      const text = redactLine(raw, tagRef);
+      const text = redactLine(raw, tagger.tag);
       if (!text) continue;
       const s = sectionOf(text);
       if (s) {
@@ -317,7 +336,9 @@ export function parseStatement(pages: string[][], opts: { filename?: string } = 
     // A GST line may name what it taxes ("IGST ON MARKUP FEE"), so GST wins.
     const isGst = GST_RE.test(desc);
     const isMarkup = MARKUP_RE.test(desc) && !isGst;
-    const isEmi = line.section === "emi" || EMI_RE.test(desc);
+    // "OFFUS EMI,PROCNG FEE" is a fee on the loan, not an instalment.
+    const emiFee = EMI_RE.test(desc) && /\bfees?\b/i.test(desc);
+    const isEmi = (line.section === "emi" || EMI_RE.test(desc)) && !emiFee;
     const isFee = FEE_RE.test(desc) && !isEmi;
     const adjacent = line.index === lastIndex + 1;
     lastIndex = line.index;
@@ -340,25 +361,39 @@ export function parseStatement(pages: string[][], opts: { filename?: string } = 
       const byLoan = loanKey ? emiByLoan.get(loanKey) : undefined;
       if (byLoan && !byLoan.parts.some((x) => x.kind === kind)) {
         // Same loan number and instalment: pair it, wherever it was printed.
-        byLoan.parts.push({ kind, label, amount: line.amount });
+        byLoan.parts.push({ kind, label, amount: line.amount, ref: line.ref });
         emiRow = byLoan;
       } else {
         const sameEmi =
           !loanKey && emiRow && adjacent && (stem === emiStemKey || kind !== "base") && !emiRow.parts.some((x) => x.kind === kind);
         if (sameEmi && emiRow) {
-          emiRow.parts.push({ kind, label, amount: line.amount });
+          emiRow.parts.push({ kind, label, amount: line.amount, ref: line.ref });
         } else {
-          emiRow = newRow(line, "emi", { kind, label, amount: line.amount });
+          emiRow = newRow(line, "emi", { kind, label, amount: line.amount, ref: line.ref });
           emiStemKey = stem;
           rows.push(emiRow);
           if (loanKey) emiByLoan.set(loanKey, emiRow);
         }
       }
       emiRow.installment ??= installment;
+      if (loan && !emiRow.loan?.token) {
+        const digits = tagger.digitsOf(`[ref:${loan}]`);
+        emiRow.loan = { token: loan, key: null, last4: digits ? digits.slice(-4) : null, instalmentNo: instalmentNumber(emiRow.installment) };
+      }
+      emiRow.loan ??= { token: null, key: null, last4: null, instalmentNo: instalmentNumber(emiRow.installment) };
       continue;
     }
+    // A GST line that cites the reference of the line it taxes: exact.
+    if (isGst && line.ref && !line.credit) {
+      const cited = rows.find((t) => !t.credit && !t.parts.some((x) => x.kind === "gst") && t.parts.some((x) => x.ref === line.ref && x.kind !== "gst"));
+      if (cited) {
+        const taxed = cited.parts.find((x) => x.ref === line.ref)!;
+        cited.parts.push({ kind: "gst", label: gstLabelFor(taxed.kind), amount: line.amount, ref: line.ref });
+        continue;
+      }
+    }
     if (isGst && emiRow && adjacent && emiRow.date === line.date && !emiRow.parts.some((x) => x.kind === "gst")) {
-      emiRow.parts.push({ kind: "gst", label: "GST on interest", amount: line.amount });
+      emiRow.parts.push({ kind: "gst", label: "GST on interest", amount: line.amount, ref: line.ref });
       continue;
     }
     closeEmi();
@@ -369,27 +404,30 @@ export function parseStatement(pages: string[][], opts: { filename?: string } = 
       const target = findGstTarget(rows, line, adjacent);
       if (target) {
         const onMarkup = target.parts.some((x) => x.kind === "markup") || target.kind === "international";
-        target.parts.push({ kind: "gst", label: onMarkup ? "GST on forex markup" : "GST", amount: line.amount });
+        target.parts.push({ kind: "gst", label: onMarkup ? "GST on forex markup" : "GST", amount: line.amount, ref: line.ref });
         continue;
       }
-      rows.push(newRow(line, intl ? "international" : "domestic", { kind: "gst", label: "GST", amount: line.amount }));
+      const lone = newRow(line, intl ? "international" : "domestic", { kind: "gst", label: "GST", amount: line.amount, ref: line.ref });
+      lone.taxRef = line.ref;
+      rows.push(lone);
       continue;
     }
 
     if (isMarkup && !line.credit) {
       const target = findMarkupTarget(rows, line);
       if (target) {
-        target.parts.push({ kind: "markup", label: "Forex markup", amount: line.amount });
+        target.parts.push({ kind: "markup", label: "Forex markup", amount: line.amount, ref: line.ref });
         continue;
       }
-      rows.push(newRow(line, intl ? "international" : "domestic", { kind: "markup", label: "Forex markup", amount: line.amount }));
+      rows.push(newRow(line, intl ? "international" : "domestic", { kind: "markup", label: "Forex markup", amount: line.amount, ref: line.ref }));
       continue;
     }
     const kind: RowKind = intl ? "international" : "domestic";
     const row = newRow(line, kind, {
       kind: isFee ? "fee" : "base",
-      label: isFee ? "Fee" : intl ? "Purchase (converted)" : "Purchase",
+      label: isFee ? (emiFee ? "EMI processing fee" : "Fee") : intl ? "Purchase (converted)" : "Purchase",
       amount: line.amount,
+      ref: line.ref,
     });
     if (line.foreign) {
       row.foreign = { currency: line.foreign.currency, amount: line.foreign.amount, rate: 0, effectiveRate: 0 };
@@ -398,6 +436,21 @@ export function parseStatement(pages: string[][], opts: { filename?: string } = 
   }
 
   resolveOrphans(rows);
+  // What is left alone is a charge nothing in this statement explains. The
+  // browser may still trace it to an instalment on record (lineage.ts).
+  for (const r of rows) {
+    if (!r.credit && r.parts.length === 1 && r.parts[0].kind === "gst") r.untraced = true;
+  }
+  const tokenDigits: Record<string, string> = {};
+  const remember = (token: string | null | undefined) => {
+    const d = token ? tagger.digitsOf(`[ref:${token}]`) : undefined;
+    if (token && d) tokenDigits[token] = d;
+  };
+  for (const r of rows) {
+    remember(r.loan?.token);
+    remember(r.taxRef);
+    for (const p of r.parts) remember(p.ref);
+  }
 
   for (const row of rows) {
     row.total = round2(row.parts.reduce((s, x) => s + x.amount, 0));
@@ -428,7 +481,7 @@ export function parseStatement(pages: string[][], opts: { filename?: string } = 
   if (bank === "unknown") warnings.push("Could not tell whether this is an HDFC or ICICI statement; parsed with the generic rules.");
   if (headings.length === 0 && rows.length > 0) warnings.push("No section headings found; domestic and international were told apart by currency only.");
 
-  return { bank, summary, card, statementDate, period, rows, unparsed, redactedLines, warnings };
+  return { bank, summary, card, statementDate, period, rows, unparsed, tokenDigits, redactedLines, warnings };
 }
 
 /** The international purchase a markup line belongs to. */
@@ -482,6 +535,18 @@ function resolveOrphans(rows: StatementRow[]): void {
   const isOrphan = (r: StatementRow, kind: RowPart["kind"]) =>
     r.parts.length === 1 && r.parts[0].kind === kind && !r.credit;
 
+  // A GST charge citing the reference of a line printed after it: exact.
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (!isOrphan(r, "gst") || !r.taxRef) continue;
+    const cited = rows.find((t) => t !== r && !t.credit && !t.parts.some((x) => x.kind === "gst") && t.parts.some((x) => x.ref === r.taxRef && x.kind !== "gst"));
+    if (cited) {
+      const taxed = cited.parts.find((x) => x.ref === r.taxRef)!;
+      cited.parts.push({ kind: "gst", label: gstLabelFor(taxed.kind), amount: r.parts[0].amount, ref: r.taxRef });
+      rows.splice(i, 1);
+    }
+  }
+
   for (let i = rows.length - 1; i >= 0; i--) {
     const r = rows[i];
     if (!isOrphan(r, "markup")) continue;
@@ -517,6 +582,23 @@ function resolveOrphans(rows: StatementRow[]): void {
       });
     if (target) {
       target.parts.push({ kind: "gst", label: "GST on forex markup", amount });
+      rows.splice(i, 1);
+    }
+  }
+
+  // GST on an instalment's interest billed the same day, printed apart:
+  // 18% of the interest, on the instalment's date.
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (!isOrphan(r, "gst")) continue;
+    const amount = r.parts[0].amount;
+    const target = rows.find((t) => {
+      if (t === r || t.kind !== "emi" || t.date !== r.date || t.parts.some((x) => x.kind === "gst")) return false;
+      const interest = t.parts.find((x) => x.kind === "interest")?.amount ?? 0;
+      return ratioClose(amount, interest * 0.18, 0.02);
+    });
+    if (target) {
+      target.parts.push({ kind: "gst", label: "GST on interest", amount });
       rows.splice(i, 1);
     }
   }

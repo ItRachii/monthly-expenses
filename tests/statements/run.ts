@@ -9,6 +9,7 @@ import { join } from "path";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { itemsToLines, type PositionedText } from "../../src/lib/statements/lines";
 import { parseStatement } from "../../src/lib/statements/parse";
+import { applyKeys, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
 
 const dir = join(__dirname, "fixtures");
 let failures = 0;
@@ -150,8 +151,9 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   const temi = t.rows.filter((r) => r.kind === "emi").sort((a, b) => a.total - b.total);
   check("two loans: two EMI rows paired by loan number: 1163 (#2) and 2810 (#5)", temi.length === 2 && temi[0].total === 1163 && temi[0].installment === "#2" && temi[1].total === 2810 && temi[1].installment === "#5", JSON.stringify(temi.map((e) => [e.total, e.installment, e.parts.map((p) => p.kind)])));
   check("two loans: no loan number or token in descriptions", !t.rows.some((r) => /\d{8,}|\[ref/.test(r.description)), t.rows.map((r) => r.description).join(" | "));
-  const blob = JSON.stringify(t);
-  check("two loans: raw numbers absent from all output", !/00000144148470|00000177777777|0999999998/.test(blob));
+  check("two loans: before keying, raw numbers live only in tokenDigits", !/00000144148470|00000177777777|0999999998/.test(JSON.stringify({ ...t, tokenDigits: {} })) && Object.keys(t.tokenDigits).length >= 2);
+  await applyKeys(t, "salt");
+  check("two loans: after keying, raw numbers absent from all output", !/00000144148470|00000177777777|0999999998/.test(JSON.stringify(t)));
   check("two loans: same number gives the same token within the parse", (() => { const toks = t.redactedLines.map((l) => l.match(/NBR?:\d\d,(\[ref:[0-9a-f]{4}\])/)?.[1]).filter(Boolean); return toks.length === 4 && toks[0] === toks[2] && toks[1] === toks[3] && toks[0] !== toks[1]; })(), t.redactedLines.join(" || "));
   const t2 = parseStatement([twoLoans]);
   check("two loans: tokens differ between uploads", t.redactedLines.join() !== t2.redactedLines.join());
@@ -185,6 +187,102 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("hdfc2026 box: card 7043 from the file name, product Millennia", b.card?.last4 === "7043" && b.card?.product === "Millennia", JSON.stringify(b.card));
   check("hdfc2026 box: period from the rows", b.period === "2026-09", String(b.period));
   check("hdfc2026 box: anonymised text carries labels and figures only", b.redactedLines.some((l) => l.startsWith("## summary")) && !b.redactedLines.some((l) => /Millennia Credit Card Statement/.test(l)), b.redactedLines.join(" | "));
+
+  // Lineage. From a real pair of HDFC statements (anonymised): the September
+  // IGST cites the exact Ref# of August's interest line (…4044689), and
+  // August's own processing-fee IGST cites the fee's Ref# (…848011).
+  const aug = [
+    "HDFC Bank", "Domestic Transactions",
+    "11/08/2026| 00:00 OFFUS EMI,PROCNG FEE,00000000001441 (Ref# 09999999980811000848011) C 299.00 l",
+    "11/08/2026| 00:00 IGST-VPS2722433500047-RATE 18.0 -23 (Ref# 09999999980811000848011) C 53.82 l",
+    "14/08/2026| 01:00 EMI INDIGO AIRLINEGURGAON C 5,859.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,PRIN NB:01,00000144148470 (Ref# 09999999980822004044671) C 982.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,INT NBR:01,00000144148470 (Ref# 09999999980822004044689) C 193.00 l",
+  ];
+  const sep = [
+    "HDFC Bank", "Domestic Transactions",
+    "22/08/2026| 00:00 IGST-VPS2723574016786-RATE 18.0 -23 (Ref# 09999999980822004044689) C 34.74 l",
+    "02/09/2026| 01:25 NETFLIXMUMBAI C 199.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,00000144148470 (Ref# 09999999980922004049488) C 996.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,00000144148470 (Ref# 09999999980922004049496) C 167.00 l",
+  ];
+  const SALT = "user-salt-A";
+  const a1 = parseStatement([aug]);
+  const augFee = a1.rows.find((r) => /PROCNG FEE/.test(r.description));
+  check("aug: processing-fee IGST joins the fee by its cited Ref# (exact, in-statement)", !!augFee && augFee.parts.length === 2 && augFee.parts[1].label === "GST on fee" && augFee.total === 352.82 && !a1.rows.some((r) => r.untraced), JSON.stringify(augFee?.parts));
+  check("aug: EMI badge on IndiGo is not an EMI", a1.rows.find((r) => /INDIGO/.test(r.description))?.kind === "domestic");
+  const e1 = a1.rows.find((r) => r.kind === "emi")!;
+  check("aug: instalment #1 982 + 193 with the interest line's reference token", e1.loan?.instalmentNo === 1 && e1.total === 1175 && !!e1.parts.find((p) => p.kind === "interest")?.ref, JSON.stringify(e1.parts));
+  await applyKeys(a1, SALT);
+  const augPayload = lineagePayload(a1.rows, "2026-08")!;
+  const refAug = await refKeyFor(SALT, "09999999980822004044689");
+  check("aug: payload carries the interest reference key, not the number", augPayload.instalments[0].refKey === refAug && !/0999999998/.test(JSON.stringify(augPayload)), JSON.stringify(augPayload.instalments[0]));
+  const kA = await loanKeyFor(SALT, "00000144148470");
+  check("keys: stable per user and salt, different under another salt", (await loanKeyFor(SALT, "00000144148470")) === kA && (await loanKeyFor("other", "00000144148470")) !== kA && augPayload.instalments[0].loanKey === kA);
+
+  // September without August on record: untraced, #1 reported missing.
+  const s1 = parseStatement([sep]);
+  check("sep: lone IGST flagged untraced with the reference it cites", s1.rows.filter((r) => r.untraced).length === 1 && !!s1.rows.find((r) => r.untraced)?.taxRef);
+  await applyKeys(s1, SALT);
+  check("sep: digits cleared after keying", Object.keys(s1.tokenDigits).length === 0 && !/0999999998|00000144148470/.test(JSON.stringify(s1)));
+  const bare = resolveLineage(s1.rows, []);
+  check("sep: no record -> untraced 1, missing #1 for Aug 2026", bare.untraced.length === 1 && bare.missing.length === 1 && bare.missing[0].instalmentNo === 1 && bare.missing[0].period === "2026-08" && bare.missing[0].loanLast4 === "8470", JSON.stringify(bare.missing));
+  const warn = lineageWarnings(bare);
+  check("sep: warnings ask for the Aug 2026 statement and name the charge", warn.length === 2 && /Loan …8470: instalment #1 is not on record\. Upload the Aug 2026 statement/.test(warn[0]) && /₹34\.74 on 22\/08/.test(warn[1]), JSON.stringify(warn));
+
+  // With August on record: exact join by reference.
+  const known: KnownInstalment[] = augPayload.instalments.map((i) => ({ ...i }));
+  const s2 = parseStatement([sep]);
+  await applyKeys(s2, SALT);
+  const res = resolveLineage(s2.rows, known);
+  const gstRow = s2.rows.find((r) => r.gstFor);
+  check("sep: IGST 34.74 traced to instalment #1 by reference", res.matched === 1 && res.byRef === 1 && res.untraced.length === 0 && res.missing.length === 0 && gstRow?.gstFor?.instalmentNo === 1 && gstRow.gstFor.matchedBy === "ref" && gstRow.gstFor.date === "2026-08-22", JSON.stringify(gstRow?.gstFor));
+  check("sep: traced row renamed with the lineage", gstRow?.description === "GST on EMI #1 interest (loan …8470, Aug 2026)", gstRow?.description);
+  const payload = lineagePayload(s2.rows, "2026-09")!;
+  check("sep: payload has instalment #2 and the GST match by reference", payload.instalments.length === 1 && payload.instalments[0].instalmentNo === 2 && payload.instalments[0].principal === 996 && payload.gstMatches.length === 1 && payload.gstMatches[0].gst === 34.74 && payload.gstMatches[0].matchedBy === "ref" && payload.gstMatches[0].refKey === refAug, JSON.stringify(payload));
+  const s3 = parseStatement([sep]);
+  await applyKeys(s3, SALT);
+  const again = resolveLineage(s3.rows, [{ ...known[0], gst: 34.74 }]);
+  check("sep: re-uploading the same statement traces the GST again by reference (idempotent)", again.byRef === 1 && again.untraced.length === 0);
+
+  // Two loans, same interest, same day: only the reference can tell the GST charges apart.
+  const twin = [
+    "HDFC Bank", "Domestic Transactions",
+    "22/08/2026| 00:00 OFFUS EMI,PRIN NB:01,00000144148470 (Ref# 09999999980822004044671) C 982.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,INT NBR:01,00000144148470 (Ref# 09999999980822004044689) C 193.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,PRIN NB:01,00000155555555 (Ref# 09999999980822004055001) C 982.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,INT NBR:01,00000155555555 (Ref# 09999999980822004055002) C 193.00 l",
+  ];
+  const tw = parseStatement([twin]);
+  await applyKeys(tw, SALT);
+  const twinKnown: KnownInstalment[] = lineagePayload(tw.rows, "2026-08")!.instalments;
+  check("twins: two instalments recorded with distinct reference keys", twinKnown.length === 2 && twinKnown[0].refKey !== twinKnown[1].refKey && twinKnown.every((k) => k.interest === 193));
+  const later = parseStatement([[
+    "HDFC Bank", "Domestic Transactions",
+    "22/08/2026| 00:00 IGST-VPS2723574016786-RATE 18.0 -23 (Ref# 09999999980822004055002) C 34.74 l",
+    "22/08/2026| 00:00 IGST-VPS2723574016787-RATE 18.0 -23 (Ref# 09999999980822004044689) C 34.74 l",
+  ]]);
+  await applyKeys(later, SALT);
+  const tres = resolveLineage(later.rows, twinKnown);
+  const k5555 = await loanKeyFor(SALT, "00000155555555");
+  check("twins: both GST charges traced by reference, first to loan …5555, second to …8470", tres.byRef === 2 && later.rows[0].gstFor?.loanKey === k5555 && later.rows[1].gstFor?.loanKey === kA, JSON.stringify(later.rows.map((r) => r.gstFor?.loanLast4)));
+  const noRefs = parseStatement([[
+    "HDFC Bank", "Domestic Transactions",
+    "22/08/2026| 00:00 IGST-RATE 18.0 C 34.74 l",
+  ]]);
+  await applyKeys(noRefs, SALT);
+  check("twins: without a reference, an ambiguous amount match is refused", resolveLineage(noRefs.rows, twinKnown).untraced.length === 1);
+
+  // Same-day GST printed apart from its instalment attaches in the parser (by reference).
+  const sameDay = parseStatement([[
+    "HDFC Bank", "Domestic Transactions",
+    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,00000144148470 (Ref# 09999999980922004049488) C 996.00 l",
+    "22/09/2026| 01:00 SWIGGY BANGALORE C 300.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,00000144148470 (Ref# 09999999980922004049496) C 167.00 l",
+    "22/09/2026| 00:00 IGST-VPS2723574016799-RATE 18.0 -23 (Ref# 09999999980922004049496) C 30.06 l",
+  ]]);
+  const sd = sameDay.rows.find((r) => r.kind === "emi")!;
+  check("parser: same-day GST citing the interest reference folds into the EMI row", sd.parts.length === 3 && sd.total === 1193.06 && !sameDay.rows.some((r) => r.untraced), JSON.stringify(sd.parts));
 
   // Password-protected copy
   let needed = false;

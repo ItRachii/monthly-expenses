@@ -9,6 +9,7 @@ import type { ParsedStatement, RowKind, StatementRow } from "@/lib/statements/ty
 import { importStatementAction } from "@/lib/actions/statements";
 import { saveStatementSummaryAction } from "@/lib/actions/cards";
 import type { SaveStatementInput } from "@/lib/cards";
+import { applyKeys, lineagePayload, lineageWarnings, resolveLineage, type KnownInstalment } from "@/lib/statements/lineage";
 import { getAddSetupAction } from "@/lib/actions/expenses";
 import { CategorySelect } from "@/components/CategorySelect";
 import { ChevronDownIcon, ReceiptIcon, XIcon } from "@/components/Icons";
@@ -45,7 +46,17 @@ function dayLabel(iso: string): string {
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" });
 }
 
-export function StatementImport({ contexts }: { contexts: Opt[] }) {
+export function StatementImport({
+  contexts,
+  loanSalt,
+  known,
+}: {
+  contexts: Opt[];
+  /** Per-user salt for keying loan numbers and references in the browser. */
+  loanSalt: string;
+  /** EMI instalments on record, to trace GST charges billed later. */
+  known: KnownInstalment[];
+}) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("pick");
   const [file, setFile] = useState<File | null>(null);
@@ -86,6 +97,10 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
     try {
       const pages = await readPdfLines(f, pw || undefined);
       const p = parseStatement(pages, { filename: f.name });
+      // Loan numbers and references become keyed hashes here; the digits
+      // are forgotten before anything is shown or sent.
+      await applyKeys(p, loanSalt);
+      p.warnings.push(...lineageWarnings(resolveLineage(p.rows, known)));
       setSummarySaved(false);
       setParsed(p);
       setSelected(new Set(p.rows.filter((r) => !r.credit).map((r) => r.id)));
@@ -157,11 +172,13 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
         }
       : null;
 
+  const lineage = parsed ? lineagePayload(parsed.rows, parsed.period) : null;
+
   function saveSummary() {
     if (!summaryInput) return;
     setError(null);
     startSaveSummary(async () => {
-      const res = await saveStatementSummaryAction(summaryInput);
+      const res = await saveStatementSummaryAction(summaryInput, lineage ?? undefined);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -199,6 +216,7 @@ export function StatementImport({ contexts }: { contexts: Opt[] }) {
       const res = await importStatementAction({
         ctx,
         summary: summaryInput && !summarySaved ? summaryInput : undefined,
+        lineage: lineage ?? undefined,
         rows: selectedRows.map((r) => ({
           date: r.date,
           item: r.description,
@@ -565,6 +583,17 @@ function RowView({
             {row.credit ? <span className="pill">credit</span> : null}
             {isAdded ? <span className="pill">added</span> : null}
             {row.installment ? <span className="pill">EMI {row.installment}</span> : null}
+            {row.loan?.last4 ? <span className="pill">loan …{row.loan.last4}</span> : null}
+            {row.gstFor ? (
+              <span className="pill" title={row.gstFor.matchedBy === "ref" ? "Cites the instalment's own reference" : "Matched by date and amount only"}>
+                {row.gstFor.matchedBy === "ref" ? "traced by reference" : "traced by amount"}
+              </span>
+            ) : null}
+            {row.untraced ? (
+              <span className="pill border-amber-400/40 text-amber-300" title="Cites a reference that is not on record">
+                untraced
+              </span>
+            ) : null}
             {row.foreign ? (
               <span className="pill">
                 {row.foreign.currency} {row.foreign.amount.toFixed(2)}
@@ -610,6 +639,26 @@ function RowView({
                     <div>
                       Effective rate with markup and GST: ₹{row.foreign.effectiveRate.toFixed(2)} per {row.foreign.currency}
                     </div>
+                  </div>
+                ) : null}
+                {row.kind === "emi" ? (
+                  <div className="mt-2 text-xs text-muted">
+                    Loan …{row.loan?.last4 ?? "?"}
+                    {row.loan?.instalmentNo ? ` · instalment #${row.loan.instalmentNo}` : ""}
+                    {row.parts.some((p) => p.kind === "gst")
+                      ? ""
+                      : ". GST on this interest is billed in a later statement and will be traced back here by its reference."}
+                  </div>
+                ) : null}
+                {row.gstFor ? (
+                  <div className="mt-2 text-xs text-muted">
+                    Belongs to instalment #{row.gstFor.instalmentNo ?? "?"} of loan …{row.gstFor.loanLast4 ?? "?"}, billed on {row.gstFor.date}
+                    {row.gstFor.matchedBy === "ref" ? ", matched by its reference." : ", matched by date and amount."}
+                  </div>
+                ) : null}
+                {row.untraced ? (
+                  <div className="mt-2 text-xs text-amber-300">
+                    Cites a reference that is not on record. Upload the statement that billed the charge it taxes.
                   </div>
                 ) : null}
               </div>
