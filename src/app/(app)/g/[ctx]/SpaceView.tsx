@@ -133,7 +133,7 @@ export function SpaceView({
           </div>
         ) : null}
 
-        {finance ? <FinanceCard f={financeFor(finance, rows, finance.currentMonth)} /> : null}
+        {finance ? <FinanceCard f={financeFor(finance, rows, finance.currentMonth)} incomeSet={finance.incomeSet} /> : null}
 
         <div>
           <AddExpenseButton ctx={ctx} lock className="btn-primary px-3 py-1.5 text-sm">

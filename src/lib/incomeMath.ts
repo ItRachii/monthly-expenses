@@ -25,6 +25,39 @@ export function incomeForMonth(history: IncomeEntry[], month: string): number | 
   return amount;
 }
 
+/**
+ * What was saved, as a whole-number percent of the month's income: 85 means
+ * 85% of income left over, -12 means 12% more spent than earned. Null
+ * without a positive income. Shown instead of the income itself, which only
+ * the profile page reveals; the whole number keeps the income from being
+ * worked back out exactly from the amount spent.
+ */
+export function savingsPercent(income: number | null, spent: number): number | null {
+  if (income === null || !(income > 0)) return null;
+  const pct = Math.round(((income - spent) / income) * 100);
+  return pct === 0 ? 0 : pct;
+}
+
+/** Savings percent per month, for the months given; months without income are left out. */
+export function savingsByMonth(
+  history: IncomeEntry[],
+  personal: { date: string; amount: number }[],
+  groupShares: Record<string, number>,
+  months: string[],
+): Record<string, number> {
+  const personalBy = new Map<string, number>();
+  for (const r of personal) {
+    const m = r.date.slice(0, 7);
+    personalBy.set(m, (personalBy.get(m) ?? 0) + r.amount);
+  }
+  const out: Record<string, number> = {};
+  for (const m of months) {
+    const pct = savingsPercent(incomeForMonth(history, m), round2((personalBy.get(m) ?? 0) + (groupShares[m] ?? 0)));
+    if (pct !== null) out[m] = pct;
+  }
+  return out;
+}
+
 export interface MonthFinance {
   income: number | null;
   /** Personal expenses in the month. */
