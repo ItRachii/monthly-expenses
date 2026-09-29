@@ -13,6 +13,7 @@
 // and the same reference key the same way in every statement, while the
 // numbers themselves never leave the page.
 
+import { formatINR } from "@/lib/format";
 import type { ParsedStatement, StatementRow } from "./types";
 
 /** An instalment on record for this user, from an earlier statement. */
@@ -182,7 +183,7 @@ export function resolveLineage(rows: StatementRow[], known: KnownInstalment[]): 
     const hit = known.find((k) => !taken.has(k) && k.refKey && k.refKey === r.taxRefKey);
     if (!hit) continue;
     if (!close(r.parts[0].amount, hit.interest * 0.18, 0.02)) {
-      amountMismatch.push(`₹${r.parts[0].amount.toFixed(2)} cites instalment #${hit.instalmentNo ?? "?"} of loan …${hit.loanLast4 ?? "?"} but is not 18% of its ₹${hit.interest.toFixed(2)} interest.`);
+      amountMismatch.push(`${formatINR(r.parts[0].amount)} cites instalment #${hit.instalmentNo ?? "?"} of loan …${hit.loanLast4 ?? "?"} but is not 18% of its ${formatINR(hit.interest)} interest.`);
     }
     link(r, hit, "ref");
   }

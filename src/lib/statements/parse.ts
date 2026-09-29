@@ -11,6 +11,7 @@
 // can run in the browser and in a Node test.
 
 import { categorize } from "@/lib/receipt/categorize";
+import { formatINR } from "@/lib/format";
 import { cleanDescription, isDateLed, isHeading, keepLine, makeRefTagger, redactLine, type RefTagging } from "./redact";
 import { readDate } from "./dates";
 import { cardIdentity, parseSummary } from "./summary";
@@ -542,7 +543,7 @@ export function assembleStatement(a: AssembleInput): ParsedStatement {
     const read = round2(rows.flatMap((r) => r.parts).filter((x) => x.kind === "gst").reduce((sum, x) => sum + x.amount, 0));
     redactedLines.push(`## gst: statement says ${gstBilled.toFixed(2)}, lines read add up to ${read.toFixed(2)}`);
     if (Math.abs(read - gstBilled) > 0.01)
-      warnings.push(`The statement's GST summary says ₹${gstBilled.toFixed(2)} of GST was billed, but the GST lines read add up to ₹${read.toFixed(2)}. A line may have been missed.`);
+      warnings.push(`The statement's GST summary says ${formatINR(gstBilled)} of GST was billed, but the GST lines read add up to ${formatINR(read)}. A line may have been missed.`);
   }
   redactedLines.push(`## card: ${identity ? `last4 from ${identity.source}${identity.product ? `, ${identity.product}` : ""}` : "not found"}`);
   if (!summary) warnings.push("No summary figures (dues, limits, due date) were found, so nothing can be saved for the card.");

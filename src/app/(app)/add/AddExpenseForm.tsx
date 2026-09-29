@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
 import { enqueueExpense } from "@/lib/offlineQueue";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
-import { todayISO } from "@/lib/format";
+import { formatINR, todayISO } from "@/lib/format";
 import { CategorySelect } from "@/components/CategorySelect";
 import {
   SplitShares,
@@ -108,8 +108,8 @@ export function AddExpenseForm({
         }
         setMessage({
           ok: true,
-          text: `Saved offline: ${input.item} — ₹${amt.toFixed(2)}`,
-          info: "You're offline — this expense is stored on this device and will sync automatically when you're back online.",
+          text: `Saved offline: ${input.item}, ${formatINR(amt)}`,
+          info: "You're offline. This expense is stored on this device and will sync automatically when you're back online.",
         });
         setItem("");
         setAmount("");
@@ -117,7 +117,7 @@ export function AddExpenseForm({
       } else {
         setMessage({
           ok: false,
-          text: "You're offline and local storage is unavailable — this expense could not be saved.",
+          text: "You're offline and local storage is unavailable, so this expense could not be saved.",
         });
       }
     }
@@ -148,11 +148,11 @@ export function AddExpenseForm({
         }
         let info: string | undefined;
         if (!isPersonal && split === SPLIT_EQUAL && memberCount > 0) {
-          info = `Each of the ${memberCount} members owes ₹${(amt / memberCount).toFixed(2)}`;
+          info = `Each of the ${memberCount} members owes ${formatINR(amt / memberCount)}`;
         }
         setMessage({
           ok: true,
-          text: `Expense saved: ${input.item} — ₹${amt.toFixed(2)}`,
+          text: `Expense saved: ${input.item}, ${formatINR(amt)}`,
           info,
         });
         setItem("");
@@ -201,6 +201,9 @@ export function AddExpenseForm({
       <input
         type="text"
         inputMode="decimal"
+        enterKeyHint="next"
+        // In the add-expense sheet the amount is what you came to type.
+        autoFocus={bare}
         className="input"
         value={amount}
         onChange={(e) => {
@@ -216,24 +219,26 @@ export function AddExpenseForm({
   return (
     <form onSubmit={submit} className={bare ? "space-y-4" : "card space-y-4"}>
       {isPersonal ? (
-        // Personal: flat 2x2 grid — Date, Category, Item, Amount.
+        // Personal: amount first, since it is the one field always typed;
+        // the date already defaults to today.
         <div className="grid gap-4 sm:grid-cols-2">
-          {dateField}
-          {categoryField}
-          {itemField}
           {amountField}
+          {itemField}
+          {categoryField}
+          {dateField}
         </div>
       ) : (
-        // Group: details on the left, amount + payer/split on the right.
+        // Group: what it was on the left (amount first), who paid and how
+        // it splits on the right.
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-4">
-            {dateField}
-            {categoryField}
+            {amountField}
             {itemField}
+            {categoryField}
           </div>
 
           <div className="space-y-4">
-            {amountField}
+            {dateField}
             <div>
               <label className="label">Who paid?</label>
               <select

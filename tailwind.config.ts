@@ -2,6 +2,9 @@ import type { Config } from "tailwindcss";
 
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
+  // hover: styles only where a mouse can hover. A tap fakes :hover on touch
+  // screens and it sticks until the next tap elsewhere.
+  future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
       colors: {

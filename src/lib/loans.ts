@@ -3,7 +3,7 @@
 
 import { createHmac } from "crypto";
 import { prisma } from "./prisma";
-import { formatDate } from "./format";
+import { formatDate, formatINR } from "./format";
 import { piiSecret } from "./piiCrypto";
 import { gstLineageName, monthLabel, type KnownInstalment, type LineagePayload } from "./statements/lineage";
 
@@ -107,7 +107,7 @@ export function pendingGstReason(p: { amount: number; date: Date }): string {
   const iso = formatDate(p.date);
   const day = new Date(p.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   return (
-    `This GST charge of ₹${p.amount.toFixed(2)} dated ${day} cites a reference that is not on record. ` +
+    `This GST charge of ${formatINR(p.amount)} dated ${day} cites a reference that is not on record. ` +
     `It is most likely GST on an EMI instalment billed in the ${monthLabel(iso.slice(0, 7))} statement. ` +
     `Upload that statement on the Statements page and this charge will be traced to its instalment by the reference and renamed.`
   );

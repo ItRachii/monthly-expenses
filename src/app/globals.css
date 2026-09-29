@@ -99,6 +99,17 @@
   }
 }
 
+/* Touch screens: iOS Safari zooms into any field under 16px when it gets
+   focus, and does not zoom back out. 16px here beats the text-sm/text-xs
+   utilities on .input and the small selects; mouse screens keep 14px. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Recharts: don't draw the focus outline box when a chart segment (e.g. a pie
    slice) is clicked. */
 .recharts-wrapper :focus,

@@ -2,8 +2,12 @@ export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+const inr = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Rupees with Indian grouping and paise: ₹1,23,456.78, and -₹50.00 when negative. */
 export function formatINR(n: number): string {
-  return `₹${(n ?? 0).toFixed(2)}`;
+  const v = round2(n ?? 0);
+  return `${v < 0 ? "-" : ""}₹${inr.format(Math.abs(v))}`;
 }
 
 // Prisma returns @db.Date values as UTC-midnight Date objects, so read the
