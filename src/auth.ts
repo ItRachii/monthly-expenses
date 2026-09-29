@@ -9,7 +9,7 @@ const nextAuth = NextAuth({
     // The only moment the app sees the address: store it encrypted on the
     // user's row, keyed by user id.
     async signIn({ user }) {
-      if (user.email) await upsertUserOnSignIn(user.email, user.name ?? "User");
+      if (user.email) await upsertUserOnSignIn(user.email, user.name ?? "User", user.image ?? null);
     },
   },
 });

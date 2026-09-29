@@ -27,6 +27,8 @@ export interface MemberDTO {
   displayName: string;
   role: string;
   joinedAt: string;
+  /** Google profile photo URL; null when none is stored yet. */
+  image?: string | null;
 }
 
 export interface PendingInviteDTO {
@@ -224,6 +226,7 @@ export async function getGroupMembers(groupId: string): Promise<MemberDTO[]> {
     return {
       email: m.email,
       displayName: display,
+      image: u?.image ?? null,
       role: m.role ?? "member",
       joinedAt: m.joinedAt.toISOString(),
     };
@@ -274,6 +277,7 @@ export async function getGroupParticipants(groupId: string): Promise<MemberDTO[]
     return {
       email: m.email,
       displayName: display,
+      image: u?.image ?? null,
       role: m.role,
       joinedAt: m.joinedAt.toISOString(),
     };

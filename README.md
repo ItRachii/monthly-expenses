@@ -113,6 +113,8 @@ savings figures, and the `app_users` columns that drive the income
 onboarding step and popup. Deploy the code only after it has run.
 `2026_09_cards.sql` adds the `cards` and `card_statements` tables that hold
 the statement summaries saved from the statement import.
+`2026_09_app_users_image.sql` adds `app_users.image`, the Google profile
+photo shown in place of member names; run it before deploying that code.
 
 ## Google OAuth setup
 

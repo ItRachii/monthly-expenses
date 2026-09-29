@@ -91,6 +91,10 @@ model AppUser {
   firstName  String  @map("first_name")
   lastName   String? @map("last_name")
   /**
+   * Google profile photo URL, refreshed on sign-in; shown in place of names.
+   */
+  image      String?
+  /**
    * Legacy nickname column; no longer read (see db/2026_09_app_users_last_name.sql).
    */
   username   String?

@@ -12,6 +12,7 @@ import { formatINR } from "@/lib/format";
 import { deleteExpenseAction } from "@/lib/actions/expenses";
 import { EditExpenseModal } from "../../log/ExpenseLog";
 import { ExportButton } from "./ExportDialog";
+import { PersonAvatar } from "@/components/Person";
 
 interface Opt {
   value: string;
@@ -282,7 +283,7 @@ export function ExpenseFeed({
                 <SortHeader label="Date" sortKey="date" sort={sort} onSort={onSort} className="w-28" />
                 <SortHeader label="Item" sortKey="item" sort={sort} onSort={onSort} />
                 <SortHeader label="Category" sortKey="category" sort={sort} onSort={onSort} className="w-32" />
-                {isPersonal ? null : <Th className="w-28">Paid by</Th>}
+                {isPersonal ? null : <Th className="w-20">Paid by</Th>}
                 {isPersonal ? null : <Th className="w-36">Status</Th>}
                 <SortHeader label="Amount" sortKey="amount" sort={sort} onSort={onSort} align="right" className="w-32" />
                 <Th align="center" className="w-24">
@@ -297,7 +298,7 @@ export function ExpenseFeed({
                   row={r}
                   checked={selected.has(r.id)}
                   isNew={fresh.has(r.id)}
-                  paidBy={isPersonal ? null : payerLabel(r.payer)}
+                  paidBy={isPersonal ? null : r.payer}
                   inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
                   pending={pending}
                   onToggle={() => toggle(r.id)}
@@ -395,6 +396,7 @@ function ExpenseTableRow({
   row: ExpenseDTO;
   checked: boolean;
   isNew: boolean;
+  /** Payer's member key; null in Personal. */
   paidBy: string | null;
   inv: ReturnType<typeof involvement> | null;
   pending: boolean;
@@ -426,7 +428,11 @@ function ExpenseTableRow({
         {row.flag && flagOpen ? <PendingFlagNote reason={row.flag} /> : null}
       </td>
       <td className="truncate text-muted">{row.category || "Uncategorised"}</td>
-      {paidBy !== null ? <td className="truncate text-muted">{paidBy}</td> : null}
+      {paidBy !== null ? (
+        <td>
+          <PersonAvatar id={paidBy} />
+        </td>
+      ) : null}
       {inv ? (
         <td>
           <StatusPill tone={inv.tone === "lent" ? "positive" : inv.tone === "borrowed" ? "negative" : "neutral"}>

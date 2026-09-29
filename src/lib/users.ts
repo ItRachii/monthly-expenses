@@ -16,7 +16,7 @@ function splitName(name: string) {
  * Called once per Google sign-in, the only time the app sees the address:
  * creates the user's row, or refreshes its encrypted copy of the address.
  */
-export async function upsertUserOnSignIn(email: string, name: string) {
+export async function upsertUserOnSignIn(email: string, name: string, image: string | null) {
   await ensurePiiMigrated();
   const id = await emailId(email);
   const emailEnc = encryptEmail(email);
@@ -31,9 +31,10 @@ export async function upsertUserOnSignIn(email: string, name: string) {
       systemRole: "",
       incomePrompt: "onboarding",
       lastSignInAt: now,
+      image,
     },
     // lastSignInAt brings back an income popup the user put off until "later".
-    update: { emailEnc, lastSignInAt: now },
+    update: { emailEnc, lastSignInAt: now, image },
   });
 }
 
@@ -74,6 +75,15 @@ export function displayNameFor(
     .filter(Boolean)
     .join(" ");
   return full || fallback;
+}
+
+/**
+ * Keeps the stored Google photo in step with the session's, so members who
+ * signed in before photos were stored show one without signing in again.
+ */
+export async function syncUserImage(email: string, current: string | null, image: string | null) {
+  if (!image || image === current) return;
+  await prisma.appUser.update({ where: { email }, data: { image } }).catch(() => {});
 }
 
 export async function getAppUser(email: string) {

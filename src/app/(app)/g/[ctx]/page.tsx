@@ -121,6 +121,7 @@ export default async function SpacePage({
       rows={rows}
       settlements={settlements}
       nameMap={r.wire.nameMap}
+      imageMap={r.wire.imageMap}
       members={r.wire.members.map((m) => ({ key: m.key, displayName: m.displayName }))}
       categories={categories}
       payerOptions={payerOptions}

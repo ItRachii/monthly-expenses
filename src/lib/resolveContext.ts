@@ -43,7 +43,7 @@ export async function resolveContext(
       context: { kind: "personal", email },
       options,
       members: [],
-      wire: buildPersonalWire(email, displayName),
+      wire: buildPersonalWire(email, displayName, appUser?.image ?? null),
       error,
     };
   }

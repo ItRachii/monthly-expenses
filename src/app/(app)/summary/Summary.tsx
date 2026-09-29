@@ -8,6 +8,7 @@ import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { MonthSelect, monthLabel } from "@/components/MonthSelect";
 import { tableDate } from "@/components/table/Table";
 import { DateBadge } from "@/components/DateBadge";
+import { PersonAvatar } from "@/components/Person";
 import { formatINR } from "@/lib/format";
 import { financeFor, type FinanceData } from "@/components/PersonalFinance";
 import {
@@ -44,14 +45,12 @@ export function Summary({
   rows,
   finance = null,
   isPersonal,
-  nameMap,
   members,
 }: {
   rows: ExpenseDTO[];
   /** Personal only: income and group shares, for the savings cards. */
   finance?: FinanceData | null;
   isPersonal: boolean;
-  nameMap: Record<string, string>;
   members: Member[];
 }) {
   // Personal also lists months with only group spending, and this month
@@ -102,9 +101,8 @@ export function Summary({
     !selectedCategory || palette.bucket(r.category) === selectedCategory;
   const detailRows = monthRows.filter(matches);
 
-  const payerLabel = (v: string) => nameMap[v] ?? v;
   const splitLabel = (v: string) =>
-    v === SPLIT_EQUAL ? "Equal Split" : v === SPLIT_CUSTOM ? "Unequal split" : nameMap[v] ?? v;
+    v === SPLIT_EQUAL ? "Equal Split" : v === SPLIT_CUSTOM ? "Unequal split" : <PersonAvatar id={v} />;
 
   return (
     <div className="space-y-5">
@@ -257,7 +255,9 @@ export function Summary({
                         <td>{categoryName(r.category)}</td>
                         <td>{r.item}</td>
                         <td className="whitespace-nowrap text-right tabular-nums">{formatINR(r.amount)}</td>
-                        <td>{payerLabel(r.payer)}</td>
+                        <td>
+                          <PersonAvatar id={r.payer} />
+                        </td>
                         <td>{splitLabel(r.split)}</td>
                       </tr>
                     ))}
