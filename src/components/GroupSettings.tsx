@@ -371,7 +371,7 @@ export function GroupSettingsOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
+      className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -380,7 +380,7 @@ export function GroupSettingsOverlay({
         role="dialog"
         aria-modal="true"
         aria-label="Group settings"
-        className="card max-h-[92vh] w-full space-y-4 overflow-y-auto rounded-b-none md:max-w-xl md:rounded-xl"
+        className="sheet card max-h-[92dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-b-none md:max-w-xl md:rounded-xl"
         style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between gap-3">

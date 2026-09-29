@@ -28,14 +28,14 @@ export function Sidebar({
 
   return (
     <aside
-      className={`hidden w-full shrink-0 border-b border-white/10 bg-surface/40 transition-[width] md:block md:border-b-0 md:border-r ${
+      className={`hidden w-full shrink-0 border-b border-white/10 bg-surface/40 md:block md:border-b-0 md:border-r ${
         collapsed ? "md:w-16" : "md:w-64"
       }`}
     >
       {/* Stretches to the full page height (flex parent), while this inner
           panel sticks to the viewport so the nav stays reachable on long pages. */}
       <div
-        className={`flex flex-col gap-6 p-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto ${
+        className={`flex flex-col gap-6 p-4 md:sticky md:top-0 md:h-dvh md:overflow-y-auto ${
           collapsed ? "md:items-center md:px-2" : ""
         }`}
       >

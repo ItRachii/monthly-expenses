@@ -45,7 +45,7 @@ export default async function LoginPage() {
   if (session?.user) redirect("/");
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4 sm:p-6">
+    <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background p-4 sm:p-6">
       {/* Ambient gradient glows behind the card. */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div className="absolute -left-40 -top-40 h-96 w-96 rounded-full bg-primary/25 blur-3xl" />

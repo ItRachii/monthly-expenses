@@ -95,12 +95,12 @@ export default async function HomePage() {
             savedPct < 0 ? (
               <>
                 Spent <span className="font-medium text-red-400">{-savedPct}% more</span> than your
-                income this month, including {formatINR(month.groups)} in groups
+                income this month{month.groups > 0 ? <>, including {formatINR(month.groups)} in groups</> : null}
               </>
             ) : (
               <>
                 Saved <span className="font-medium text-emerald-400">{savedPct}%</span> of your income
-                this month, after {formatINR(month.groups)} in groups
+                this month{month.groups > 0 ? <>, after {formatINR(month.groups)} in groups</> : null}
               </>
             )
           )}

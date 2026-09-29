@@ -81,7 +81,7 @@ export function OfflineSync({ ownerTag }: { ownerTag: string }) {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 md:bottom-6">
-      <div className="pointer-events-auto card w-full max-w-md space-y-2 px-4 py-3 text-sm shadow-xl">
+      <div className="toast-in pointer-events-auto card w-full max-w-md space-y-2 px-4 py-3 text-sm shadow-xl">
         {n > 0 ? (
           <div className="flex items-center gap-3">
             {syncing ? (

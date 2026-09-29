@@ -97,20 +97,19 @@ export function ProfileForm({
 
   return (
     <div className="space-y-4">
-      {/* Header: avatar + who you are, with the same Edit entry point as the
-          details card below. */}
+      {/* Header: avatar + who you are. Editing lives on the details card
+          below, next to the fields it changes. */}
       <section className="card flex items-center gap-4">
         <UserAvatar image={image} className="h-16 w-16 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-xl font-semibold">{displayName}</div>
           <div className="truncate text-sm text-muted">{email}</div>
         </div>
-        {!editing ? <EditButton onClick={startEdit} /> : null}
       </section>
 
       <form onSubmit={save} className="card space-y-5">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="section-title">Personal Information</h2>
+          <h2 className="section-title">Personal information</h2>
           {!editing ? <EditButton onClick={startEdit} /> : null}
         </div>
 
@@ -123,7 +122,7 @@ export function ProfileForm({
         ) : null}
 
         <dl className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
-          <Field label="First Name">
+          <Field label="First name">
             {editing ? (
               <input
                 className="input mt-1"
@@ -137,7 +136,7 @@ export function ProfileForm({
               firstName
             )}
           </Field>
-          <Field label="Last Name">
+          <Field label="Last name">
             {editing ? (
               <input
                 className="input mt-1"

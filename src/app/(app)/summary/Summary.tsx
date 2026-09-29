@@ -118,8 +118,9 @@ export function Summary({
         />
       </div>
 
-      {/* Quick summary cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Quick summary cards: two per row even on phones, so the charts are
+          not four full screens down. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatCard title="Total spent" tone="spend" {...series()} />
         {isPersonal ? (
           <>
@@ -140,11 +141,14 @@ export function Summary({
             />
             {finance ? (
               <>
-                <StatCard
-                  title="Your share in groups"
-                  tone="spend"
-                  {...finSeries((m) => fin(m)?.groups)}
-                />
+                {/* Only when there is group spending to show; a card of ₹0s is noise. */}
+                {[selectedMonth, ...spark].some((m) => (fin(m)?.groups ?? 0) > 0) ? (
+                  <StatCard
+                    title="Your share in groups"
+                    tone="spend"
+                    {...finSeries((m) => fin(m)?.groups)}
+                  />
+                ) : null}
                 {fin(selectedMonth)?.savingsPct != null ? (
                   <StatCard
                     title="Savings, % of income"
@@ -153,7 +157,7 @@ export function Summary({
                     {...finSeries((m) => fin(m)?.savingsPct)}
                   />
                 ) : finance.incomeSet ? null : (
-                  <Link href="/profile" className="card flex items-center text-sm text-primary hover:underline">
+                  <Link href="/profile" className="card col-span-2 flex items-center text-sm text-primary hover:underline lg:col-span-1">
                     Add your monthly income to see savings
                   </Link>
                 )}

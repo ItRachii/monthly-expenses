@@ -27,7 +27,7 @@ export function mainItems(statements: boolean): NavItem[] {
 
 // "Account" section under the main nav: where the user edits their profile.
 export const ACCOUNT_ITEMS: NavItem[] = [
-  { href: "/profile", label: "Edit Profile" },
+  { href: "/profile", label: "Profile" },
 ];
 
 export function NavLinks({

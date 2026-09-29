@@ -118,7 +118,7 @@ export function Tabs<T extends string>({
       <span
         aria-hidden
         className={`pointer-events-none absolute -bottom-px left-0 h-0.5 rounded-full bg-primary ${
-          animate ? "transition-[transform,width] duration-300 ease-out motion-reduce:transition-none" : ""
+          animate ? "transition-[transform,width] duration-200 ease-out motion-reduce:transition-none" : ""
         }`}
         style={bar ? { width: bar.width, transform: `translateX(${bar.left}px)` } : { width: 0, opacity: 0 }}
       />

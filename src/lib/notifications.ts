@@ -13,6 +13,8 @@ export type NotificationType =
 export interface NotificationDTO {
   id: number;
   groupId: string;
+  /** The group's current name, so each item says where it happened. */
+  groupName: string;
   type: string;
   message: string;
   isRead: boolean;
@@ -56,10 +58,12 @@ export async function getNotifications(
     where: { recipientEmail: email, isRead: false },
     orderBy: { createdAt: "desc" },
     take: limit,
+    include: { group: { select: { name: true } } },
   });
   return rows.map((n) => ({
     id: n.id,
     groupId: n.groupId,
+    groupName: n.group.name,
     type: n.type,
     message: n.message,
     isRead: n.isRead,

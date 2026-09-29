@@ -369,6 +369,9 @@ function ExpenseRow({
   };
 
   return (
+    // 700ms is on purpose: past the 300ms UI budget, but this is the slow
+    // fade-out of the "just added" highlight, not a reply to a tap. Faster
+    // and the eye misses which row was new.
     <div
       {...(isDesktop ? {} : pressable)}
       className={`flex items-center gap-3 px-3 py-2.5 transition-colors duration-700 ${
@@ -491,7 +494,7 @@ function ExpenseActions({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
+      className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
       onPointerDownCapture={() => {
         armed.current = true;
       }}
@@ -509,7 +512,7 @@ function ExpenseActions({
         role="dialog"
         aria-modal="true"
         aria-label={`Actions for ${expense.item}`}
-        className="card w-full space-y-1 rounded-b-none p-3 md:max-w-sm md:rounded-xl"
+        className="sheet card w-full space-y-1 rounded-b-none p-3 md:max-w-sm md:rounded-xl"
         style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
         <div className="px-3 pb-2 pt-1">

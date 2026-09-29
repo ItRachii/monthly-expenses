@@ -1,11 +1,11 @@
 import type { MetadataRoute } from "next";
 
-// Web App Manifest — makes the app installable (served at /manifest.webmanifest).
+// Web App Manifest: makes the app installable (served at /manifest.webmanifest).
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Ledger — Monthly Expenses",
+    name: "Ledger: monthly expenses",
     short_name: "Ledger",
-    description: "Track every expense, own every dollar.",
+    description: "Track every expense, own every rupee.",
     start_url: "/",
     scope: "/",
     display: "standalone",
