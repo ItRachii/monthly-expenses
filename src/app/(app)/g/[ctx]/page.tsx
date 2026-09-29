@@ -11,6 +11,8 @@ import { getUserGroups, touchGroupVisit } from "@/lib/groups";
 import { buildGroupView, type GroupView } from "@/lib/groupView";
 import { getGroupSharesByMonth, getIncomeHistory } from "@/lib/income";
 import { monthKey } from "@/lib/format";
+import { savingsByMonth } from "@/lib/incomeMath";
+import type { FinanceData } from "@/components/PersonalFinance";
 import { SpaceView, type SpaceTab } from "./SpaceView";
 
 // One screen per context ("personal" or a group id): hero + Expenses /
@@ -40,23 +42,31 @@ export default async function SpacePage({
     );
   }
 
-  const [rowsRaw, settlementsRaw, usedCategories, finance] = await Promise.all([
+  const [rowsRaw, settlementsRaw, usedCategories, incomeData] = await Promise.all([
     getExpenses(r.context, "desc"),
     getSettlements(r.context),
     getUsedCategories(r.context),
     // Personal only: income and your share of group spending, for savings.
     r.isPersonal
-      ? Promise.all([getIncomeHistory(user.email), getGroupSharesByMonth(user.email)]).then(
-          ([incomeHistory, groupShares]) => ({
-            incomeHistory,
-            groupShares,
-            currentMonth: monthKey(new Date()),
-          }),
-        )
+      ? Promise.all([getIncomeHistory(user.email), getGroupSharesByMonth(user.email)])
       : Promise.resolve(null),
     // Feeds the sidebar's recent groups.
     r.isPersonal ? Promise.resolve() : touchGroupVisit(user.email, r.ctxValue),
   ]);
+  // The income never reaches the browser: only whether it is set and what
+  // was saved each month as a percent of it.
+  let finance: FinanceData | null = null;
+  if (incomeData) {
+    const [incomeHistory, groupShares] = incomeData;
+    const currentMonth = monthKey(new Date());
+    const months = [...new Set([...rowsRaw.map((x) => x.date.slice(0, 7)), ...Object.keys(groupShares), currentMonth])];
+    finance = {
+      groupShares,
+      currentMonth,
+      incomeSet: incomeHistory.length > 0,
+      savingsPct: savingsByMonth(incomeHistory, rowsRaw, groupShares, months),
+    };
+  }
   const rows = maskExpenses(rowsRaw, r.wire);
   const settlements = maskSettlements(settlementsRaw, r.wire);
   const categories = mergeCategories(usedCategories);

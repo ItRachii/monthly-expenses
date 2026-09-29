@@ -148,6 +148,7 @@ export function StatCard({
   previous,
   tone,
   money = true,
+  unit,
 }: {
   title: string;
   value: number;
@@ -158,9 +159,18 @@ export function StatCard({
   /** "spend": up is red, down is green. "gain": the reverse. "neutral": direction only. */
   tone: "spend" | "gain" | "neutral";
   money?: boolean;
+  /** "percent": the value is a percent; the change is shown in percentage points. */
+  unit?: "percent";
 }) {
-  const [whole, frac] = (money ? inr.format(value) : String(value)).split(".");
-  const change = previous && previous > 0 ? ((value - previous) / previous) * 100 : null;
+  const percent = unit === "percent";
+  const [whole, frac] = (percent ? `${value}` : money ? inr.format(value) : String(value)).split(".");
+  const change = percent
+    ? previous === null
+      ? null
+      : value - previous
+    : previous && previous > 0
+      ? ((value - previous) / previous) * 100
+      : null;
   const up = change !== null && change > 0;
   const colour =
     change === null || Math.abs(change) < 0.05
@@ -177,9 +187,10 @@ export function StatCard({
       <div className="truncate text-sm text-muted">{title}</div>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 truncate text-2xl font-semibold tabular-nums">
-          {money ? "₹" : ""}
+          {money && !percent ? "₹" : ""}
           {whole}
           {frac ? <span className="text-sm font-medium text-muted">.{frac}</span> : null}
+          {percent ? "%" : ""}
         </div>
         <Sparkline values={history} colour={colour === MUTED ? "#4C72B0" : colour} />
       </div>
@@ -190,7 +201,7 @@ export function StatCard({
           <>
             <span className="flex items-center gap-1 font-semibold" style={{ color: colour }}>
               <Arrow className="h-4 w-4" />
-              {Math.abs(change).toFixed(1)}%
+              {percent ? `${Math.abs(change)} pts` : `${Math.abs(change).toFixed(1)}%`}
             </span>
             <span className="text-muted">vs last month</span>
           </>

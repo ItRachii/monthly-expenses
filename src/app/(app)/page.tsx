@@ -12,7 +12,7 @@ import { formatINR, monthKey } from "@/lib/format";
 import { PlusIcon } from "@/components/Icons";
 import { AddExpenseButton } from "@/components/AddExpense";
 import { getGroupSharesByMonth, getIncomeHistory } from "@/lib/income";
-import { incomeForMonth, monthFinance } from "@/lib/incomeMath";
+import { incomeForMonth, monthFinance, savingsPercent } from "@/lib/incomeMath";
 
 // Splitwise-style dashboard: overall position, one card per group with
 // per-member balances, a Personal card, and the Add-expense FAB.
@@ -32,6 +32,10 @@ export default async function HomePage() {
     personal.total,
     groupShares[thisMonth] ?? 0,
   );
+  // Savings as a percent of income; the income itself is shown only on the
+  // profile page, behind the eye button.
+  const savedPct = savingsPercent(month.income, month.spent);
+  const incomeSet = incomeHistory.length > 0;
 
   return (
     <div className="space-y-6 pb-24">
@@ -85,21 +89,20 @@ export default async function HomePage() {
           )}
         </div>
         <div className="mt-1 text-sm text-muted">
-          {month.savings === null ? (
+          {!incomeSet ? (
             "Add your monthly income on your profile to track savings"
-          ) : (
-            <>
-              Income {formatINR(month.income ?? 0)} · with {formatINR(month.groups)} in groups,{" "}
-              {month.savings < 0 ? (
-                <span className="font-medium text-red-400">
-                  overspent {formatINR(-month.savings)}
-                </span>
-              ) : (
-                <span className="font-medium text-emerald-400">
-                  saved {formatINR(month.savings)}
-                </span>
-              )}
-            </>
+          ) : savedPct === null ? null : (
+            savedPct < 0 ? (
+              <>
+                Spent <span className="font-medium text-red-400">{-savedPct}% more</span> than your
+                income this month, including {formatINR(month.groups)} in groups
+              </>
+            ) : (
+              <>
+                Saved <span className="font-medium text-emerald-400">{savedPct}%</span> of your income
+                this month, after {formatINR(month.groups)} in groups
+              </>
+            )
           )}
         </div>
       </Link>

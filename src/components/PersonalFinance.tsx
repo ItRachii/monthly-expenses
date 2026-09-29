@@ -2,50 +2,56 @@
 
 import { formatINR } from "@/lib/format";
 import { AddIncomeButton } from "@/components/IncomePrompt";
-import { incomeForMonth, monthFinance, type IncomeEntry, type MonthFinance } from "@/lib/incomeMath";
+import { round2 } from "@/lib/settlementMath";
 
-/** Income plus your share of group spending, for the Personal screen. */
+/**
+ * Savings for the Personal screen. The income itself is not here: it stays
+ * on the server and is shown only behind the eye button on the profile page.
+ */
 export interface FinanceData {
-  /** Income changes, oldest first. */
-  incomeHistory: IncomeEntry[];
   /** YYYY-MM -> your share of every group's expenses that month. */
   groupShares: Record<string, number>;
+  /** YYYY-MM -> what was saved as a whole-number percent of that month's income. */
+  savingsPct: Record<string, number>;
+  /** Whether a monthly income is set at all. */
+  incomeSet: boolean;
   /** Server's current month, YYYY-MM. */
   currentMonth: string;
 }
 
-/** One month's income, spend (personal + groups) and savings. */
+/** One month's spend (personal + groups) and savings as a percent of income. */
+export interface MonthView {
+  personal: number;
+  groups: number;
+  spent: number;
+  /** Null when no income applies to the month. */
+  savingsPct: number | null;
+}
+
 export function financeFor(
   finance: FinanceData,
   rows: { date: string; amount: number }[],
   month: string,
-): MonthFinance {
-  const personal = rows
-    .filter((r) => r.date.slice(0, 7) === month)
-    .reduce((s, r) => s + r.amount, 0);
-  return monthFinance(
-    incomeForMonth(finance.incomeHistory, month),
-    personal,
-    finance.groupShares[month] ?? 0,
-  );
+): MonthView {
+  const personal = round2(rows.filter((r) => r.date.slice(0, 7) === month).reduce((s, r) => s + r.amount, 0));
+  const groups = round2(finance.groupShares[month] ?? 0);
+  return { personal, groups, spent: round2(personal + groups), savingsPct: finance.savingsPct[month] ?? null };
 }
 
-/** Hero card: this month's income, total spend and what is left over. */
-export function FinanceCard({ f }: { f: MonthFinance }) {
-  const negative = f.savings !== null && f.savings < 0;
+/** Hero card: this month's spend and what share of income is left over. */
+export function FinanceCard({ f, incomeSet }: { f: MonthView; incomeSet: boolean }) {
+  const negative = f.savingsPct !== null && f.savingsPct < 0;
   return (
     <div className="card space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        <Figure label="Income">
-          {f.income !== null ? formatINR(f.income) : <span className="text-muted">Not set</span>}
-        </Figure>
+      <div className="grid grid-cols-2 gap-3">
         <Figure label="Spent">{formatINR(f.spent)}</Figure>
         <Figure label={negative ? "Overspent" : "Savings"}>
-          {f.savings === null ? (
+          {f.savingsPct === null ? (
             <span className="text-muted">-</span>
           ) : (
             <span className={negative ? "text-red-400" : "text-emerald-400"}>
-              {formatINR(Math.abs(f.savings))}
+              {Math.abs(f.savingsPct)}%
+              <span className="ml-1 text-xs font-normal text-muted">of income</span>
             </span>
           )}
         </Figure>
@@ -53,7 +59,7 @@ export function FinanceCard({ f }: { f: MonthFinance }) {
       <p className="text-xs text-muted">
         This month: {formatINR(f.personal)} personal + {formatINR(f.groups)} your share in groups.
       </p>
-      {f.income === null ? (
+      {!incomeSet ? (
         // Highlighted until set: the popup is skippable, this is the way back.
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3">
           <p className="text-sm text-amber-200">

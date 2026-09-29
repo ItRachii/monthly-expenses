@@ -58,7 +58,7 @@ export function Summary({
     const set = new Set(rows.map((r) => r.date.slice(0, 7)));
     if (finance) {
       for (const m of Object.keys(finance.groupShares)) set.add(m);
-      if (finance.incomeHistory.length > 0) set.add(finance.currentMonth);
+      if (finance.incomeSet) set.add(finance.currentMonth);
     }
     return Array.from(set).sort().reverse();
   }, [rows, finance]);
@@ -145,16 +145,14 @@ export function Summary({
                   tone="spend"
                   {...finSeries((m) => fin(m)?.groups)}
                 />
-                {fin(selectedMonth)?.income != null ? (
-                  <>
-                    <StatCard title="Income" tone="neutral" {...finSeries((m) => fin(m)?.income)} />
-                    <StatCard
-                      title="Savings"
-                      tone="gain"
-                      {...finSeries((m) => fin(m)?.savings)}
-                    />
-                  </>
-                ) : (
+                {fin(selectedMonth)?.savingsPct != null ? (
+                  <StatCard
+                    title="Savings, % of income"
+                    tone="gain"
+                    unit="percent"
+                    {...finSeries((m) => fin(m)?.savingsPct)}
+                  />
+                ) : finance.incomeSet ? null : (
                   <Link href="/profile" className="card flex items-center text-sm text-primary hover:underline">
                     Add your monthly income to see savings
                   </Link>
