@@ -12,7 +12,7 @@ export default async function GroupsPage() {
 
   return (
     <div className="space-y-6">
-      <h1>👥 Groups</h1>
+      <h1>Groups</h1>
       {pending.length > 0 ? <PendingInvites invites={pending} /> : null}
       <GroupsManager
         groups={groups.map((g) => ({

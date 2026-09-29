@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { WifiOffIcon } from "@/components/Icons";
 
 export const metadata: Metadata = { title: "Offline — Ledger" };
 
@@ -6,7 +7,7 @@ export const metadata: Metadata = { title: "Offline — Ledger" };
 export default function OfflinePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
-      <div className="text-5xl">📡</div>
+      <WifiOffIcon className="h-12 w-12 text-muted" />
       <h1 className="text-2xl font-bold">You&apos;re offline</h1>
       <p className="max-w-sm text-muted">
         This page hasn&apos;t been loaded on this device yet. Pages you&apos;ve

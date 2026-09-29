@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { doSignIn } from "@/lib/actions/auth";
+import { WalletIcon } from "@/components/Icons";
 
 export const dynamic = "force-dynamic";
 
@@ -121,8 +122,8 @@ export default async function LoginPage() {
                   strokeWidth="2.5"
                 />
               </svg>
-              <div className="absolute inset-0 flex items-center justify-center text-[7rem] leading-none">
-                🧑‍💻
+              <div className="absolute inset-0 flex items-center justify-center">
+                <WalletIcon className="h-28 w-28 text-primary-light drop-shadow-[0_0_24px_rgba(143,176,230,0.45)]" />
               </div>
             </div>
 

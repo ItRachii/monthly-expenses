@@ -3,14 +3,25 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { NotificationDTO } from "@/lib/notifications";
+import { AddCircleIcon, PaymentsIcon, PencilIcon, TrashIcon } from "@/components/Icons";
+import { NotificationsIcon } from "@/components/NavIcons";
 import { markAllReadAction, markReadAction } from "@/lib/actions/notifications";
 
-const ICONS: Record<string, string> = {
-  expense_added: "➕",
-  expense_deleted: "🗑",
-  settlement_recorded: "💰",
-  group_renamed: "✏️",
+const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  expense_added: AddCircleIcon,
+  expense_deleted: TrashIcon,
+  settlement_recorded: PaymentsIcon,
+  group_renamed: PencilIcon,
 };
+
+function TypeIcon({ type }: { type: string }) {
+  const Icon = ICONS[type] ?? NotificationsIcon;
+  return (
+    <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/15 text-primary-light">
+      <Icon className="h-5 w-5" />
+    </span>
+  );
+}
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -74,9 +85,7 @@ export function NotificationList({
             title="Mark as read"
             className="card flex w-full items-start gap-3 border-primary/30 bg-primary/5 text-left transition hover:bg-primary/10"
           >
-            <span className="text-lg" aria-hidden>
-              {ICONS[n.type] ?? "🔔"}
-            </span>
+            <TypeIcon type={n.type} />
             <div className="flex-1">
               <div className="text-sm text-ink">{n.message}</div>
               <div className="mt-0.5 text-xs text-muted">{timeAgo(n.createdAt)}</div>

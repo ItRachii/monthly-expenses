@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, XIcon } from "@/components/Icons";
+import { CheckIcon, MailIcon, XIcon } from "@/components/Icons";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { respondInviteAction } from "@/lib/actions/groups";
@@ -21,8 +21,8 @@ export function PendingInvites({ invites }: { invites: PendingInviteDTO[] }) {
 
   return (
     <div className="space-y-3">
-      <h2 className="section-title">
-        📬 Pending Invites ({invites.length})
+      <h2 className="section-title flex items-center gap-2">
+        <MailIcon className="h-5 w-5 text-primary-light" /> Pending Invites ({invites.length})
       </h2>
       {invites.map((inv) => (
         <div

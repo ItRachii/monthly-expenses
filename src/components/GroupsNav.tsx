@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useState } from "react";
-import { NAV_ICONS } from "./NavIcons";
+import { GroupsIcon } from "./NavIcons";
 import { MinusIcon, PlusIcon } from "./Icons";
 import type { SidebarGroup } from "@/lib/groups";
 
@@ -82,7 +82,6 @@ export function GroupsNav({ groups, collapsed }: { groups: SidebarGroup[]; colla
   const more = groups.length - shown.length;
   const totalUnread = groups.reduce((s, g) => s + g.unread, 0);
   const onList = pathname === "/groups";
-  const Icon = NAV_ICONS["/groups"];
   const href = (id: string) => `/g/${encodeURIComponent(id)}`;
 
   if (collapsed) {
@@ -95,8 +94,8 @@ export function GroupsNav({ groups, collapsed }: { groups: SidebarGroup[]; colla
             onList ? "bg-primary/15 text-ink" : "text-muted hover:bg-white/5 hover:text-ink"
           }`}
         >
-          <span aria-hidden className="relative text-4xl leading-none">
-            {Icon ? <Icon /> : "👥"}
+          <span aria-hidden className={`relative text-2xl leading-none ${onList || active ? "text-primary-light" : ""}`}>
+            <GroupsIcon filled={onList || !!active} />
           </span>
           <span className="sr-only">Groups</span>
         </Link>
@@ -144,8 +143,8 @@ export function GroupsNav({ groups, collapsed }: { groups: SidebarGroup[]; colla
             onList ? "font-semibold text-ink" : active ? "text-ink" : "text-muted hover:text-ink"
           }`}
         >
-          <span aria-hidden className="text-lg leading-none">
-            {Icon ? <Icon /> : "👥"}
+          <span aria-hidden className={`text-lg leading-none ${onList || active ? "text-primary-light" : ""}`}>
+            <GroupsIcon filled={onList || !!active} />
           </span>
           <span className="flex-1">Groups</span>
         </Link>
