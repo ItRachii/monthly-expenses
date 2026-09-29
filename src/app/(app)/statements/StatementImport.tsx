@@ -18,7 +18,7 @@ import { Tabs } from "@/components/Tabs";
 import { FileDropzone } from "@/components/FileDropzone";
 import { EyeIcon, LabelIcon, ReceiptIcon, XIcon } from "@/components/Icons";
 import { RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
-import { mergeCategories } from "@/lib/constants";
+import { findCategory, formatCategory, mergeCategories } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 
 interface Opt {
@@ -29,6 +29,9 @@ interface Opt {
 type Phase = "pick" | "reading" | "review";
 
 type TabId = "all" | RowKind;
+
+/** The bulk category menu's "+ Add new category…" entry. */
+const NEW_CATEGORY = "__new_category__";
 type SortKey = "date" | "description" | "amount";
 
 const TABS: { id: TabId; label: string; shortLabel?: string }[] = [
@@ -84,6 +87,9 @@ export function StatementImport({
   const [error, setError] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ParsedStatement | null>(null);
   const [tab, setTab] = useState<TabId>("all");
+  // The "new category" dialog: the rows it will apply to (the selection, or
+  // one row from its own category cell), or null when closed.
+  const [naming, setNaming] = useState<string[] | null>(null);
   const [query, setQuery] = useState("");
   const [sort, onSort] = useSort<SortKey>({ key: "date", dir: "asc" }, ["amount"]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -247,6 +253,10 @@ export function StatementImport({
   /** Bulk action: one category for every selected row. */
   function categoriseSelected(c: string) {
     if (!c) return;
+    if (c === NEW_CATEGORY) {
+      setNaming(selectedRows.map((r) => r.id));
+      return;
+    }
     setCategories((m) => ({ ...m, ...Object.fromEntries(selectedRows.map((r) => [r.id, c])) }));
   }
 
@@ -479,6 +489,7 @@ export function StatementImport({
                       {c}
                     </option>
                   ))}
+                  <option value={NEW_CATEGORY}>+ Add new category…</option>
                 </select>
               </label>
               <button type="button" className="chip-btn" disabled={selectedRows.length === 0} onClick={() => setSelected(new Set())}>
@@ -487,6 +498,18 @@ export function StatementImport({
               </button>
               <SearchBox value={query} onChange={setQuery} placeholder="Search rows" className="w-full sm:ml-auto sm:w-64" />
             </div>
+
+            {naming ? (
+              <NewCategoryDialog
+                categories={allCategories}
+                count={naming.length}
+                onApply={(c) => {
+                  setCategories((m) => ({ ...m, ...Object.fromEntries(naming.map((id) => [id, c])) }));
+                  setNaming(null);
+                }}
+                onClose={() => setNaming(null)}
+              />
+            ) : null}
 
             {tab === "emi" && parsed.loans.length > 0 ? (
               <div className="rounded-lg border border-ink/10 p-3 text-sm" data-loans>
@@ -550,6 +573,7 @@ export function StatementImport({
                           onToggleOpen={() => setExpanded((x) => (x === r.id ? null : r.id))}
                           onToggleChecked={() => toggle(r.id)}
                           onCategory={(c) => setCategories((m) => ({ ...m, [r.id]: c }))}
+                          onNewCategory={() => setNaming([r.id])}
                         />
                       ))}
                     </tbody>
@@ -675,6 +699,8 @@ interface RowProps {
   onToggleOpen: () => void;
   onToggleChecked: () => void;
   onCategory: (c: string) => void;
+  /** Opens the new-category dialog for this row (desktop table). */
+  onNewCategory?: () => void;
 }
 
 /** A row's state as a pill: added, a credit, untraced GST, or new. */
@@ -711,7 +737,7 @@ function Amount({ row }: { row: StatementRow }) {
   );
 }
 
-function RowView({ row, open, checked, isAdded, category, categories, onToggleOpen, onToggleChecked, onCategory }: RowProps) {
+function RowView({ row, open, checked, isAdded, category, categories, onToggleOpen, onToggleChecked, onCategory, onNewCategory }: RowProps) {
   const disabled = row.credit || isAdded;
   return (
     <>
@@ -737,7 +763,28 @@ function RowView({ row, open, checked, isAdded, category, categories, onToggleOp
           </div>
           <RowTags row={row} />
         </td>
-        <td className="truncate text-muted">{category}</td>
+        {/* The category is picked in place; "+ Add new category…" opens the
+            same dialog as the bulk action, for this row. Added rows are final
+            and credits are never imported, so those are plain text. */}
+        <td onClick={(e) => e.stopPropagation()}>
+          {disabled ? (
+            <span className="block truncate text-muted">{category}</span>
+          ) : (
+            <select
+              className="select py-1.5"
+              aria-label={`Category for ${row.description}`}
+              value={findCategory(categories, category) ?? category}
+              onChange={(e) => (e.target.value === NEW_CATEGORY ? onNewCategory?.() : onCategory(e.target.value))}
+            >
+              {(category && !findCategory(categories, category) ? [category, ...categories] : categories).map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+              <option value={NEW_CATEGORY}>+ Add new category…</option>
+            </select>
+          )}
+        </td>
         <td>{statusOf(row, isAdded)}</td>
         <td className="text-right">
           <Amount row={row} />
@@ -871,6 +918,83 @@ function RowDetails({
         {isAdded ? <div className="text-sm">{category}</div> : <CategorySelect categories={categories} value={category} onChange={onCategory} />}
         <div className="mt-2 text-xs text-muted">Date: {row.date}</div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Names a new category for the selected rows. Same rule as the row picker
+ * and the server: case, spacing and a plural "s" are ignored, so an
+ * existing category is offered instead of a near-duplicate.
+ */
+function NewCategoryDialog({
+  categories,
+  count,
+  onApply,
+  onClose,
+}: {
+  categories: string[];
+  count: number;
+  onApply: (category: string) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const existing = findCategory(categories, name);
+  const formatted = formatCategory(name);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-category-title"
+        className="modal-pop card w-full max-w-sm space-y-4"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const c = existing ?? formatted;
+          if (c) onApply(c);
+        }}
+      >
+        <h2 id="new-category-title" className="section-title">
+          New category
+        </h2>
+        <div className="space-y-1">
+          <label className="label" htmlFor="new-category-name">
+            Name
+          </label>
+          <input
+            id="new-category-name"
+            className="input"
+            autoFocus
+            maxLength={50}
+            placeholder="e.g. Pet care"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          {existing ? (
+            <p className="text-xs text-warning">&ldquo;{existing}&rdquo; is already present; it will be used.</p>
+          ) : formatted && formatted !== name.trim() ? (
+            <p className="text-xs text-muted">Will be saved as &ldquo;{formatted}&rdquo;.</p>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-primary" disabled={!formatted}>
+            Apply to {count} row{count === 1 ? "" : "s"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
