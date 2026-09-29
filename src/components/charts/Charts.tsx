@@ -365,7 +365,7 @@ export function MonthlyTrend({
       action={
         <select
           aria-label="Time range"
-          className="select w-auto py-1.5 text-xs"
+          className="select w-auto py-2 text-xs"
           value={range}
           onChange={(e) => setRange(e.target.value as typeof range)}
         >
@@ -460,7 +460,7 @@ export function MonthlyTrend({
       </ul>
 
       <details className="text-sm">
-        <summary className="cursor-pointer select-none text-xs text-muted hover:text-ink">View as table</summary>
+        <summary className="-my-2 inline-flex min-h-11 cursor-pointer select-none items-center py-2 text-xs text-muted hover:text-ink">View as table</summary>
         <div className="mt-2 overflow-x-auto">
           <table className="data-table">
             <thead>

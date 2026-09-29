@@ -121,7 +121,7 @@ export function SpaceView({
             <div className="card space-y-2">
               <button
                 type="button"
-                className="flex w-full items-center justify-between gap-2 text-left"
+                className="-my-2 flex min-h-11 w-full items-center justify-between gap-2 py-2 text-left"
                 aria-expanded={linesOpen}
                 onClick={() => setLinesOpen((v) => !v)}
               >

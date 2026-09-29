@@ -19,6 +19,13 @@ export function monthKey(d: Date | string): string {
   return `${y}-${m}`;
 }
 
+/** "2026-09" to "Sep 2026". */
+export function monthLabel(key: string): string {
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const [y, m] = key.split("-").map(Number);
+  return m >= 1 && m <= 12 ? `${MONTHS[m - 1]} ${y}` : key;
+}
+
 export function formatDate(d: Date | string): string {
   const dt = typeof d === "string" ? new Date(d) : d;
   const y = dt.getUTCFullYear();

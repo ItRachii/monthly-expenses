@@ -8,7 +8,7 @@ import {
   getPersonalMonthSpend,
 } from "@/lib/balances";
 import { SETTLE_EPS } from "@/lib/settlementMath";
-import { formatINR, monthKey } from "@/lib/format";
+import { formatINR, monthKey, monthLabel } from "@/lib/format";
 import { AddExpenseButton } from "@/components/AddExpense";
 import { getGroupSharesByMonth, getIncomeHistory } from "@/lib/income";
 import { incomeForMonth, monthFinance, savingsPercent } from "@/lib/incomeMath";
@@ -66,7 +66,7 @@ export default async function HomePage() {
       >
         <div className="flex items-baseline justify-between gap-2">
           <span className="font-semibold">Personal expenses</span>
-          <span className="shrink-0 text-xs text-muted">{personal.month}</span>
+          <span className="shrink-0 text-xs text-muted">{monthLabel(personal.month)}</span>
         </div>
         <div className="mt-1 text-sm text-muted">
           {personal.count > 0 ? (

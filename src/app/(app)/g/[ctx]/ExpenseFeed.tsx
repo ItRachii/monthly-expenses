@@ -734,13 +734,13 @@ function ExpenseRow({
           {flag ? <PendingFlagButton reason={flag} open={flagOpen} onToggle={() => setFlagOpen((o) => !o)} /> : null}
         </div>
         {flag && flagOpen ? <PendingFlagNote reason={flag} /> : null}
-        <div className="mt-0.5 truncate text-xs text-muted">
-          <span className="md:hidden">
-            {paidBy ? `${paidBy} paid ` : null}
-            <span className="text-sm font-semibold text-ink">{formatINR(amount)}</span>
-            {" · "}
-          </span>
-          {category}
+        {/* Phones: the payer and the category each shorten on their own; the
+            amount, the one figure that must stay readable, never does. */}
+        <div className="mt-0.5 flex min-w-0 items-baseline gap-1 text-xs text-muted">
+          {paidBy ? <span className="min-w-0 truncate md:hidden">{paidBy} paid</span> : null}
+          <span className="shrink-0 text-sm font-semibold text-ink md:hidden">{formatINR(amount)}</span>
+          <span className="shrink-0 md:hidden">·</span>
+          <span className="min-w-0 truncate">{category}</span>
         </div>
       </div>
       {/* Desktop only: who paid and the full amount as its own column. */}

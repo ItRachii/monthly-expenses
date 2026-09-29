@@ -190,7 +190,7 @@ export function ProfileForm({
                   )}
                   <button
                     type="button"
-                    className="icon-btn h-8 w-8 shrink-0"
+                    className="icon-btn -my-1.5 shrink-0"
                     onClick={toggleIncome}
                     disabled={revealing}
                     aria-pressed={revealed !== null}

@@ -18,7 +18,7 @@ export function MobileTopBar({
         <Link
           href="/notifications"
           aria-label="Notifications"
-          className="relative grid h-10 w-10 place-items-center rounded-lg text-2xl leading-none transition hover:bg-ink/5"
+          className="relative grid h-11 w-11 place-items-center rounded-lg text-2xl leading-none transition hover:bg-ink/5"
         >
           <span aria-hidden>
             <NotificationsIcon />
@@ -32,7 +32,7 @@ export function MobileTopBar({
         <Link
           href="/profile"
           aria-label="Profile"
-          className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="-m-1 shrink-0 rounded-full p-1 outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <UserAvatar image={image} className="h-9 w-9" />
         </Link>

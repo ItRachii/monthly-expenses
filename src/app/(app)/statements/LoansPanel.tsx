@@ -86,7 +86,7 @@ function LoanBlock({ loan }: { loan: LoanView }) {
           Total is what the instalment really cost once its GST arrived. A pending GST usually turns up in the next statement.
         </p>
         {!confirm ? (
-          <button type="button" className="btn-danger px-3 py-1 text-xs" onClick={() => setConfirm(true)}>
+          <button type="button" className="btn-danger px-3 py-2.5 text-xs" onClick={() => setConfirm(true)}>
             Forget this loan
           </button>
         ) : (
