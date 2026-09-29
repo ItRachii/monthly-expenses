@@ -7,12 +7,12 @@ import { DateBadge } from "@/components/DateBadge";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
-import { SETTLE_EPS, round2, shareFor } from "@/lib/settlementMath";
-import { formatINR } from "@/lib/format";
+import { SETTLE_EPS, paidFor, payersOf, round2, shareFor } from "@/lib/settlementMath";
+import { formatINR, listNames } from "@/lib/format";
 import { deleteExpenseAction } from "@/lib/actions/expenses";
 import { EditExpenseModal } from "../../log/ExpenseLog";
 import { ExportButton } from "./ExportDialog";
-import { PersonAvatar } from "@/components/Person";
+import { PersonAvatar, PersonAvatars } from "@/components/Person";
 
 interface Opt {
   value: string;
@@ -30,17 +30,15 @@ function involvement(
   selfKey: string,
   memberCount: number,
 ): { label: string; amount: number | null; tone: "lent" | "borrowed" | "muted" } {
-  // "you paid" with nothing lent means the whole cost was yours: no balance.
+  // What you put in against your share. Paying exactly your share (the whole
+  // cost when it was all yours) leaves no balance either way.
   const share = shareFor(r, selfKey, memberCount);
-  if (r.payer === selfKey) {
-    const lent = round2(r.amount - share);
-    return lent > SETTLE_EPS
-      ? { label: "you lent", amount: lent, tone: "lent" }
-      : { label: "no balance", amount: null, tone: "muted" };
-  }
-  const borrowed = round2(share);
-  return borrowed > SETTLE_EPS
-    ? { label: "you borrowed", amount: borrowed, tone: "borrowed" }
+  const paid = paidFor(r, selfKey);
+  const net = round2(paid - share);
+  if (net > SETTLE_EPS) return { label: "you lent", amount: net, tone: "lent" };
+  if (net < -SETTLE_EPS) return { label: "you borrowed", amount: -net, tone: "borrowed" };
+  return paid > 0 || share > 0
+    ? { label: "no balance", amount: null, tone: "muted" }
     : { label: "not involved", amount: null, tone: "muted" };
 }
 
@@ -111,7 +109,7 @@ export function ExpenseFeed({
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const onlyFlagged = flaggedOnly && flaggedCount > 0;
 
-  const payerLabel = (v: string) => nameMap[v] ?? v;
+  const payerLabel = (r: ExpenseDTO) => listNames(payersOf(r).map((k) => nameMap[k] ?? k));
 
   // Column filters, from the table headings: one category, one payer
   // (groups only), a date range. A range replaces the month picker's scope,
@@ -147,7 +145,7 @@ export function ExpenseFeed({
       (r) =>
         (month === ALL || r.date.startsWith(month)) &&
         (!onlyFlagged || Boolean(r.flag)) &&
-        (!payer || r.payer === payer) &&
+        (!payer || payersOf(r).includes(payer)) &&
         (!category || categoryOf(r) === category) &&
         (!range?.from || r.date >= range.from) &&
         (!range?.to || r.date <= range.to) &&
@@ -155,7 +153,7 @@ export function ExpenseFeed({
           r.item.toLowerCase().includes(q) ||
           (r.category || "").toLowerCase().includes(q) ||
           (r.receiptMerchant ?? "").toLowerCase().includes(q) ||
-          (!isPersonal && payerLabel(r.payer).toLowerCase().includes(q))),
+          (!isPersonal && payerLabel(r).toLowerCase().includes(q))),
     );
     return sortRows(inTab, sort, (r, k) =>
       k === "date" ? r.date : k === "amount" ? r.amount : k === "category" ? r.category || "Uncategorised" : r.item,
@@ -305,7 +303,7 @@ export function ExpenseFeed({
           <span className="text-muted">Filtered by</span>
           {range ? <FilterChip label={`Date: ${rangeLabel(range)}`} onClear={() => pickRange(null)} /> : null}
           {category ? <FilterChip label={`Category: ${category}`} onClear={() => pickCategory(null)} /> : null}
-          {payer ? <FilterChip label={`Paid by: ${payerLabel(payer)}`} onClear={() => pickPayer(null)} /> : null}
+          {payer ? <FilterChip label={`Paid by: ${nameMap[payer] ?? payer}`} onClear={() => pickPayer(null)} /> : null}
           {filterCount > 1 ? (
             <button
               type="button"
@@ -386,7 +384,7 @@ export function ExpenseFeed({
                   row={r}
                   checked={selected.has(r.id)}
                   isNew={fresh.has(r.id)}
-                  paidBy={isPersonal ? null : r.payer}
+                  paidBy={isPersonal ? null : payersOf(r)}
                   inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
                   pending={pending}
                   onToggle={() => toggle(r.id)}
@@ -411,7 +409,7 @@ export function ExpenseFeed({
                   flag={r.flag}
                   date={r.date}
                   amount={r.amount}
-                  paidBy={isPersonal ? null : payerLabel(r.payer)}
+                  paidBy={isPersonal ? null : payerLabel(r)}
                   category={r.category || "Uncategorised"}
                   inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
                   isDesktop={false}
@@ -484,8 +482,8 @@ function ExpenseTableRow({
   row: ExpenseDTO;
   checked: boolean;
   isNew: boolean;
-  /** Payer's member key; null in Personal. */
-  paidBy: string | null;
+  /** The payers' member keys; null in Personal. */
+  paidBy: string[] | null;
   inv: ReturnType<typeof involvement> | null;
   pending: boolean;
   onToggle: () => void;
@@ -518,7 +516,7 @@ function ExpenseTableRow({
       <td className="truncate text-muted">{row.category || "Uncategorised"}</td>
       {paidBy !== null ? (
         <td>
-          <PersonAvatar id={paidBy} />
+          <PersonAvatars ids={paidBy} />
         </td>
       ) : null}
       {inv ? (
@@ -637,7 +635,7 @@ function ExpenseRow({
   /** ISO date, shown as the month over the day. */
   date: string;
   amount: number;
-  /** Payer's display name; null in Personal, where there is only you. */
+  /** The payers' names ("Golu and Peehu"); null in Personal, where there is only you. */
   paidBy: string | null;
   category: string;
   inv: ReturnType<typeof involvement> | null;

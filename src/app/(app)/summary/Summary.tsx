@@ -8,7 +8,8 @@ import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { MonthSelect, monthLabel } from "@/components/MonthSelect";
 import { tableDate } from "@/components/table/Table";
 import { DateBadge } from "@/components/DateBadge";
-import { PersonAvatar } from "@/components/Person";
+import { PersonAvatar, PersonAvatars } from "@/components/Person";
+import { paidFor, payersOf } from "@/lib/settlementMath";
 import { formatINR } from "@/lib/format";
 import { financeFor, type FinanceData } from "@/components/PersonalFinance";
 import {
@@ -79,12 +80,13 @@ export function Summary({
   // Per-month series for the cards: the six months up to the selected one.
   const spark = monthsUpTo(months, selectedMonth, 6);
   const prevMonth = months[months.indexOf(selectedMonth) + 1] ?? null;
-  const sumWhere = (m: string, pred: (r: ExpenseDTO) => boolean = () => true) =>
-    rows.filter((r) => r.date.slice(0, 7) === m && pred(r)).reduce((s, r) => s + r.amount, 0);
-  const series = (pred?: (r: ExpenseDTO) => boolean) => ({
-    value: sumWhere(selectedMonth, pred),
-    history: spark.map((m) => sumWhere(m, pred)),
-    previous: prevMonth ? sumWhere(prevMonth, pred) : null,
+  // Sums a per-row value over a month: the amount, or one member's part of it.
+  const sumWhere = (m: string, value: (r: ExpenseDTO) => number = (r) => r.amount) =>
+    rows.filter((r) => r.date.slice(0, 7) === m).reduce((s, r) => s + value(r), 0);
+  const series = (value?: (r: ExpenseDTO) => number) => ({
+    value: sumWhere(selectedMonth, value),
+    history: spark.map((m) => sumWhere(m, value)),
+    previous: prevMonth ? sumWhere(prevMonth, value) : null,
   });
   const countIn = (m: string) => rows.filter((r) => r.date.slice(0, 7) === m).length;
   const dailyAvg = (m: string) => sumWhere(m) / daysIn(m);
@@ -170,7 +172,7 @@ export function Summary({
               key={m.key}
               title={`${m.displayName} paid`}
               tone="neutral"
-              {...series((r) => r.payer === m.key)}
+              {...series((r) => paidFor(r, m.key))}
             />
           ))
         )}
@@ -256,7 +258,7 @@ export function Summary({
                         <td>{r.item}</td>
                         <td className="whitespace-nowrap text-right tabular-nums">{formatINR(r.amount)}</td>
                         <td>
-                          <PersonAvatar id={r.payer} />
+                          <PersonAvatars ids={payersOf(r)} />
                         </td>
                         <td>{splitLabel(r.split)}</td>
                       </tr>

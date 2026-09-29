@@ -77,7 +77,7 @@ export async function getOutstandingTransfers(
   const [expenses, settlements] = await Promise.all([
     prisma.expense.findMany({
       where: { groupId, date: { gte: start, lt: end } },
-      select: { payer: true, split: true, amount: true, shares: true },
+      select: { payer: true, split: true, amount: true, shares: true, payers: true },
     }),
     prisma.settlement.findMany({
       where: { groupId, month },
@@ -87,7 +87,7 @@ export async function getOutstandingTransfers(
 
   const transfers = simplifyDebts(
     computeNets(
-      expenses.map((e) => ({ ...e, shares: parseShares(e.shares) })),
+      expenses.map((e) => ({ ...e, shares: parseShares(e.shares), payers: parseShares(e.payers) })),
       memberEmails,
     ),
   );

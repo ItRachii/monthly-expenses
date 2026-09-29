@@ -13,7 +13,7 @@ import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
 import { formatINR } from "@/lib/format";
-import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
+import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { MAX_AMOUNT, cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { SETTLE_EPS, round2, type Shares } from "@/lib/settlementMath";
 import type { MemberDTO } from "@/lib/groups";
@@ -60,18 +60,20 @@ function validateExpenseInput(input: {
 }
 
 /**
- * Resolves an unequal split sent as { wireKey: rupees } to { email: rupees }.
- * Every key must be a current participant, every amount a non-negative
- * number, and the shares must add up to the expense amount to the paisa.
+ * Resolves per-person amounts sent as { wireKey: rupees } to { email: rupees }:
+ * an unequal split ("owes") or several payers ("paid"). Every key must be a
+ * current participant, every amount a non-negative number, and the amounts
+ * must add up to the expense amount to the paisa.
  */
 function resolveShares(
   scope: string,
   participants: MemberDTO[],
   input: unknown,
   amount: number,
+  what: "owes" | "paid" = "owes",
 ): { shares: Shares } | { error: string } {
-  if (!input || typeof input !== "object" || Array.isArray(input))
-    return { error: "Enter how much each person owes." };
+  const empty = `Enter how much each person ${what}.`;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return { error: empty };
   const entries = Object.entries(input as Record<string, unknown>);
   if (entries.length > participants.length)
     return { error: "The split has more people than the group." };
@@ -87,12 +89,32 @@ function resolveShares(
     total += n;
     shares[email] = n;
   }
-  if (Object.keys(shares).length === 0) return { error: "Enter how much each person owes." };
+  if (Object.keys(shares).length === 0) return { error: empty };
   if (Math.abs(round2(total) - round2(amount)) > SETTLE_EPS)
     return {
-      error: `Shares add up to ${formatINR(round2(total))} but the expense is ${formatINR(amount)}.`,
+      error: `${what === "paid" ? "Payments" : "Shares"} add up to ${formatINR(round2(total))} but the expense is ${formatINR(amount)}.`,
     };
   return { shares };
+}
+
+/**
+ * The payer of a group expense: one participant, or several with what each
+ * put in. One name in the "several" map collapses to a plain single payer.
+ * An unknown single key falls back to `fallback`.
+ */
+function resolvePayer(
+  scope: string,
+  participants: MemberDTO[],
+  input: { payer: string; payers?: Record<string, number>; amount: number },
+  fallback: string,
+): { payer: string; payers: Shares | null } | { error: string } {
+  if (input.payer !== PAYER_MULTIPLE)
+    return { payer: emailForKey(scope, participants, input.payer) ?? fallback, payers: null };
+  const res = resolveShares(scope, participants, input.payers, input.amount, "paid");
+  if ("error" in res) return res;
+  const ids = Object.keys(res.shares);
+  if (ids.length === 1) return { payer: ids[0], payers: null };
+  return { payer: PAYER_MULTIPLE, payers: res.shares };
 }
 
 export async function addExpenseAction(input: {
@@ -101,9 +123,10 @@ export async function addExpenseAction(input: {
   category: string;
   item: string;
   amount: number;
-  payer: string; // wire participant key, resolved to an email server-side
+  payer: string; // wire participant key, or "multiple", resolved server-side
   split: string; // "equal", "custom" or a wire participant key
   shares?: Record<string, number>; // wire key -> rupees, when split = "custom"
+  payers?: Record<string, number>; // wire key -> rupees, when payer = "multiple"
 }): Promise<ActionResult> {
   const session = await auth();
   const email = session?.user?.email;
@@ -118,6 +141,7 @@ export async function addExpenseAction(input: {
   // Resolve payer/split server-side: clients only ever send opaque participant
   // keys, and anything invalid or stale falls back to a safe default.
   let payer: string;
+  let payers: Shares | null = null;
   let split: string;
   let shares: Shares | null = null;
 
@@ -134,7 +158,10 @@ export async function addExpenseAction(input: {
     groupId = input.ctx;
 
     const participants = await getGroupParticipants(input.ctx);
-    payer = emailForKey(input.ctx, participants, input.payer) ?? email;
+    const who = resolvePayer(input.ctx, participants, input, email);
+    if ("error" in who) return { ok: false, error: who.error };
+    payer = who.payer;
+    payers = who.payers;
     if (input.split === SPLIT_CUSTOM) {
       const res = resolveShares(input.ctx, participants, input.shares, input.amount);
       if ("error" in res) return { ok: false, error: res.error };
@@ -159,6 +186,7 @@ export async function addExpenseAction(input: {
     item,
     amount: input.amount,
     payer,
+    payers,
     split,
     shares,
     ownerEmail,
@@ -191,9 +219,10 @@ export async function updateExpenseAction(
     category: string;
     item: string;
     amount: number;
-    payer: string; // wire participant key
+    payer: string; // wire participant key, or "multiple"
     split: string; // "equal", "custom" or a wire participant key
     shares?: Record<string, number>; // wire key -> rupees, when split = "custom"
+    payers?: Record<string, number>; // wire key -> rupees, when payer = "multiple"
   },
 ): Promise<ActionResult> {
   const session = await auth();
@@ -211,6 +240,7 @@ export async function updateExpenseAction(
   // Authorize against, and resolve payer/split within, the expense's own
   // context (mirrors addExpenseAction) so stale form values can't be persisted.
   let payer: string;
+  let payers: Shares | null = null;
   let split: string;
   let shares: Shares | null = null;
   if (exp.ownerEmail) {
@@ -222,7 +252,12 @@ export async function updateExpenseAction(
       return { ok: false, error: "Not authorized." };
     const participants = await getGroupParticipants(exp.groupId);
     // Unknown keys keep the row's existing values rather than guessing.
-    payer = emailForKey(exp.groupId, participants, input.payer) ?? exp.payer;
+    const who = resolvePayer(exp.groupId, participants, input, exp.payer);
+    if ("error" in who) return { ok: false, error: who.error };
+    payer = who.payer;
+    payers = who.payers;
+    // A stale key on a several-payers row would keep "multiple" without payers.
+    if (payer === PAYER_MULTIPLE && !payers) return { ok: false, error: "Enter how much each person paid." };
     if (input.split === SPLIT_CUSTOM) {
       const res = resolveShares(exp.groupId, participants, input.shares, input.amount);
       if ("error" in res) return { ok: false, error: res.error };
@@ -256,6 +291,7 @@ export async function updateExpenseAction(
     item,
     amount: input.amount,
     payer,
+    payers,
     split,
     shares,
   });

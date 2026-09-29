@@ -2,7 +2,7 @@
 
 import { CameraIcon, TrashIcon, XIcon } from "@/components/Icons";
 import { FileDropzone } from "@/components/FileDropzone";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ocrImages, type OcrProgress } from "@/lib/ocr";
 import { parseReceipt } from "@/lib/receipt/parse";
@@ -75,6 +75,7 @@ export function ReceiptScanner({
   const [purchasedOn, setPurchasedOn] = useState(todayISO());
   const [items, setItems] = useState<EditItem[]>([]);
   const [payer, setPayer] = useState(defaultPayer);
+  const uid = useId();
   const [split, setSplit] = useState(SPLIT_EQUAL);
 
   function reset() {
@@ -305,12 +306,12 @@ export function ReceiptScanner({
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="label">Merchant</label>
-              <input className="input" value={merchant} onChange={(e) => setMerchant(e.target.value)} />
+              <label htmlFor={`${uid}-merchant`} className="label">Merchant</label>
+              <input id={`${uid}-merchant`} className="input" value={merchant} onChange={(e) => setMerchant(e.target.value)} />
             </div>
             <div>
-              <label className="label">Date</label>
-              <input
+              <label htmlFor={`${uid}-date`} className="label">Date</label>
+              <input id={`${uid}-date`}
                 type="date"
                 className="input"
                 value={purchasedOn}
@@ -322,16 +323,16 @@ export function ReceiptScanner({
           {!isPersonal ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="label">Who paid?</label>
-                <select className="select" value={payer} onChange={(e) => setPayer(e.target.value)}>
+                <label htmlFor={`${uid}-who-paid`} className="label">Who paid?</label>
+                <select id={`${uid}-who-paid`} className="select" value={payer} onChange={(e) => setPayer(e.target.value)}>
                   {payerOptions.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="label">Split</label>
-                <select className="select" value={split} onChange={(e) => setSplit(e.target.value)}>
+                <label htmlFor={`${uid}-split`} className="label">Split</label>
+                <select id={`${uid}-split`} className="select" value={split} onChange={(e) => setSplit(e.target.value)}>
                   {/* Unequal amounts are per expense; a whole receipt splits one way. */}
                   {splitOptions.filter((o) => o.value !== SPLIT_CUSTOM).map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>

@@ -149,3 +149,33 @@ export function PersonAvatar({
     </>
   );
 }
+
+/**
+ * Several members side by side, overlapping like a stack of coins; each
+ * photo keeps its own name label and tap bubble.
+ */
+export function PersonAvatars({
+  ids,
+  size = "sm",
+  interactive = true,
+  className = "",
+}: {
+  ids: string[];
+  size?: keyof typeof SIZES;
+  interactive?: boolean;
+  className?: string;
+}) {
+  return (
+    <span className={`inline-flex items-center ${className}`}>
+      {ids.map((id, i) => (
+        <PersonAvatar
+          key={id}
+          id={id}
+          size={size}
+          interactive={interactive}
+          className={`rounded-full ring-2 ring-surface ${i > 0 ? "-ml-1.5" : ""}`}
+        />
+      ))}
+    </span>
+  );
+}

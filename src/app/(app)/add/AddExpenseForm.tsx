@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
 import { enqueueExpense } from "@/lib/offlineQueue";
-import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
+import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR, todayISO } from "@/lib/format";
 import { CategorySelect } from "@/components/CategorySelect";
 import {
@@ -56,12 +56,18 @@ export function AddExpenseForm({
   const [payer, setPayer] = useState(defaultPayer);
   const [split, setSplit] = useState(defaultSplit);
   const [shareInputs, setShareInputs] = useState<ShareInputs>({});
+  const [payerInputs, setPayerInputs] = useState<ShareInputs>({});
   const custom = !isPersonal && split === SPLIT_CUSTOM;
+  // Several payers, each with what they put in; needs two people to pick from.
+  const multi = !isPersonal && payer === PAYER_MULTIPLE;
+  const whoPaidOptions =
+    payerOptions.length > 1 ? [...payerOptions, { value: PAYER_MULTIPLE, label: "Multiple people" }] : payerOptions;
   const [message, setMessage] = useState<
     { ok: boolean; text: string; info?: string } | null
   >(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const uid = useId();
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,6 +85,13 @@ export function AddExpenseForm({
       return;
     }
 
+    if (multi) {
+      const err = sharesError(payerInputs, payerOptions, amt, "paid");
+      if (err) {
+        setMessage({ ok: false, text: err });
+        return;
+      }
+    }
     if (custom) {
       const err = sharesError(shareInputs, payerOptions, amt);
       if (err) {
@@ -95,6 +108,7 @@ export function AddExpenseForm({
       amount: amt,
       payer,
       split,
+      ...(multi ? { payers: sharesFromInputs(payerInputs, payerOptions) } : {}),
       ...(custom ? { shares: sharesFromInputs(shareInputs, payerOptions) } : {}),
     };
 
@@ -114,6 +128,7 @@ export function AddExpenseForm({
         setItem("");
         setAmount("");
         setShareInputs({});
+        setPayerInputs({});
       } else {
         setMessage({
           ok: false,
@@ -158,6 +173,7 @@ export function AddExpenseForm({
         setItem("");
         setAmount("");
         setShareInputs({});
+        setPayerInputs({});
       } else {
         setMessage({ ok: false, text: res.error ?? "Something went wrong." });
       }
@@ -166,8 +182,8 @@ export function AddExpenseForm({
 
   const dateField = (
     <div>
-      <label className="label">Date</label>
-      <input
+      <label htmlFor={`${uid}-date`} className="label">Date</label>
+      <input id={`${uid}-date`}
         type="date"
         className="input"
         value={date}
@@ -178,15 +194,15 @@ export function AddExpenseForm({
 
   const categoryField = (
     <div>
-      <label className="label">Category</label>
-      <CategorySelect categories={categories} value={category} onChange={setCategory} />
+      <label htmlFor={`${uid}-category`} className="label">Category</label>
+      <CategorySelect id={`${uid}-category`} categories={categories} value={category} onChange={setCategory} />
     </div>
   );
 
   const itemField = (
     <div>
-      <label className="label">Item / Description</label>
-      <input
+      <label htmlFor={`${uid}-item-description`} className="label">Item / Description</label>
+      <input id={`${uid}-item-description`}
         className="input"
         value={item}
         onChange={(e) => setItem(e.target.value)}
@@ -197,8 +213,8 @@ export function AddExpenseForm({
 
   const amountField = (
     <div>
-      <label className="label">Amount (₹)</label>
-      <input
+      <label htmlFor={`${uid}-amount`} className="label">Amount (₹)</label>
+      <input id={`${uid}-amount`}
         type="text"
         inputMode="decimal"
         enterKeyHint="next"
@@ -240,13 +256,13 @@ export function AddExpenseForm({
           <div className="space-y-4">
             {dateField}
             <div>
-              <label className="label">Who paid?</label>
-              <select
+              <label htmlFor={`${uid}-who-paid`} className="label">Who paid?</label>
+              <select id={`${uid}-who-paid`}
                 className="select"
                 value={payer}
                 onChange={(e) => setPayer(e.target.value)}
               >
-                {payerOptions.map((o) => (
+                {whoPaidOptions.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
@@ -254,8 +270,8 @@ export function AddExpenseForm({
               </select>
             </div>
             <div>
-              <label className="label">Split</label>
-              <select
+              <label htmlFor={`${uid}-split`} className="label">Split</label>
+              <select id={`${uid}-split`}
                 className="select"
                 value={split}
                 onChange={(e) => setSplit(e.target.value)}
@@ -268,9 +284,24 @@ export function AddExpenseForm({
               </select>
             </div>
           </div>
+          {multi ? (
+            <div className="sm:col-span-2">
+              <p className="label">How much did each person pay?</p>
+              <SplitShares
+                idPrefix="paid"
+                members={payerOptions}
+                amount={parseFloat(amount)}
+                values={payerInputs}
+                onChange={(v) => {
+                  setPayerInputs(v);
+                  setMessage(null);
+                }}
+              />
+            </div>
+          ) : null}
           {custom ? (
             <div className="sm:col-span-2">
-              <label className="label">How much does each person owe?</label>
+              <p className="label">How much does each person owe?</p>
               <SplitShares
                 members={payerOptions}
                 amount={parseFloat(amount)}

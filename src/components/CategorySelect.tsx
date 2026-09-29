@@ -18,10 +18,13 @@ export function CategorySelect({
   categories,
   value,
   onChange,
+  id,
 }: {
   categories: string[];
   value: string;
   onChange: (category: string) => void;
+  /** Links the field to its label; applies to the picker and the new-name box alike. */
+  id?: string;
 }) {
   const [creating, setCreating] = useState(false);
 
@@ -37,6 +40,7 @@ export function CategorySelect({
     return (
       <div className="space-y-1">
         <input
+          id={id}
           className="input"
           autoFocus
           placeholder="New category name"
@@ -81,6 +85,7 @@ export function CategorySelect({
 
   return (
     <select
+      id={id}
       className="select"
       value={selected}
       onChange={(e) => {

@@ -115,6 +115,8 @@ onboarding step and popup. Deploy the code only after it has run.
 the statement summaries saved from the statement import.
 `2026_09_app_users_image.sql` adds `app_users.image`, the Google profile
 photo shown in place of member names; run it before deploying that code.
+`2026_09_expense_payers.sql` adds `expenses.payers`, what each person put in
+when several people paid for one expense; run it before deploying that code.
 
 ## Google OAuth setup
 

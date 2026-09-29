@@ -15,6 +15,9 @@ export const CATEGORIES = [
   "Other",
 ] as const;
 
+/** Several payers: the row's `payers` map holds what each person put in. */
+export const PAYER_MULTIPLE = "multiple";
+
 export const SPLIT_EQUAL = "equal";
 /** Unequal split: the row's `shares` map holds each participant's amount. */
 export const SPLIT_CUSTOM = "custom";

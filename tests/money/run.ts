@@ -1,6 +1,6 @@
 // Unit checks for split and savings math (no database). Run with
 // `npm run test:money`.
-import { computeNets, parseShares, shareFor, simplifyDebts } from "../../src/lib/settlementMath";
+import { computeNets, paidFor, parseShares, payersOf, shareFor, simplifyDebts } from "../../src/lib/settlementMath";
 import {
   REMIND_LATER_MS,
   incomeForMonth,
@@ -38,6 +38,22 @@ check("share: equal", shareFor(rows[1], "a", 3) === 100);
 check("share: one person", shareFor(rows[2], "a", 3) === 50 && shareFor(rows[2], "c", 3) === 0);
 check("parseShares drops junk", same(parseShares({ a: 5, b: "x", c: -1, d: 0 }), { a: 5, d: 0 }));
 check("parseShares rejects non-objects", parseShares([1]) === null && parseShares(null) === null);
+
+// Several payers: A and B put in 600 + 300 for a 900 dinner split equally
+// three ways; C paid nothing. Each owes 300, so A is up 300, B even, C down 300.
+const multi = { payer: "multiple", payers: { a: 600, b: 300 }, split: "equal", amount: 900 };
+check("paidFor: several payers", paidFor(multi, "a") === 600 && paidFor(multi, "b") === 300 && paidFor(multi, "c") === 0);
+check("paidFor: single payer", paidFor(rows[1], "b") === 300 && paidFor(rows[1], "a") === 0);
+check("payersOf: several", same(payersOf(multi), ["a", "b"]));
+check("payersOf: single", same(payersOf(rows[2]), ["c"]));
+check("payersOf: largest first", same(payersOf({ ...multi, payers: { b: 300, a: 600 } }), ["a", "b"]));
+check("payersOf: zero amounts dropped", same(payersOf({ ...multi, payers: { a: 900, b: 0 } }), ["a"]));
+const multiNets = computeNets([multi], ["a", "b", "c"]);
+check("nets: several payers", same(multiNets.map((n) => n.net), [300, 0, -300]), JSON.stringify(multiNets));
+check("transfers: several payers", same(simplifyDebts(multiNets), [{ from: "c", to: "a", amount: 300 }]));
+// Unequal split and several payers on the same row.
+const both = { payer: "multiple", payers: { a: 500, c: 400 }, split: "custom", amount: 900, shares: { a: 100, b: 300, c: 500 } };
+check("nets: several payers + unequal split", same(computeNets([both], ["a", "b", "c"]).map((n) => n.net), [400, -300, -100]));
 
 // Income: first entry covers earlier months; later entries apply forward only.
 const history = [

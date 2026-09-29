@@ -4,10 +4,11 @@
 import ExcelJS from "exceljs";
 import type { ExpenseDTO } from "./expenses";
 import type { SettlementDTO } from "./settlements";
-import { SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
+import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
 import {
   applyPayments,
   computeNets,
+  paidFor,
   round2,
   simplifyDebts,
   type Transfer,
@@ -97,6 +98,13 @@ export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
             .map(([id, n]) => `${nameFor(id)} ${n.toFixed(2)}`)
             .join(", ")}`
         : nameFor(r.split);
+  const payerLabel = (r: ExpenseDTO) =>
+    r.payer === PAYER_MULTIPLE
+      ? Object.entries(r.payers ?? {})
+          .sort((a, b) => b[1] - a[1])
+          .map(([id, n]) => `${nameFor(id)} ${n.toFixed(2)}`)
+          .join(", ")
+      : nameFor(r.payer);
 
   // Group rows by month, newest first.
   const byMonth = new Map<string, ExpenseDTO[]>();
@@ -164,9 +172,7 @@ export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
       header,
       monthKeys.map((m) => {
         const rows = byMonth.get(m)!;
-        const paid = memberEmails.map((e) =>
-          round2(rows.filter((r) => r.payer === e).reduce((s, r) => s + r.amount, 0)),
-        );
+        const paid = memberEmails.map((e) => round2(rows.reduce((s, r) => s + paidFor(r, e), 0)));
         const out = monthOutstanding(rows, memberEmails, settlementsFor(m));
         return [
           monthLabel(m),
@@ -178,9 +184,7 @@ export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
       }),
       moneyCols,
     );
-    const paidTotals = memberEmails.map((e) =>
-      round2(expenses.filter((r) => r.payer === e).reduce((s, r) => s + r.amount, 0)),
-    );
+    const paidTotals = memberEmails.map((e) => round2(expenses.reduce((s, r) => s + paidFor(r, e), 0)));
     totalRow(ws, ["Total", expenses.length, grand, ...paidTotals, null], moneyCols);
   }
   ws.addRow([]);
@@ -236,7 +240,7 @@ export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
     const data = rows.map((r) =>
       isPersonal
         ? [r.date, r.category, r.item, r.amount, r.receiptMerchant, r.gstRate, r.gstAmount]
-        : [r.date, r.category, r.item, r.amount, nameFor(r.payer), splitLabel(r), r.receiptMerchant, r.gstRate, r.gstAmount],
+        : [r.date, r.category, r.item, r.amount, payerLabel(r), splitLabel(r), r.receiptMerchant, r.gstRate, r.gstAmount],
     );
     const h = table(sheet, header, data, isPersonal ? [4, 7] : [4, 9]);
     const monthTotal = round2(rows.reduce((s, r) => s + r.amount, 0));

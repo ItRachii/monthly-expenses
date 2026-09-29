@@ -49,7 +49,7 @@ export async function getOutstandingAllMonths(
   const [expenses, settlements] = await Promise.all([
     prisma.expense.findMany({
       where: { groupId },
-      select: { date: true, payer: true, split: true, amount: true, shares: true },
+      select: { date: true, payer: true, split: true, amount: true, shares: true, payers: true },
     }),
     prisma.settlement.findMany({
       where: { groupId },
@@ -60,7 +60,7 @@ export async function getOutstandingAllMonths(
   const byMonth = new Map<string, ExpenseLike[]>();
   for (const e of expenses) {
     const m = monthKey(e.date);
-    const row = { ...e, shares: parseShares(e.shares) };
+    const row = { ...e, shares: parseShares(e.shares), payers: parseShares(e.payers) };
     const list = byMonth.get(m);
     if (list) list.push(row);
     else byMonth.set(m, [row]);
