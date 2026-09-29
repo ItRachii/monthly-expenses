@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Ledger</title>
+  <defs>
+    <!-- Back cards: the app's accent (warm) and primary (blue). -->
+    <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFD08A"/>
+      <stop offset="1" stop-color="#E8834A"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7EA0F0"/>
+      <stop offset="0.55" stop-color="#4C72B0"/>
+      <stop offset="1" stop-color="#2C4A8C"/>
+    </linearGradient>
+    <!-- Frosted glass: a milky wash, brighter at the top left. -->
+    <linearGradient id="glassFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.58"/>
+      <stop offset="0.5" stop-color="#E4ECFF" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#7F9BE0" stop-opacity="0.34"/>
+    </linearGradient>
+    <linearGradient id="glassEdge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.12"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.22" cy="0.18" r="0.75">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="frost" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="34"/>
+    </filter>
+    <filter id="cardShadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter>
+    <filter id="glyphShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#152657" flood-opacity="0.5"/>
+    </filter>
+    <clipPath id="glassClip">
+      <rect x="236" y="334" width="520" height="520" rx="136"/>
+    </clipPath>
+    <!-- The two cards behind the glass, drawn once and reused for the blur. -->
+    <g id="backCards">
+      <rect x="160" y="220" width="440" height="460" rx="118" fill="url(#warm)" transform="rotate(-11 380 450)"/>
+      <rect x="410" y="200" width="470" height="500" rx="124" fill="url(#blue)" transform="rotate(12 645 450)"/>
+    </g>
+  </defs>
+
+  <g transform="translate(-8 -2)">
+  <use href="#backCards"/>
+
+  <!-- Soft shadow the glass casts on what is behind it. -->
+  <rect x="256" y="378" width="480" height="480" rx="130" fill="#0B1633" opacity="0.28" filter="url(#cardShadow)"/>
+
+  <!-- Glass: the cards behind, blurred, seen through a milky pane. -->
+  <g clip-path="url(#glassClip)">
+    <rect x="236" y="334" width="520" height="520" fill="#F4F7FF" opacity="0.35"/>
+    <g filter="url(#frost)"><use href="#backCards"/></g>
+    <rect x="236" y="334" width="520" height="520" fill="url(#glassFill)"/>
+    <rect x="236" y="334" width="520" height="520" fill="url(#sheen)"/>
+  </g>
+  <rect x="238" y="336" width="516" height="516" rx="134" fill="none" stroke="url(#glassEdge)" stroke-width="5"/>
+
+  <!-- Rupee sign, drawn as strokes so it is the same on every device. -->
+  <g transform="translate(366 440)" filter="url(#glyphShadow)" fill="none" stroke="#FFFFFF" stroke-width="52" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 24 H236"/>
+    <path d="M24 100 H236"/>
+    <path d="M24 24 H112 C190 24 214 62 214 100 C214 146 176 178 112 178 H36 L204 300"/>
+  </g>
+  </g>
+</svg>
