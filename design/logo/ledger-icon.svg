@@ -6,7 +6,7 @@
   
   <!-- Three cards stacked like a wallet on one centre line, each its own card: the mint card,
        the blue card, and a frosted glass pocket in front holding the rupee
-       sign. The back cards are slightly narrower, so they recede. -->
+       sign. All three share the same left and right edges. -->
   <defs>
     <linearGradient id="back" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#8FEBD2"/>
@@ -42,8 +42,8 @@
     </filter>
 
     <!-- Card shapes, each used for its fill, its contact shadow and the glass. -->
-    <rect id="backCard" x="262" y="176" width="500" height="420" rx="112"/>
-    <rect id="midCard" x="237" y="300" width="550" height="470" rx="120"/>
+    <rect id="backCard" x="212" y="176" width="600" height="420" rx="132"/>
+    <rect id="midCard" x="212" y="300" width="600" height="470" rx="132"/>
     <rect id="glassCard" x="212" y="436" width="600" height="400" rx="132"/>
     <clipPath id="glassClip"><use href="#glassCard"/></clipPath>
 
