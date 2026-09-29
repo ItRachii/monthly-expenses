@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangleIcon, CalendarIcon, DownloadIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
-import { RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
+import { AlertTriangleIcon, CalendarIcon, DownloadIcon, FilterIcon, PeopleIcon, PencilIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/Icons";
+import { FilterHeader, RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
 import { DateBadge } from "@/components/DateBadge";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -112,12 +112,20 @@ export function ExpenseFeed({
 
   const payerLabel = (v: string) => nameMap[v] ?? v;
 
+  // "Paid by" filter, from the table heading (groups only): one member or everyone.
+  const [payer, setPayer] = useState<string | null>(null);
+  const pickPayer = (v: string | null) => {
+    setPayer(v);
+    setSelected(new Set());
+  };
+
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const inTab = rows.filter(
       (r) =>
         (month === ALL || r.date.startsWith(month)) &&
         (!onlyFlagged || Boolean(r.flag)) &&
+        (!payer || r.payer === payer) &&
         (!q ||
           r.item.toLowerCase().includes(q) ||
           (r.category || "").toLowerCase().includes(q) ||
@@ -128,7 +136,7 @@ export function ExpenseFeed({
       k === "date" ? r.date : k === "amount" ? r.amount : k === "category" ? r.category || "Uncategorised" : r.item,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, month, onlyFlagged, query, sort, isPersonal, nameMap]);
+  }, [rows, month, onlyFlagged, payer, query, sort, isPersonal, nameMap]);
   const shownTotal = round2(shown.reduce((s, r) => s + r.amount, 0));
 
   // Selection only covers rows still on show; a deleted or filtered-out row drops out.
@@ -238,6 +246,19 @@ export function ExpenseFeed({
             Flagged {flaggedCount}
           </button>
         ) : null}
+        {payer ? (
+          <button
+            type="button"
+            className="chip-btn border-primary/40 bg-primary/10"
+            onClick={() => pickPayer(null)}
+            aria-label={`Clear filter: paid by ${payerLabel(payer)}`}
+            title={`Paid by ${payerLabel(payer)}`}
+          >
+            <FilterIcon className="h-4 w-4 text-primary-light" />
+            <span className="max-w-[8rem] truncate">{payerLabel(payer)}</span>
+            <XIcon className="h-4 w-4 text-muted" />
+          </button>
+        ) : null}
         {/* Search and the month filter share a row, on phones too. */}
         <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
           <SearchBox value={query} onChange={setQuery} placeholder="Search expenses" className="min-w-0 flex-1 sm:w-64 sm:flex-none" />
@@ -267,7 +288,7 @@ export function ExpenseFeed({
 
       {shown.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted">
-          {query.trim() ? `No expenses match "${query.trim()}".` : "No expenses here."}
+          {query.trim() ? `No expenses match "${query.trim()}".` : payer ? `No expenses paid by ${payerLabel(payer)}${month === ALL ? "" : ` in ${monthTab(month)}`}.` : "No expenses here."}
         </p>
       ) : (
         <>
@@ -283,7 +304,25 @@ export function ExpenseFeed({
                 <SortHeader label="Date" sortKey="date" sort={sort} onSort={onSort} className="w-28" />
                 <SortHeader label="Item" sortKey="item" sort={sort} onSort={onSort} />
                 <SortHeader label="Category" sortKey="category" sort={sort} onSort={onSort} className="w-32" />
-                {isPersonal ? null : <Th className="w-20">Paid by</Th>}
+                {isPersonal ? null : (
+                  <FilterHeader
+                    label="Paid by"
+                    allLabel="Everyone"
+                    allIcon={
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink/[0.08] text-muted">
+                        <PeopleIcon className="h-4 w-4" />
+                      </span>
+                    }
+                    options={payerOptions.map((o) => ({
+                      value: o.value,
+                      label: o.label,
+                      icon: <PersonAvatar id={o.value} interactive={false} />,
+                    }))}
+                    value={payer}
+                    onChange={pickPayer}
+                    className="w-28"
+                  />
+                )}
                 {isPersonal ? null : <Th className="w-36">Status</Th>}
                 <SortHeader label="Amount" sortKey="amount" sort={sort} onSort={onSort} align="right" className="w-32" />
                 <Th align="center" className="w-24">
