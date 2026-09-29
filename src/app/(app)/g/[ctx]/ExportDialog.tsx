@@ -9,10 +9,14 @@ export function ExportButton({
   ctx,
   minDate,
   maxDate,
+  className = "btn-secondary",
+  children = "Export to Excel",
 }: {
   ctx: string;
   minDate: string;
   maxDate: string;
+  className?: string;
+  children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"all" | "range">("all");
@@ -33,8 +37,8 @@ export function ExportButton({
 
   return (
     <>
-      <button type="button" className="btn-secondary" onClick={() => setOpen(true)}>
-        Export to Excel
+      <button type="button" className={className} onClick={() => setOpen(true)}>
+        {children}
       </button>
 
       {open ? (

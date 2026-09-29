@@ -16,7 +16,8 @@ import { getAddSetupAction } from "@/lib/actions/expenses";
 import { CategorySelect } from "@/components/CategorySelect";
 import { Tabs } from "@/components/Tabs";
 import { FileDropzone } from "@/components/FileDropzone";
-import { ChevronDownIcon, ReceiptIcon, XIcon } from "@/components/Icons";
+import { EyeIcon, LabelIcon, ReceiptIcon, XIcon } from "@/components/Icons";
+import { RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { mergeCategories } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 
@@ -27,7 +28,11 @@ interface Opt {
 
 type Phase = "pick" | "reading" | "review";
 
-const TABS: { id: RowKind; label: string; shortLabel?: string }[] = [
+type TabId = "all" | RowKind;
+type SortKey = "date" | "description" | "amount";
+
+const TABS: { id: TabId; label: string; shortLabel?: string }[] = [
+  { id: "all", label: "All" },
   { id: "domestic", label: "Domestic" },
   { id: "international", label: "International", shortLabel: "Intl." },
   { id: "emi", label: "EMI" },
@@ -78,7 +83,9 @@ export function StatementImport({
   const [wrongPassword, setWrongPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ParsedStatement | null>(null);
-  const [tab, setTab] = useState<RowKind>("domestic");
+  const [tab, setTab] = useState<TabId>("all");
+  const [query, setQuery] = useState("");
+  const [sort, onSort] = useSort<SortKey>({ key: "date", dir: "asc" }, ["amount"]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [added, setAdded] = useState<Set<string>>(new Set());
@@ -130,8 +137,8 @@ export function StatementImport({
       setResult(null);
       setNeedPassword(false);
       setWrongPassword(false);
-      const first = TABS.find((t) => p.rows.some((r) => r.kind === t.id));
-      setTab(first?.id ?? "domestic");
+      setTab("all");
+      setQuery("");
       setPhase("review");
     } catch (e) {
       setPhase("pick");
@@ -165,10 +172,19 @@ export function StatementImport({
   }
 
   const rows = parsed?.rows ?? [];
-  const tabRows = useMemo(
-    () => rows.filter((r) => r.kind === tab).sort((a, b) => a.date.localeCompare(b.date)),
-    [rows, tab],
-  );
+  // The rows on show: this tab, matching the search (description or
+  // category), in the chosen order.
+  const tabRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const shown = rows.filter(
+      (r) =>
+        (tab === "all" || r.kind === tab) &&
+        (!q || r.description.toLowerCase().includes(q) || (categories[r.id] ?? r.category).toLowerCase().includes(q)),
+    );
+    return sortRows(shown, sort, (r, k) => (k === "date" ? r.date : k === "amount" ? (r.credit ? -r.total : r.total) : r.description));
+  }, [rows, tab, query, sort, categories]);
+  const selectable = tabRows.filter((r) => !r.credit && !added.has(r.id));
+  const selectedShown = selectable.filter((r) => selected.has(r.id)).length;
   const selectedRows = rows.filter((r) => selected.has(r.id) && !added.has(r.id));
   const selectedTotal = selectedRows.reduce((s, r) => s + r.total, 0);
   const allCategories = useMemo(
@@ -217,16 +233,21 @@ export function StatementImport({
     });
   }
 
-  function setAllInTab(on: boolean) {
+  function setAllShown(on: boolean) {
     setSelected((s) => {
       const n = new Set(s);
-      for (const r of tabRows) {
-        if (r.credit || added.has(r.id)) continue;
+      for (const r of selectable) {
         if (on) n.add(r.id);
         else n.delete(r.id);
       }
       return n;
     });
+  }
+
+  /** Bulk action: one category for every selected row. */
+  function categoriseSelected(c: string) {
+    if (!c) return;
+    setCategories((m) => ({ ...m, ...Object.fromEntries(selectedRows.map((r) => [r.id, c])) }));
   }
 
   function doImport() {
@@ -360,7 +381,7 @@ export function StatementImport({
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2 text-sm">
-              {TABS.map((t) => {
+              {TABS.filter((t) => t.id !== "all").map((t) => {
                 const rs = rows.filter((r) => r.kind === t.id && !r.credit);
                 const total = rs.reduce((s, r) => s + r.total, 0);
                 return (
@@ -416,36 +437,56 @@ export function StatementImport({
             </section>
           ) : null}
 
-          <section className="card space-y-3">
+          <section className="card space-y-4">
             {/* The border runs the full width of the card; the tab underline sits on it. */}
-            <div className="flex items-end justify-between gap-4 border-b border-ink/10">
+            <div className="border-b border-ink/10">
               <Tabs
                 label="Statement rows"
-                tabs={TABS.map((t) => ({ ...t, count: rows.filter((r) => r.kind === t.id).length }))}
+                tabs={TABS.map((t) => ({ ...t, count: t.id === "all" ? rows.length : rows.filter((r) => r.kind === t.id).length }))}
                 value={tab}
-                onChange={setTab}
+                onChange={(t) => {
+                  setTab(t);
+                  setExpanded(null);
+                }}
               />
-              {tabRows.length > 0 ? (
-                <div className="hidden gap-3 whitespace-nowrap pb-2.5 text-xs sm:flex">
-                  <button type="button" className="text-muted transition-colors hover:text-ink" onClick={() => setAllInTab(true)}>
-                    Select all
-                  </button>
-                  <button type="button" className="text-muted transition-colors hover:text-ink" onClick={() => setAllInTab(false)}>
-                    None
-                  </button>
-                </div>
-              ) : null}
             </div>
-            {tabRows.length > 0 ? (
-              <div className="flex justify-end gap-3 whitespace-nowrap text-xs sm:hidden">
-                <button type="button" className="text-muted transition-colors hover:text-ink" onClick={() => setAllInTab(true)}>
-                  Select all
-                </button>
-                <button type="button" className="text-muted transition-colors hover:text-ink" onClick={() => setAllInTab(false)}>
-                  None
-                </button>
-              </div>
-            ) : null}
+
+            {/* Toolbar: what is selected, bulk actions on it, and search. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-sm text-muted" aria-live="polite">
+                {selectedRows.length > 0 ? (
+                  <>
+                    <span className="font-semibold text-ink">{selectedRows.length} selected</span> · {formatINR(selectedTotal)}
+                  </>
+                ) : (
+                  "Tick the rows to add"
+                )}
+              </span>
+              <label className={`chip-btn relative ${selectedRows.length === 0 ? "pointer-events-none opacity-45" : "cursor-pointer"}`}>
+                <LabelIcon className="h-4 w-4 text-muted" />
+                Set category
+                {/* The native select sits over the chip: a real menu on every device. */}
+                <select
+                  aria-label="Set category for the selected rows"
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  value=""
+                  disabled={selectedRows.length === 0}
+                  onChange={(e) => categoriseSelected(e.target.value)}
+                >
+                  <option value="">Set category</option>
+                  {allCategories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="chip-btn" disabled={selectedRows.length === 0} onClick={() => setSelected(new Set())}>
+                <XIcon className="h-4 w-4 text-muted" />
+                Clear
+              </button>
+              <SearchBox value={query} onChange={setQuery} placeholder="Search rows" className="w-full sm:ml-auto sm:w-64" />
+            </div>
 
             {tab === "emi" && parsed.loans.length > 0 ? (
               <div className="rounded-lg border border-ink/10 p-3 text-sm" data-loans>
@@ -471,22 +512,59 @@ export function StatementImport({
             ) : null}
 
             {tabRows.length === 0 ? (
-              <p className="text-sm text-muted">No {TABS.find((t) => t.id === tab)?.label.toLowerCase()} rows in this statement.</p>
+              <p className="py-6 text-center text-sm text-muted">
+                {query.trim()
+                  ? `No rows match "${query.trim()}".`
+                  : `No ${tab === "all" ? "" : `${TABS.find((t) => t.id === tab)?.label.toLowerCase()} `}rows in this statement.`}
+              </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th className="w-8"></th>
-                      <th>Date</th>
-                      <th>Description</th>
-                      <th className="text-right">Total</th>
-                      <th className="w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <>
+                {/* Desktop: the table. */}
+                <div className="hidden overflow-hidden rounded-xl border border-ink/10 md:block">
+                  <table className="list-table">
+                    <thead>
+                      <tr>
+                        <th scope="col" className="w-12 px-3 py-3">
+                          <SelectAllCheckbox selected={selectedShown} total={selectable.length} onChange={setAllShown} label="Select all rows shown" />
+                        </th>
+                        <SortHeader label="Date" sortKey="date" sort={sort} onSort={onSort} className="w-32" />
+                        <SortHeader label="Description" sortKey="description" sort={sort} onSort={onSort} />
+                        <Th className="w-40">Category</Th>
+                        <Th className="w-28">Status</Th>
+                        <SortHeader label="Amount" sortKey="amount" sort={sort} onSort={onSort} align="right" className="w-32" />
+                        <Th align="center" className="w-20">
+                          Details
+                        </Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tabRows.map((r) => (
+                        <RowView
+                          key={r.id}
+                          row={r}
+                          open={expanded === r.id}
+                          checked={selected.has(r.id)}
+                          isAdded={added.has(r.id)}
+                          category={categories[r.id] ?? r.category}
+                          categories={allCategories}
+                          onToggleOpen={() => setExpanded((x) => (x === r.id ? null : r.id))}
+                          onToggleChecked={() => toggle(r.id)}
+                          onCategory={(c) => setCategories((m) => ({ ...m, [r.id]: c }))}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Phones: the same rows, stacked. */}
+                <div className="md:hidden">
+                  <label className="mb-2 flex items-center gap-3 px-1 text-sm text-muted">
+                    <SelectAllCheckbox selected={selectedShown} total={selectable.length} onChange={setAllShown} label="Select all rows shown" />
+                    Select all ({selectable.length})
+                  </label>
+                  <ul className="divide-y divide-ink/[0.06] overflow-hidden rounded-xl border border-ink/10">
                     {tabRows.map((r) => (
-                      <RowView
+                      <PhoneRow
                         key={r.id}
                         row={r}
                         open={expanded === r.id}
@@ -499,9 +577,9 @@ export function StatementImport({
                         onCategory={(c) => setCategories((m) => ({ ...m, [r.id]: c }))}
                       />
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </ul>
+                </div>
+              </>
             )}
 
             <div className="flex flex-col gap-3 border-t border-ink/10 pt-3 sm:flex-row sm:items-end sm:justify-between">
@@ -587,17 +665,7 @@ function SummaryGrid({ summary }: { summary: NonNullable<ParsedStatement["summar
   );
 }
 
-function RowView({
-  row,
-  open,
-  checked,
-  isAdded,
-  category,
-  categories,
-  onToggleOpen,
-  onToggleChecked,
-  onCategory,
-}: {
+interface RowProps {
   row: StatementRow;
   open: boolean;
   checked: boolean;
@@ -607,125 +675,202 @@ function RowView({
   onToggleOpen: () => void;
   onToggleChecked: () => void;
   onCategory: (c: string) => void;
-}) {
+}
+
+/** A row's state as a pill: added, a credit, untraced GST, or new. */
+function statusOf(row: StatementRow, isAdded: boolean) {
+  if (isAdded) return <StatusPill tone="positive">Added</StatusPill>;
+  if (row.credit) return <StatusPill tone="info" title="Credits are not expenses">Credit</StatusPill>;
+  if (row.untraced)
+    return (
+      <StatusPill tone="warning" title="Cites a reference that is not on record. Can be added now; it is traced once that statement is uploaded.">
+        Untraced
+      </StatusPill>
+    );
+  return <StatusPill tone="neutral">New</StatusPill>;
+}
+
+/** The small facts under a description: instalment, loan, tracing, currency. */
+function RowTags({ row }: { row: StatementRow }) {
+  const tags: string[] = [];
+  if (row.installment) tags.push(`EMI ${row.installment}`);
+  if (row.loan?.last4) tags.push(`loan …${row.loan.last4}`);
+  if (row.gstFor) tags.push(row.gstFor.matchedBy === "ref" ? "traced by reference" : "traced by amount");
+  if (row.foreign) tags.push(`${row.foreign.currency} ${row.foreign.amount.toFixed(2)}`);
+  if (row.parts.length > 1) tags.push(`${row.parts.length} parts`);
+  if (tags.length === 0) return null;
+  return <div className="mt-0.5 truncate text-xs text-muted">{tags.join(" · ")}</div>;
+}
+
+function Amount({ row }: { row: StatementRow }) {
+  return (
+    <span className={`whitespace-nowrap font-semibold tabular-nums ${row.credit ? "text-positive" : ""}`}>
+      {row.credit ? "+" : ""}
+      {formatINR(row.total)}
+    </span>
+  );
+}
+
+function RowView({ row, open, checked, isAdded, category, categories, onToggleOpen, onToggleChecked, onCategory }: RowProps) {
   const disabled = row.credit || isAdded;
   return (
     <>
       <tr
-        className={`cursor-pointer transition hover:bg-ink/5 ${isAdded ? "opacity-60" : ""}`}
+        data-selected={(checked && !isAdded) || undefined}
+        className={`cursor-pointer hover:bg-ink/[0.03] ${isAdded ? "opacity-60" : ""}`}
         onClick={onToggleOpen}
         aria-expanded={open}
       >
         <td onClick={(e) => e.stopPropagation()}>
-          <input
-            type="checkbox"
+          <RowCheckbox
             checked={checked && !isAdded}
             disabled={disabled}
             onChange={onToggleChecked}
-            aria-label={`Select ${row.description}`}
+            label={`Select ${row.description}`}
             title={row.credit ? "Credits are not expenses" : isAdded ? "Already added" : undefined}
           />
         </td>
-        <td className="whitespace-nowrap text-muted">{dayLabel(row.date)}</td>
-        <td>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-medium">{row.description}</span>
-            {row.credit ? <span className="pill">credit</span> : null}
-            {isAdded ? <span className="pill">added</span> : null}
-            {row.installment ? <span className="pill">EMI {row.installment}</span> : null}
-            {row.loan?.last4 ? <span className="pill">loan …{row.loan.last4}</span> : null}
-            {row.gstFor ? (
-              <span className="pill" title={row.gstFor.matchedBy === "ref" ? "Cites the instalment's own reference" : "Matched by date and amount only"}>
-                {row.gstFor.matchedBy === "ref" ? "traced by reference" : "traced by amount"}
-              </span>
-            ) : null}
-            {row.untraced ? (
-              <span className="pill border-amber-400/40 text-warning" title="Cites a reference that is not on record. Can be added now; it is traced once that statement is uploaded.">
-                untraced
-              </span>
-            ) : null}
-            {row.foreign ? (
-              <span className="pill">
-                {row.foreign.currency} {row.foreign.amount.toFixed(2)}
-              </span>
-            ) : null}
-            {row.parts.length > 1 ? <span className="text-xs text-muted">{row.parts.length} parts</span> : null}
+        <td className="whitespace-nowrap text-muted">{tableDate(row.date)}</td>
+        <td className="max-w-0">
+          <div className="truncate font-semibold" title={row.description}>
+            {row.description}
           </div>
+          <RowTags row={row} />
         </td>
-        <td className={`whitespace-nowrap text-right font-semibold ${row.credit ? "text-positive" : ""}`}>
-          {row.credit ? "+" : ""}
-          {formatINR(row.total)}
+        <td className="truncate text-muted">{category}</td>
+        <td>{statusOf(row, isAdded)}</td>
+        <td className="text-right">
+          <Amount row={row} />
         </td>
-        <td>
-          <ChevronDownIcon className={`h-4 w-4 text-muted transition-transform ${open ? "rotate-180" : ""}`} />
+        <td className="text-center" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className={`icon-btn mx-auto ${open ? "bg-primary/10 text-primary-light" : "text-primary-light"}`}
+            onClick={onToggleOpen}
+            aria-expanded={open}
+            aria-label={`${open ? "Hide" : "Show"} details for ${row.description}`}
+            title={open ? "Hide details" : "Details"}
+          >
+            <EyeIcon />
+          </button>
         </td>
       </tr>
       {open ? (
         <tr className="bg-ink/[0.03]">
-          <td colSpan={5} className="!py-3">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Breakdown</div>
-                <table className="w-full text-sm">
-                  <tbody>
-                    {row.parts.map((p, i) => (
-                      <tr key={i}>
-                        <td className="py-0.5 pr-3 text-muted">{p.label}</td>
-                        <td className="py-0.5 text-right">{formatINR(p.amount)}</td>
-                      </tr>
-                    ))}
-                    <tr className="border-t border-ink/10 font-semibold">
-                      <td className="pt-1 pr-3">Total</td>
-                      <td className="pt-1 text-right">{formatINR(row.total)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                {row.foreign ? (
-                  <div className="mt-2 space-y-0.5 text-xs text-muted">
-                    <div>
-                      {row.foreign.currency} {row.foreign.amount.toFixed(2)} at ₹{row.foreign.rate.toFixed(2)} per{" "}
-                      {row.foreign.currency}
-                    </div>
-                    <div>
-                      Effective rate with markup and GST: ₹{row.foreign.effectiveRate.toFixed(2)} per {row.foreign.currency}
-                    </div>
-                  </div>
-                ) : null}
-                {row.kind === "emi" ? (
-                  <div className="mt-2 text-xs text-muted">
-                    Loan …{row.loan?.last4 ?? "?"}
-                    {row.loan?.instalmentNo ? ` · instalment #${row.loan.instalmentNo}` : ""}
-                    {row.parts.some((p) => p.kind === "gst")
-                      ? ""
-                      : ". GST on this interest is billed in a later statement and will be traced back here by its reference."}
-                  </div>
-                ) : null}
-                {row.gstFor ? (
-                  <div className="mt-2 text-xs text-muted">
-                    Belongs to instalment #{row.gstFor.instalmentNo ?? "?"} of loan …{row.gstFor.loanLast4 ?? "?"}, billed on {row.gstFor.date}
-                    {row.gstFor.matchedBy === "ref" ? ", matched by its reference." : ", matched by date and amount."}
-                  </div>
-                ) : null}
-                {row.untraced ? (
-                  <div className="mt-2 text-xs text-warning">
-                    Cites a reference that is not on record. Upload the statement that billed the charge it taxes. You can add this row now: the
-                    expense carries a warning until that statement is uploaded, and is then traced to its instalment by the reference and renamed.
-                  </div>
-                ) : null}
-              </div>
-              <div onClick={(e) => e.stopPropagation()}>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Category</div>
-                {isAdded ? (
-                  <div className="text-sm">{category}</div>
-                ) : (
-                  <CategorySelect categories={categories} value={category} onChange={onCategory} />
-                )}
-                <div className="mt-2 text-xs text-muted">Date: {row.date}</div>
-              </div>
-            </div>
+          <td colSpan={7} className="!py-4">
+            <RowDetails row={row} isAdded={isAdded} category={category} categories={categories} onCategory={onCategory} />
           </td>
         </tr>
       ) : null}
     </>
+  );
+}
+
+function PhoneRow({ row, open, checked, isAdded, category, categories, onToggleOpen, onToggleChecked, onCategory }: RowProps) {
+  const disabled = row.credit || isAdded;
+  return (
+    <li data-selected={(checked && !isAdded) || undefined} className={`data-[selected]:bg-primary/[0.06] ${isAdded ? "opacity-60" : ""}`}>
+      <div className="flex items-start gap-3 p-3">
+        <div className="pt-0.5">
+          <RowCheckbox
+            checked={checked && !isAdded}
+            disabled={disabled}
+            onChange={onToggleChecked}
+            label={`Select ${row.description}`}
+            title={row.credit ? "Credits are not expenses" : isAdded ? "Already added" : undefined}
+          />
+        </div>
+        <button type="button" onClick={onToggleOpen} aria-expanded={open} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{row.description}</span>
+            <span className="mt-0.5 block truncate text-xs text-muted">
+              {tableDate(row.date)} · {category}
+            </span>
+          </span>
+          <span className="flex shrink-0 flex-col items-end gap-1 text-sm">
+            <Amount row={row} />
+            {statusOf(row, isAdded)}
+          </span>
+        </button>
+      </div>
+      {open ? (
+        <div className="border-t border-ink/[0.06] bg-ink/[0.03] p-3">
+          <RowDetails row={row} isAdded={isAdded} category={category} categories={categories} onCategory={onCategory} />
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+/** A row opened up: its breakdown, loan or GST notes, and its category. */
+function RowDetails({
+  row,
+  isAdded,
+  category,
+  categories,
+  onCategory,
+}: {
+  row: StatementRow;
+  isAdded: boolean;
+  category: string;
+  categories: string[];
+  onCategory: (c: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div>
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Breakdown</div>
+        <table className="w-full text-sm">
+          <tbody>
+            {row.parts.map((p, i) => (
+              <tr key={i}>
+                <td className="py-0.5 pr-3 text-muted">{p.label}</td>
+                <td className="py-0.5 text-right">{formatINR(p.amount)}</td>
+              </tr>
+            ))}
+            <tr className="border-t border-ink/10 font-semibold">
+              <td className="pt-1 pr-3">Total</td>
+              <td className="pt-1 text-right">{formatINR(row.total)}</td>
+            </tr>
+          </tbody>
+        </table>
+        {row.foreign ? (
+          <div className="mt-2 space-y-0.5 text-xs text-muted">
+            <div>
+              {row.foreign.currency} {row.foreign.amount.toFixed(2)} at ₹{row.foreign.rate.toFixed(2)} per {row.foreign.currency}
+            </div>
+            <div>
+              Effective rate with markup and GST: ₹{row.foreign.effectiveRate.toFixed(2)} per {row.foreign.currency}
+            </div>
+          </div>
+        ) : null}
+        {row.kind === "emi" ? (
+          <div className="mt-2 text-xs text-muted">
+            Loan …{row.loan?.last4 ?? "?"}
+            {row.loan?.instalmentNo ? ` · instalment #${row.loan.instalmentNo}` : ""}
+            {row.parts.some((p) => p.kind === "gst")
+              ? ""
+              : ". GST on this interest is billed in a later statement and will be traced back here by its reference."}
+          </div>
+        ) : null}
+        {row.gstFor ? (
+          <div className="mt-2 text-xs text-muted">
+            Belongs to instalment #{row.gstFor.instalmentNo ?? "?"} of loan …{row.gstFor.loanLast4 ?? "?"}, billed on {row.gstFor.date}
+            {row.gstFor.matchedBy === "ref" ? ", matched by its reference." : ", matched by date and amount."}
+          </div>
+        ) : null}
+        {row.untraced ? (
+          <div className="mt-2 text-xs text-warning">
+            Cites a reference that is not on record. Upload the statement that billed the charge it taxes. You can add this row now: the
+            expense carries a warning until that statement is uploaded, and is then traced to its instalment by the reference and renamed.
+          </div>
+        ) : null}
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Category</div>
+        {isAdded ? <div className="text-sm">{category}</div> : <CategorySelect categories={categories} value={category} onChange={onCategory} />}
+        <div className="mt-2 text-xs text-muted">Date: {row.date}</div>
+      </div>
+    </div>
   );
 }
