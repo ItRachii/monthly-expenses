@@ -206,7 +206,7 @@ export function Summary({
             <div className="flex items-center gap-2 px-4 py-3">
               <button
                 type="button"
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                className="-my-2 flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2 text-left"
                 aria-expanded={detailOpen}
                 onClick={() => setDetailOpen((v) => !v)}
               >
@@ -225,7 +225,7 @@ export function Summary({
                 <button
                   type="button"
                   onClick={() => setSelectedCategory(null)}
-                  className="inline-flex shrink-0 items-center gap-1 text-sm text-muted hover:text-ink"
+                  className="-my-2 inline-flex min-h-11 shrink-0 items-center gap-1 py-2 text-sm text-muted hover:text-ink"
                 >
                   Clear filter <XIcon className="h-4 w-4" />
                 </button>

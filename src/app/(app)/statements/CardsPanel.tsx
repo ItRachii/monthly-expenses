@@ -115,7 +115,7 @@ function CardBlock({ card }: { card: CardView }) {
           </table>
         </div>
         {!confirm ? (
-          <button type="button" className="btn-danger px-3 py-1 text-xs" onClick={() => setConfirm(true)}>
+          <button type="button" className="btn-danger px-3 py-2.5 text-xs" onClick={() => setConfirm(true)}>
             Remove card
           </button>
         ) : (

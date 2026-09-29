@@ -125,6 +125,12 @@
   .icon-btn {
     @apply grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition hover:bg-ink/5 hover:text-ink active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
   }
+  /* Fingers: a 44px target, grown into the margins so nothing else moves. */
+  @media (pointer: coarse) {
+    .icon-btn {
+      @apply -m-1 h-11 w-11;
+    }
+  }
   .input,
   .select,
   .textarea {
