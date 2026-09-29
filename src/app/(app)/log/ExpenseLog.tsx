@@ -343,13 +343,13 @@ export function EditExpenseModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={onClose}
     >
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={save}
-        className="card max-h-[90vh] w-full max-w-md space-y-4 overflow-y-auto"
+        className="modal-pop card max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto overscroll-contain"
       >
         <div className="flex items-center justify-between">
           <h3 className="section-title">Edit Expense</h3>

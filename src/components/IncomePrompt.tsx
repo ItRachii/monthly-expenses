@@ -63,13 +63,13 @@ export function IncomeDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <form
         role="dialog"
         aria-modal="true"
         aria-labelledby="income-title"
         onSubmit={save}
-        className="card w-full max-w-md space-y-4"
+        className="modal-pop card w-full max-w-md space-y-4"
       >
         <div className="flex items-start justify-between gap-3">
           <div>

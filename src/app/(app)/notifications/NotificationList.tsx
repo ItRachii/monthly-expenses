@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { NotificationDTO } from "@/lib/notifications";
@@ -9,6 +10,7 @@ import { markAllReadAction, markReadAction } from "@/lib/actions/notifications";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   expense_added: AddCircleIcon,
+  expense_updated: PencilIcon,
   expense_deleted: TrashIcon,
   settlement_recorded: PaymentsIcon,
   group_renamed: PencilIcon,
@@ -49,12 +51,6 @@ export function NotificationList({
     });
   }
 
-  function onItemClick(n: NotificationDTO) {
-    startTransition(async () => {
-      await markReadAction(n.id);
-      router.refresh();
-    });
-  }
 
   if (notifications.length === 0) {
     return (
@@ -79,19 +75,22 @@ export function NotificationList({
 
       <div className="space-y-2">
         {notifications.map((n) => (
-          <button
+          // Opens the group it happened in; opening it counts as seeing it.
+          <Link
             key={n.id}
-            onClick={() => onItemClick(n)}
-            title="Mark as read"
-            className="card flex w-full items-start gap-3 border-primary/30 bg-primary/5 text-left transition hover:bg-primary/10"
+            href={`/g/${encodeURIComponent(n.groupId)}`}
+            onClick={() => void markReadAction(n.id)}
+            className="card flex w-full items-start gap-3 border-primary/30 bg-primary/5 text-left transition hover:bg-primary/10 active:scale-[0.99]"
           >
             <TypeIcon type={n.type} />
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <div className="text-sm text-ink">{n.message}</div>
-              <div className="mt-0.5 text-xs text-muted">{timeAgo(n.createdAt)}</div>
+              <div className="mt-0.5 truncate text-xs text-muted">
+                <span className="font-medium text-ink/80">{n.groupName}</span> · {timeAgo(n.createdAt)}
+              </div>
             </div>
             <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />
-          </button>
+          </Link>
         ))}
       </div>
     </div>

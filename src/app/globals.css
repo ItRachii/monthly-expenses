@@ -5,12 +5,37 @@
 :root {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
+  /* Motion: a strong ease-out for things that appear or respond, and the
+     iOS drawer curve for sheets. The built-in easings are too weak. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 @layer base {
   html,
   body {
     @apply bg-background text-ink;
+  }
+  /* No grey flash over tapped controls: each one has its own :active. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Taps fire at once, with no wait for a double-tap zoom. */
+  a,
+  button,
+  summary,
+  label,
+  [role="button"],
+  [role="tab"] {
+    touch-action: manipulation;
+  }
+  /* A long press on a control must not select its label. Content text stays
+     selectable. */
+  button,
+  summary,
+  [role="tab"] {
+    -webkit-user-select: none;
+    user-select: none;
   }
   h1 {
     @apply text-2xl font-bold;
@@ -22,7 +47,7 @@
     @apply rounded-xl border border-white/10 bg-surface p-5;
   }
   .btn {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
   }
   .btn-primary {
     @apply btn bg-primary text-white hover:bg-primary/90;
@@ -35,7 +60,7 @@
   }
   /* Icon-only control: 36px hit area around a 20px stroke icon (Icons.tsx). */
   .icon-btn {
-    @apply grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition hover:bg-white/5 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50;
+    @apply grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition hover:bg-white/5 hover:text-ink active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
   }
   .input,
   .select,
@@ -107,6 +132,73 @@
   select,
   textarea {
     font-size: 16px !important;
+  }
+}
+
+/* Sheets and dialogs. They enter with motion so it is clear where they came
+   from; they leave at once, since the answer to "close" should be instant.
+   On phones a sheet rises from the bottom edge; from md up it is a centred
+   dialog that settles from 96%. @starting-style needs no JavaScript, and a
+   browser without it simply shows the sheet in place. */
+.sheet-backdrop {
+  transition: opacity 200ms var(--ease-out);
+}
+.sheet {
+  transition: transform 320ms var(--ease-drawer);
+}
+.modal-pop {
+  transition:
+    transform 200ms var(--ease-out),
+    opacity 200ms var(--ease-out);
+}
+.toast-in {
+  transition:
+    transform 240ms var(--ease-out),
+    opacity 240ms var(--ease-out);
+}
+@starting-style {
+  .sheet-backdrop {
+    opacity: 0;
+  }
+  .sheet {
+    transform: translateY(100%);
+  }
+  .modal-pop {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+  .toast-in {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+@media (min-width: 768px) {
+  .sheet {
+    transition:
+      transform 200ms var(--ease-out),
+      opacity 200ms var(--ease-out);
+  }
+  @starting-style {
+    .sheet {
+      transform: scale(0.96);
+      opacity: 0;
+    }
+  }
+}
+/* Reduced motion: fade only, no travel. */
+@media (prefers-reduced-motion: reduce) {
+  .sheet,
+  .modal-pop,
+  .toast-in {
+    transition: opacity 150ms ease-out;
+  }
+  @starting-style {
+    .sheet,
+    .modal-pop,
+    .toast-in {
+      transform: none;
+      opacity: 0;
+    }
   }
 }
 

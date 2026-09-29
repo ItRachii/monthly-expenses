@@ -11,10 +11,10 @@ import { useAddExpense } from "./AddExpense";
 const BASE_ITEMS = [
   { href: "/", label: "Home" },
   { href: "/add", label: "Add" },
-  { href: "/notifications", label: "Alerts" },
+  { href: "/notifications", label: "Notifications" },
   { href: "/profile", label: "Profile" },
 ];
-const STATEMENTS = { href: "/statements", label: "Import" };
+const STATEMENTS = { href: "/statements", label: "Statements" };
 
 export function MobileBottomNav({ statements = false }: { statements?: boolean }) {
   const pathname = usePathname();
@@ -26,7 +26,7 @@ export function MobileBottomNav({ statements = false }: { statements?: boolean }
       {items.map((it) => {
         const active = pathname === it.href;
         const Icon = NAV_ICONS[it.href];
-        const className = `relative flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] transition ${
+        const className = `relative flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] transition active:scale-95 ${
           active ? "font-semibold text-ink" : "text-muted"
         }`;
         const content = (

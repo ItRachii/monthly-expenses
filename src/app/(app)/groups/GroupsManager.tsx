@@ -4,15 +4,25 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createGroupAction } from "@/lib/actions/groups";
-import { GroupAddIcon } from "@/components/Icons";
-import { ChevronRightIcon, XIcon } from "@/components/Icons";
+import { ChevronRightIcon, GroupAddIcon, XIcon } from "@/components/Icons";
+import { formatINR } from "@/lib/format";
+import { SETTLE_EPS } from "@/lib/settlementMath";
 
 
 export interface GroupItem {
   id: string;
   name: string;
   description: string | null;
-  role: string;
+  memberCount: number;
+  /** Your all-months position in the group: positive means you are owed. */
+  net: number;
+  unread: number;
+}
+
+function Position({ net }: { net: number }) {
+  if (net > SETTLE_EPS) return <span className="text-emerald-400">You are owed {formatINR(net)}</span>;
+  if (net < -SETTLE_EPS) return <span className="text-red-400">You owe {formatINR(-net)}</span>;
+  return <span>Settled up</span>;
 }
 
 // The groups list: each row opens the group screen, whose gear holds the
@@ -28,20 +38,27 @@ export function GroupsManager({ groups }: { groups: GroupItem[] }) {
           wait for an invite!
         </div>
       ) : (
-        <div className="space-y-3">
+        // Bottom room so the create button never covers the last row.
+        <div className="space-y-3 pb-20 md:pb-0">
           {groups.map((g) => (
             <Link
               key={g.id}
               href={`/g/${encodeURIComponent(g.id)}`}
-              className="card flex items-center gap-3 transition hover:bg-white/5"
+              className="card flex items-center gap-3 transition hover:bg-white/5 active:scale-[0.99]"
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold">{g.name}</div>
-                {g.description ? (
-                  <div className="truncate text-sm text-muted">{g.description}</div>
-                ) : null}
+                <div className="truncate text-sm text-muted">
+                  <Position net={g.net} />
+                  {g.memberCount > 0 ? <> · {g.memberCount} member{g.memberCount === 1 ? "" : "s"}</> : null}
+                </div>
               </div>
-              {g.role === "admin" ? <span className="pill">Admin</span> : null}
+              {g.unread > 0 ? (
+                <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold tabular-nums text-white">
+                  {g.unread > 99 ? "99+" : g.unread}
+                  <span className="sr-only"> unread</span>
+                </span>
+              ) : null}
               <ChevronRightIcon className="h-5 w-5 shrink-0 text-muted" />
             </Link>
           ))}
@@ -90,13 +107,13 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
+      className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
       onClick={onClose}
     >
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
-        className="card w-full space-y-4 rounded-b-none md:max-w-lg md:rounded-xl"
+        className="sheet card w-full space-y-4 rounded-b-none md:max-w-lg md:rounded-xl"
         style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between">

@@ -47,7 +47,7 @@ export default async function AppLayout({
   return (
     <SidebarProvider>
       <AddExpenseProvider contexts={addContexts} offlineOwner={offlineOwner}>
-        <div className="flex min-h-screen flex-col md:flex-row">
+        <div className="flex min-h-dvh flex-col md:flex-row">
           {/* Desktop: left sidebar. Mobile: a top bar (profile + notifications)
               and a bottom tab bar; these handle their own safe-area insets. */}
           <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} statements={statements} groups={sidebarGroups} />

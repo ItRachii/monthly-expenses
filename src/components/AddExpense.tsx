@@ -109,7 +109,7 @@ export function AddExpenseProvider({
           role="status"
           className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4 md:bottom-8"
         >
-          <div className="rounded-lg border border-emerald-500/30 bg-surface px-4 py-2.5 text-sm text-emerald-300 shadow-xl">
+          <div className="toast-in rounded-lg border border-emerald-500/30 bg-surface px-4 py-2.5 text-sm text-emerald-300 shadow-xl">
             {toast}
           </div>
         </div>
@@ -197,7 +197,7 @@ function AddExpenseOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
+      className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -206,7 +206,7 @@ function AddExpenseOverlay({
         role="dialog"
         aria-modal="true"
         aria-label="Add expense"
-        className="card max-h-[92vh] w-full space-y-4 overflow-y-auto rounded-b-none md:max-w-xl md:rounded-xl"
+        className="sheet card max-h-[92dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-b-none md:max-w-xl md:rounded-xl"
         style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between gap-3">

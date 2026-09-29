@@ -23,7 +23,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-4">
-      <h1>My Profile</h1>
+      <h1>Profile</h1>
       <ProfileForm
         email={ownEmail(user.appUser) ?? "Sign in again to show your email"}
         firstName={user.appUser.firstName}

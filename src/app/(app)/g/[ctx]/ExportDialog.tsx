@@ -39,14 +39,14 @@ export function ExportButton({
 
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
+          className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
           onClick={() => setOpen(false)}
         >
           <div
             role="dialog"
             aria-label="Export to Excel"
             onClick={(e) => e.stopPropagation()}
-            className="card w-full space-y-4 rounded-b-none md:max-w-md md:rounded-xl"
+            className="sheet card w-full space-y-4 rounded-b-none md:max-w-md md:rounded-xl"
             style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
           >
             <div className="flex items-center justify-between">

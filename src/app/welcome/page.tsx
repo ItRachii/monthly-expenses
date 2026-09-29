@@ -17,7 +17,7 @@ export default async function WelcomePage() {
     redirect("/");
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="flex min-h-svh items-center justify-center p-4">
       <WelcomeForm firstName={user.appUser.firstName} lastName={user.appUser.lastName ?? ""} />
     </div>
   );
