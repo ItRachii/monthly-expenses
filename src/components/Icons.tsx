@@ -64,3 +64,4 @@ export const ArrowDownIcon = icon("arrow_downward");
 export const SearchIcon = icon("search");
 export const LabelIcon = icon("label");
 export const DownloadIcon = icon("download");
+export const CalendarIcon = icon("calendar_month");

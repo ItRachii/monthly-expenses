@@ -16,6 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import { formatINR } from "@/lib/format";
+import { monthLabel } from "@/components/MonthSelect";
 import { TrendingDownIcon, TrendingUpIcon } from "@/components/Icons";
 import { DRAW_MS, useCountUp, useReducedMotion } from "./motion";
 
@@ -320,7 +321,7 @@ function TrendTooltip({
   return (
     <div className={`${tooltipBox} min-w-[11rem]`}>
       <div className="mb-1 flex items-baseline justify-between gap-4">
-        <span className="text-muted">{label ? monthShort(label) : ""}</span>
+        <span className="text-muted">{label ? monthLabel(label) : ""}</span>
         <span className="font-semibold">{formatINR(row.total)}</span>
       </div>
       {lines.map((k) => (
@@ -476,7 +477,7 @@ export function MonthlyTrend({
             <tbody>
               {[...data].reverse().map((row) => (
                 <tr key={row.month}>
-                  <td className="whitespace-nowrap">{monthShort(row.month)}</td>
+                  <td className="whitespace-nowrap">{monthLabel(row.month)}</td>
                   {keys.map((k) => (
                     <td key={k} className="text-right tabular-nums">
                       {(row[k] as number) > 0 ? formatINR(row[k] as number) : "-"}
