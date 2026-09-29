@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import { formatINR } from "@/lib/format";
 import { TrendingDownIcon, TrendingUpIcon } from "@/components/Icons";
+import { DRAW_MS, useCountUp, useReducedMotion } from "./motion";
 
 // ---------------------------------------------------------------------------
 // Shared category palette.
@@ -108,6 +109,23 @@ function ChartCard({
   );
 }
 
+// The strong curves from globals.css, for Recharts' own animations.
+const STRONG_EASE_OUT = "cubic-bezier(0.23,1,0.32,1)" as const;
+const STRONG_EASE_IN_OUT = "cubic-bezier(0.65,0,0.35,1)" as const;
+
+/** Rupees that count up to their value (see useCountUp). */
+function CountUpINR({ value, className }: { value: number; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useCountUp(value, (n) => {
+    if (ref.current) ref.current.textContent = exactINR(n);
+  });
+  return (
+    <span ref={ref} className={className}>
+      {exactINR(value)}
+    </span>
+  );
+}
+
 function Swatch({ colour }: { colour: string }) {
   return <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: colour }} />;
 }
@@ -119,6 +137,7 @@ function Swatch({ colour }: { colour: string }) {
 function Sparkline({ values, colour }: { values: number[]; colour: string }) {
   const W = 96;
   const H = 40;
+  const id = useId();
   if (values.length < 2) return <div style={{ width: W, height: H }} aria-hidden />;
   const max = Math.max(...values);
   const min = Math.min(...values);
@@ -137,9 +156,28 @@ function Sparkline({ values, colour }: { values: number[]; colour: string }) {
     const [x3, y3] = pts[i + 2] ?? pts[i + 1];
     d += ` C${x1 + (x2 - x0) / 6},${y1 + (y2 - y0) / 6} ${x2 - (x3 - x1) / 6},${y2 - (y3 - y1) / 6} ${x2},${y2}`;
   }
+  const [lx, ly] = pts[pts.length - 1];
+  const area = `${d} L${lx},${H} L${pts[0][0]},${H} Z`;
+  // Glass line: a soft glow under a crisp stroke, a tinted fill fading to
+  // nothing, and a dot on this month. It draws left to right, then the fill
+  // and the dot settle in (globals.css, .spark-*). Keyed on the values, so a
+  // new month redraws it.
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden className="shrink-0">
-      <path d={d} fill="none" stroke={colour} strokeWidth={2} strokeLinecap="round" />
+    <svg key={values.join(",")} width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden className="shrink-0 overflow-visible">
+      <defs>
+        <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={colour} stopOpacity={0.28} />
+          <stop offset="100%" stopColor={colour} stopOpacity={0} />
+        </linearGradient>
+        <filter id={`${id}-glow`} x="-20%" y="-50%" width="140%" height="200%">
+          <feGaussianBlur stdDeviation={2.5} />
+        </filter>
+      </defs>
+      <path className="spark-area" d={area} fill={`url(#${id}-fill)`} />
+      <path className="spark-line" d={d} pathLength={1} fill="none" stroke={colour} strokeWidth={5} strokeOpacity={0.35} strokeLinecap="round" filter={`url(#${id}-glow)`} />
+      <path className="spark-line" d={d} pathLength={1} fill="none" stroke={colour} strokeWidth={2} strokeLinecap="round" />
+      <circle className="spark-dot" cx={lx} cy={ly} r={5} fill={colour} fillOpacity={0.25} />
+      <circle className="spark-dot" cx={lx} cy={ly} r={2.5} fill={colour} />
     </svg>
   );
 }
@@ -166,7 +204,17 @@ export function StatCard({
   unit?: "percent";
 }) {
   const percent = unit === "percent";
-  const [whole, frac] = (percent ? `${value}` : money ? inr.format(value) : String(value)).split(".");
+  const text = (n: number) => (percent || !money ? String(Math.round(n)) : inr.format(n)).split(".");
+  const [whole, frac] = text(value);
+  // The figure counts up to its value when the tab opens, and from the old
+  // figure to the new one when the month changes.
+  const wholeRef = useRef<HTMLSpanElement>(null);
+  const fracRef = useRef<HTMLSpanElement>(null);
+  useCountUp(value, (n) => {
+    const [w, f] = text(n);
+    if (wholeRef.current) wholeRef.current.textContent = w;
+    if (fracRef.current && f !== undefined) fracRef.current.textContent = `.${f}`;
+  });
   const change = percent
     ? previous === null
       ? null
@@ -193,8 +241,12 @@ export function StatCard({
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 truncate text-2xl font-semibold tabular-nums max-sm:text-lg">
           {money && !percent ? "₹" : ""}
-          {whole}
-          {frac ? <span className="text-sm font-medium text-muted">.{frac}</span> : null}
+          <span ref={wholeRef}>{whole}</span>
+          {frac ? (
+            <span ref={fracRef} className="text-sm font-medium text-muted">
+              .{frac}
+            </span>
+          ) : null}
           {percent ? "%" : ""}
         </div>
         <div className="max-sm:hidden">
@@ -299,6 +351,7 @@ export function MonthlyTrend({
   const months = RANGES.find((r) => r.id === range)?.months ?? Infinity;
   const data = Number.isFinite(months) ? all.slice(-months) : all;
   const capEvery = data.length > 12 ? 2 : 1;
+  const reduced = useReducedMotion();
 
   return (
     <ChartCard
@@ -340,7 +393,12 @@ export function MonthlyTrend({
                 stackId="month"
                 fill={palette.colourOf(k)}
                 maxBarSize={64}
-                isAnimationActive={false}
+                // Columns rise from the axis, each category a beat after the
+                // one below it, so every month visibly adds up.
+                isAnimationActive={!reduced}
+                animationBegin={i * 70}
+                animationDuration={DRAW_MS - 150}
+                animationEasing={STRONG_EASE_OUT}
                 // Each segment is its own rounded block, inset to leave a gap
                 // to its neighbours in the stack.
                 shape={(props: unknown) => {
@@ -566,6 +624,7 @@ export function CategoryDonut({
   const shown = hover ?? (selectedIndex >= 0 ? selectedIndex : null);
   const dimmed = (i: number) =>
     hover !== null ? hover !== i : Boolean(selected) && data[i]?.category !== selected;
+  const reduced = useReducedMotion();
 
   return (
     <ChartCard title="Where it went">
@@ -591,7 +650,13 @@ export function CategoryDonut({
                 paddingAngle={data.length > 1 ? 2 : 0}
                 cornerRadius={6}
                 stroke="none"
-                isAnimationActive={false}
+                // Clockwise from 12 o'clock, the ring sweeps round and fills
+                // each category in turn while the total counts up.
+                startAngle={90}
+                endAngle={-270}
+                isAnimationActive={!reduced}
+                animationDuration={DRAW_MS}
+                animationEasing={STRONG_EASE_IN_OUT as "ease-in-out"}
                 labelLine={false}
                 label={(props: unknown) => (
                   <DonutCallout
@@ -618,7 +683,7 @@ export function CategoryDonut({
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-xs text-muted">Total</span>
-            <span className="text-[15px] font-semibold tabular-nums">{exactINR(total)}</span>
+            <CountUpINR value={total} className="text-[15px] font-semibold tabular-nums" />
           </div>
         </div>
 
@@ -670,6 +735,7 @@ export function CategoryBars({
   rows: { category: string; amount: number }[];
   palette: Palette;
 }) {
+  const reduced = useReducedMotion();
   const data = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of rows) {
@@ -710,7 +776,14 @@ export function CategoryBars({
                 );
               }}
             />
-            <Bar dataKey="amount" radius={[0, 6, 6, 0]} maxBarSize={22} isAnimationActive={false}>
+            <Bar
+              dataKey="amount"
+              radius={[0, 6, 6, 0]}
+              maxBarSize={22}
+              isAnimationActive={!reduced}
+              animationDuration={DRAW_MS - 150}
+              animationEasing={STRONG_EASE_OUT}
+            >
               {data.map((d) => (
                 <Cell key={d.category} fill={palette.colourOf(d.category)} />
               ))}
