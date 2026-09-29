@@ -15,6 +15,7 @@ import { applyKeys, lineagePayload, lineageWarnings, resolveLineage, type KnownI
 import { getAddSetupAction } from "@/lib/actions/expenses";
 import { CategorySelect } from "@/components/CategorySelect";
 import { Tabs } from "@/components/Tabs";
+import { FileDropzone } from "@/components/FileDropzone";
 import { ChevronDownIcon, ReceiptIcon, XIcon } from "@/components/Icons";
 import { mergeCategories } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
@@ -292,16 +293,21 @@ export function StatementImport({
             </div>
           </div>
 
-          <label className="block">
-            <span className="label">Statement file</span>
-            <input
-              type="file"
-              accept="application/pdf,.pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.csv,text/csv"
-              className="input"
-              disabled={phase === "reading"}
-              onChange={(e) => pick(e.target.files?.[0] ?? null)}
-            />
-          </label>
+          <FileDropzone
+            label="Statement file"
+            accept=".pdf,application/pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.csv,text/csv"
+            disabled={phase === "reading"}
+            onFiles={(fs) => pick(fs[0] ?? null)}
+            onReject={(fs) => setError(`${fs[0].name} is not a PDF, Excel (.xlsx) or CSV file.`)}
+            hint="Supported formats: PDF, Excel (.xlsx), CSV. Read on this device, never uploaded."
+          >
+            {file ? (
+              <span className="max-w-full truncate rounded-full bg-white/[0.06] px-3 py-1 text-xs text-ink">
+                {phase === "reading" ? "Reading " : ""}
+                {file.name}
+              </span>
+            ) : null}
+          </FileDropzone>
 
           {needPassword && file ? (
             <form

@@ -1,6 +1,7 @@
 "use client";
 
-import { CameraIcon, ImageIcon, TrashIcon, XIcon } from "@/components/Icons";
+import { CameraIcon, TrashIcon, XIcon } from "@/components/Icons";
+import { FileDropzone } from "@/components/FileDropzone";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ocrImages, type OcrProgress } from "@/lib/ocr";
@@ -89,6 +90,10 @@ export function ReceiptScanner({
   function addFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const incoming = Array.from(e.target.files ?? []);
     e.target.value = "";
+    addImages(incoming);
+  }
+
+  function addImages(incoming: File[]) {
     if (incoming.length === 0) return;
     setError(null);
     setFiles((prev) => {
@@ -224,20 +229,19 @@ export function ReceiptScanner({
 
       {phase === "pick" ? (
         <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {/* No `capture` → the gallery/photo picker. */}
-            <label className="btn-secondary flex-1 cursor-pointer text-center">
-              <ImageIcon className="h-4 w-4" /> Choose from gallery
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="sr-only"
-                aria-label="Choose receipt images from gallery"
-                onChange={addFiles}
-              />
-            </label>
-            {/* `capture` → opens the camera on mobile (ignored on desktop). */}
+          {/* No `capture`: the gallery or file picker, or drag images in. */}
+          <FileDropzone
+            label="Choose receipt images"
+            accept="image/*"
+            multiple
+            action="to add receipt images"
+            hint="JPG, PNG or HEIC. Several at once. Read on this device, never uploaded."
+            onFiles={addImages}
+            onReject={(fs) => setError(`${fs.length === 1 ? `${fs[0].name} is` : `${fs.length} files are`} not an image.`)}
+          />
+          <div className="flex sm:hidden">
+            {/* `capture` opens the camera on phones. Desktops ignore it, and the
+                picker above already covers them. */}
             <label className="btn-secondary flex-1 cursor-pointer text-center">
               <CameraIcon className="h-4 w-4" /> Take photo
               <input
@@ -251,9 +255,6 @@ export function ReceiptScanner({
               />
             </label>
           </div>
-          <p className="text-xs text-muted">
-            Add one or more receipt images from your gallery or camera.
-          </p>
           {files.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {files.map((f, i) => (
