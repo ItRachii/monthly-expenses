@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
 import { enqueueExpense } from "@/lib/offlineQueue";
@@ -67,6 +67,7 @@ export function AddExpenseForm({
   >(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const uid = useId();
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -181,8 +182,8 @@ export function AddExpenseForm({
 
   const dateField = (
     <div>
-      <label className="label">Date</label>
-      <input
+      <label htmlFor={`${uid}-date`} className="label">Date</label>
+      <input id={`${uid}-date`}
         type="date"
         className="input"
         value={date}
@@ -193,15 +194,15 @@ export function AddExpenseForm({
 
   const categoryField = (
     <div>
-      <label className="label">Category</label>
-      <CategorySelect categories={categories} value={category} onChange={setCategory} />
+      <label htmlFor={`${uid}-category`} className="label">Category</label>
+      <CategorySelect id={`${uid}-category`} categories={categories} value={category} onChange={setCategory} />
     </div>
   );
 
   const itemField = (
     <div>
-      <label className="label">Item / Description</label>
-      <input
+      <label htmlFor={`${uid}-item-description`} className="label">Item / Description</label>
+      <input id={`${uid}-item-description`}
         className="input"
         value={item}
         onChange={(e) => setItem(e.target.value)}
@@ -212,8 +213,8 @@ export function AddExpenseForm({
 
   const amountField = (
     <div>
-      <label className="label">Amount (₹)</label>
-      <input
+      <label htmlFor={`${uid}-amount`} className="label">Amount (₹)</label>
+      <input id={`${uid}-amount`}
         type="text"
         inputMode="decimal"
         enterKeyHint="next"
@@ -255,8 +256,8 @@ export function AddExpenseForm({
           <div className="space-y-4">
             {dateField}
             <div>
-              <label className="label">Who paid?</label>
-              <select
+              <label htmlFor={`${uid}-who-paid`} className="label">Who paid?</label>
+              <select id={`${uid}-who-paid`}
                 className="select"
                 value={payer}
                 onChange={(e) => setPayer(e.target.value)}
@@ -269,8 +270,8 @@ export function AddExpenseForm({
               </select>
             </div>
             <div>
-              <label className="label">Split</label>
-              <select
+              <label htmlFor={`${uid}-split`} className="label">Split</label>
+              <select id={`${uid}-split`}
                 className="select"
                 value={split}
                 onChange={(e) => setSplit(e.target.value)}
@@ -285,7 +286,7 @@ export function AddExpenseForm({
           </div>
           {multi ? (
             <div className="sm:col-span-2">
-              <label className="label">How much did each person pay?</label>
+              <p className="label">How much did each person pay?</p>
               <SplitShares
                 idPrefix="paid"
                 members={payerOptions}
@@ -300,7 +301,7 @@ export function AddExpenseForm({
           ) : null}
           {custom ? (
             <div className="sm:col-span-2">
-              <label className="label">How much does each person owe?</label>
+              <p className="label">How much does each person owe?</p>
               <SplitShares
                 members={payerOptions}
                 amount={parseFloat(amount)}

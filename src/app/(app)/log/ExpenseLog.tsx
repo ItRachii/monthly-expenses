@@ -2,7 +2,7 @@
 
 import { PencilIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/Icons";
 import { PendingFlag } from "@/components/PendingFlag";
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { type ReactNode, useId, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
@@ -42,6 +42,7 @@ export function ExpenseLog({
   isPersonal: boolean;
 }) {
   const router = useRouter();
+  const uid = useId();
   const [pending, startTransition] = useTransition();
 
   const [month, setMonth] = useState("All");
@@ -122,24 +123,24 @@ export function ExpenseLog({
       <div className="grid grid-cols-5 items-end gap-3">
         {contextSelector}
         <div>
-          <label className="label">Month</label>
-          <select className="select" value={month} onChange={(e) => setMonth(e.target.value)}>
+          <label htmlFor={`${uid}-month`} className="label">Month</label>
+          <select id={`${uid}-month`} className="select" value={month} onChange={(e) => setMonth(e.target.value)}>
             {months.map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="label">Category</label>
-          <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <label htmlFor={`${uid}-category`} className="label">Category</label>
+          <select id={`${uid}-category`} className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
             {["All", ...categories].map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="label">Payer</label>
-          <select className="select" value={payer} onChange={(e) => setPayer(e.target.value)}>
+          <label htmlFor={`${uid}-payer`} className="label">Payer</label>
+          <select id={`${uid}-payer`} className="select" value={payer} onChange={(e) => setPayer(e.target.value)}>
             <option value="All">All</option>
             {payerOptions.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -147,8 +148,8 @@ export function ExpenseLog({
           </select>
         </div>
         <div>
-          <label className="label">Split</label>
-          <select className="select" value={split} onChange={(e) => setSplit(e.target.value)}>
+          <label htmlFor={`${uid}-split`} className="label">Split</label>
+          <select id={`${uid}-split`} className="select" value={split} onChange={(e) => setSplit(e.target.value)}>
             <option value="All">All</option>
             {splitOptions.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -286,6 +287,7 @@ export function EditExpenseModal({
   const multi = !isPersonal && payer === PAYER_MULTIPLE;
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const uid = useId();
 
   // Legacy rows can hold a payer/split for someone no longer in the group.
   // Surface that original value as an option so the row displays honestly and
@@ -375,8 +377,8 @@ export function EditExpenseModal({
         </div>
 
         <div>
-          <label className="label">Date</label>
-          <input
+          <label htmlFor={`${uid}-date`} className="label">Date</label>
+          <input id={`${uid}-date`}
             type="date"
             className="input"
             value={date}
@@ -384,16 +386,16 @@ export function EditExpenseModal({
           />
         </div>
         <div>
-          <label className="label">Category</label>
-          <CategorySelect categories={categories} value={category} onChange={setCategory} />
+          <label htmlFor={`${uid}-category`} className="label">Category</label>
+          <CategorySelect id={`${uid}-category`} categories={categories} value={category} onChange={setCategory} />
         </div>
         <div>
-          <label className="label">Item / Description</label>
-          <input className="input" value={item} onChange={(e) => setItem(e.target.value)} />
+          <label htmlFor={`${uid}-item-description`} className="label">Item / Description</label>
+          <input id={`${uid}-item-description`} className="input" value={item} onChange={(e) => setItem(e.target.value)} />
         </div>
         <div>
-          <label className="label">Amount (₹)</label>
-          <input
+          <label htmlFor={`${uid}-amount`} className="label">Amount (₹)</label>
+          <input id={`${uid}-amount`}
             type="text"
             inputMode="decimal"
             className="input"
@@ -407,8 +409,8 @@ export function EditExpenseModal({
         {!isPersonal ? (
           <>
             <div>
-              <label className="label">Payer</label>
-              <select
+              <label htmlFor={`${uid}-payer`} className="label">Payer</label>
+              <select id={`${uid}-payer`}
                 className="select"
                 value={payer}
                 onChange={(e) => setPayer(e.target.value)}
@@ -422,7 +424,7 @@ export function EditExpenseModal({
             </div>
             {multi ? (
               <div>
-                <label className="label">How much did each person pay?</label>
+                <p className="label">How much did each person pay?</p>
                 <SplitShares
                   idPrefix="paid"
                   members={payerOptions}
@@ -436,8 +438,8 @@ export function EditExpenseModal({
               </div>
             ) : null}
             <div>
-              <label className="label">Split</label>
-              <select
+              <label htmlFor={`${uid}-split`} className="label">Split</label>
+              <select id={`${uid}-split`}
                 className="select"
                 value={split}
                 onChange={(e) => setSplit(e.target.value)}
