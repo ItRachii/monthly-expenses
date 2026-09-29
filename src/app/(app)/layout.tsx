@@ -8,7 +8,7 @@ import { MobileTopBar } from "@/components/MobileTopBar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { OfflineSync } from "@/components/OfflineSync";
 import { AddExpenseProvider } from "@/components/AddExpense";
-import { getUserGroups } from "@/lib/groups";
+import { getSidebarGroups, getUserGroups } from "@/lib/groups";
 import { statementsEnabled } from "@/lib/features";
 import { redirect } from "next/navigation";
 import { getIncomeHistory } from "@/lib/income";
@@ -25,10 +25,11 @@ export default async function AppLayout({
 }) {
   const user = await requireUser();
   const displayName = displayNameFor(user.appUser, user.name || user.email);
-  const [unreadCount, groups, incomeHistory] = await Promise.all([
+  const [unreadCount, groups, incomeHistory, sidebarGroups] = await Promise.all([
     getUnreadCount(user.email),
     getUserGroups(user.email),
     getIncomeHistory(user.email),
+    getSidebarGroups(user.email),
   ]);
   // New users set their income before anything else; existing users without
   // one get a skippable popup.
@@ -49,7 +50,7 @@ export default async function AppLayout({
         <div className="flex min-h-screen flex-col md:flex-row">
           {/* Desktop: left sidebar. Mobile: a top bar (profile + notifications)
               and a bottom tab bar; these handle their own safe-area insets. */}
-          <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} statements={statements} />
+          <Sidebar name={displayName} image={user.image} unreadCount={unreadCount} statements={statements} groups={sidebarGroups} />
           <MobileTopBar image={user.image} unreadCount={unreadCount} />
           <AppMain>{children}</AppMain>
           <MobileBottomNav statements={statements} />

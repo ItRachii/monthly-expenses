@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { NAV_ICONS } from "./NavIcons";
 
@@ -36,17 +37,21 @@ export function NavLinks({
   unreadCount = 0,
   collapsed = false,
   ariaLabel,
+  slots = {},
 }: {
   items?: NavItem[];
   unreadCount?: number;
   collapsed?: boolean;
   ariaLabel?: string;
+  /** Replaces the plain link for an href, e.g. the expandable Groups entry. */
+  slots?: Record<string, ReactNode>;
 }) {
   const pathname = usePathname();
 
   return (
     <nav aria-label={ariaLabel} className="flex flex-col gap-1">
       {items.map((it) => {
+        if (slots[it.href]) return <div key={it.href}>{slots[it.href]}</div>;
         const active = pathname === it.href;
         const showBadge = it.href === "/notifications" && unreadCount > 0;
         const Icon = NAV_ICONS[it.href];

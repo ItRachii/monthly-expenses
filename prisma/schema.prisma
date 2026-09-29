@@ -147,14 +147,17 @@ model GroupNameHistory {
 }
 
 model GroupMember {
-  id          Int      @id @default(autoincrement())
-  groupId     String   @map("group_id")
-  email       String
-  displayName String?  @map("display_name")
-  role        String?
-  joinedAt    DateTime @map("joined_at")
-  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  id            Int       @id @default(autoincrement())
+  groupId       String    @map("group_id")
+  email         String
+  displayName   String?   @map("display_name")
+  role          String?
+  joinedAt      DateTime  @map("joined_at")
+  /// When this member last opened the group, for the sidebar's recent groups.
+  lastVisitedAt DateTime? @map("last_visited_at") @db.Timestamptz(6)
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
+  @@index([email, lastVisitedAt(sort: Desc)], map: "group_members_email_visit_idx")
   @@map("group_members")
 }
 
