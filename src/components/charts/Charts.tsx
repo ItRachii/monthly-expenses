@@ -51,7 +51,10 @@ export function buildPalette(rows: { category: string; amount: number }[]): Pale
     const c = categoryName(r.category);
     totals.set(c, (totals.get(c) ?? 0) + r.amount);
   }
+  // A category literally called "Other" is never named: it joins the grey
+  // overflow bucket, or the charts would draw two series called "Other".
   const named = Array.from(totals.entries())
+    .filter(([c]) => c !== OTHER)
     .sort((a, b) => b[1] - a[1])
     .slice(0, HUES.length)
     .map(([c]) => c);
@@ -71,7 +74,7 @@ export function monthShort(key: string): string {
 }
 
 /** Exact rupees with Indian grouping: ₹1,23,456.78. */
-export const exactINR = (n: number) => `₹${inr.format(n)}`;
+export const exactINR = formatINR;
 
 /** ₹1.2k / ₹15k / ₹1.1L: short enough for axis ticks and caps. */
 function compactINR(n: number): string {
