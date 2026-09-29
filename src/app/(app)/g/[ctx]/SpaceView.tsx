@@ -11,6 +11,7 @@ import type { SettlementDTO } from "@/lib/settlements";
 import type { BalanceLine } from "@/lib/balances";
 import type { GroupView } from "@/lib/groupView";
 import { GroupSettingsOverlay } from "@/components/GroupSettings";
+import { Tabs } from "@/components/Tabs";
 import { FinanceCard, financeFor, type FinanceData } from "@/components/PersonalFinance";
 import { ExpenseFeed } from "./ExpenseFeed";
 import { Settlement } from "../../settlement/Settlement";
@@ -142,22 +143,8 @@ export function SpaceView({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-white/10" role="tablist">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm transition ${
-              tab === t.id
-                ? "border-primary font-semibold text-ink"
-                : "border-transparent text-muted hover:text-ink"
-            }`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="border-b border-white/10">
+        <Tabs label={isPersonal ? "Personal expenses" : "Group"} tabs={tabs} value={tab} onChange={setTab} />
       </div>
 
       {tab === "expenses" ? (
