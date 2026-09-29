@@ -4,80 +4,77 @@
   <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
   <svg x="-76.79999999999995" y="-76.79999999999995" width="1177.6" height="1177.6" viewBox="0 0 1024 1024">
   
-  <!-- Three layers stacked like cards in a wallet, sharing one rounded
-       outline: the warm card at the back, the blue card in the middle,
-       and a frosted glass pocket in front holding the rupee sign. -->
+  <!-- Three cards stacked like a wallet on one centre line, each its own card: the mint card,
+       the blue card, and a frosted glass pocket in front holding the rupee
+       sign. The back cards are slightly narrower, so they recede. -->
   <defs>
-    <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFD891"/>
-      <stop offset="1" stop-color="#F0A35E"/>
+    <linearGradient id="back" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8FEBD2"/>
+      <stop offset="1" stop-color="#27A88E"/>
     </linearGradient>
     <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#86A6F2"/>
       <stop offset="0.5" stop-color="#4C72B0"/>
       <stop offset="1" stop-color="#2A4687"/>
     </linearGradient>
+    <linearGradient id="topLight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="0.12" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
     <linearGradient id="glassFill" x1="0" y1="0" x2="0.9" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.60"/>
-      <stop offset="0.55" stop-color="#E6EDFF" stop-opacity="0.30"/>
-      <stop offset="1" stop-color="#9DB4EE" stop-opacity="0.30"/>
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.62"/>
+      <stop offset="0.55" stop-color="#E6EDFF" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#B7C8F3" stop-opacity="0.34"/>
     </linearGradient>
     <linearGradient id="glassEdge" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.95"/>
       <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.18"/>
     </linearGradient>
     <radialGradient id="sheen" cx="0.2" cy="0.1" r="0.8">
       <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.5"/>
       <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
     </radialGradient>
-    <filter id="frost" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="22"/>
-    </filter>
-    <filter id="lift" x="-20%" y="-30%" width="140%" height="160%">
-      <feGaussianBlur stdDeviation="14"/>
-    </filter>
+    <filter id="frost" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="24"/></filter>
+    <filter id="contact" x="-20%" y="-30%" width="140%" height="160%"><feGaussianBlur stdDeviation="12"/></filter>
     <filter id="glyphShadow" x="-40%" y="-40%" width="180%" height="180%">
       <feDropShadow dx="0" dy="12" stdDeviation="13" flood-color="#132352" flood-opacity="0.5"/>
     </filter>
 
-    <!-- The shared outline every layer is cut to. -->
-    <clipPath id="outline">
-      <rect x="212" y="182" width="600" height="640" rx="150"/>
-    </clipPath>
-    <!-- The glass pocket: its top edge rises slightly to the right. -->
-    <clipPath id="pocket">
-      <rect x="192" y="452" width="640" height="480" rx="118" transform="rotate(-4 512 692)"/>
-    </clipPath>
+    <!-- Card shapes, each used for its fill, its contact shadow and the glass. -->
+    <rect id="backCard" x="262" y="176" width="500" height="420" rx="112"/>
+    <rect id="midCard" x="237" y="300" width="550" height="470" rx="120"/>
+    <rect id="glassCard" x="212" y="436" width="600" height="400" rx="132"/>
+    <clipPath id="glassClip"><use href="#glassCard"/></clipPath>
 
-    <g id="back">
-      <rect x="212" y="182" width="600" height="640" fill="url(#warm)"/>
-      <!-- The blue card: its top edge falls slightly to the right. -->
-      <rect x="192" y="316" width="640" height="400" rx="122" fill="url(#blue)" transform="rotate(3.5 512 516)"/>
+    <g id="behindGlass">
+      <use href="#backCard" fill="url(#back)"/>
+      <use href="#midCard" fill="url(#blue)"/>
     </g>
   </defs>
 
-  <g clip-path="url(#outline)">
-    <use href="#back"/>
-    <!-- A soft shadow above the pocket's edge lifts it off the blue card. -->
-    <rect x="192" y="440" width="640" height="480" rx="118" transform="rotate(-4 512 680)" fill="#0B1633" opacity="0.22" filter="url(#lift)"/>
-    <!-- Frosted glass: the cards behind, blurred, through a milky pane. -->
-    <g clip-path="url(#pocket)">
-      <rect x="212" y="182" width="600" height="640" fill="#F4F7FF" opacity="0.30"/>
-      <g filter="url(#frost)"><use href="#back"/></g>
-      <rect x="192" y="420" width="640" height="420" fill="url(#glassFill)"/>
-      <rect x="192" y="420" width="640" height="420" fill="url(#sheen)"/>
-    </g>
-    <!-- The pocket's top edge, catching the light. -->
-    <rect x="192" y="452" width="640" height="480" rx="118" transform="rotate(-4 512 692)" fill="none" stroke="url(#glassEdge)" stroke-width="7"/>
+  <!-- Back card. -->
+  <use href="#backCard" fill="url(#back)"/>
+  <use href="#backCard" fill="url(#topLight)"/>
+
+  <!-- Blue card, with the shadow it casts on the back card just above its edge. -->
+  <use href="#midCard" transform="translate(0 -14)" fill="#0A1230" opacity="0.35" filter="url(#contact)"/>
+  <use href="#midCard" fill="url(#blue)"/>
+  <use href="#midCard" fill="url(#topLight)"/>
+
+  <!-- Glass pocket: its contact shadow, then the cards behind it blurred
+       through a milky pane, then its lit edge. -->
+  <use href="#glassCard" transform="translate(0 -14)" fill="#0A1230" opacity="0.30" filter="url(#contact)"/>
+  <g clip-path="url(#glassClip)">
+    <rect x="150" y="380" width="724" height="500" fill="#F4F7FF" opacity="0.18"/>
+    <g filter="url(#frost)"><use href="#behindGlass"/></g>
+    <rect x="150" y="380" width="724" height="500" fill="url(#glassFill)"/>
+    <rect x="150" y="380" width="724" height="500" fill="url(#sheen)"/>
   </g>
-  <!-- The outline's lower edge where it bounds the glass. -->
-  <g clip-path="url(#pocket)">
-    <rect x="215" y="185" width="594" height="634" rx="147" fill="none" stroke="url(#glassEdge)" stroke-width="5"/>
-  </g>
+  <use href="#glassCard" fill="none" stroke="url(#glassEdge)" stroke-width="5"/>
 
   <!-- Rupee sign, drawn as strokes so it is the same on every device. -->
-  <g transform="translate(416 520) scale(0.74)" filter="url(#glyphShadow)" fill="none" stroke="#FFFFFF" stroke-width="54" stroke-linecap="round" stroke-linejoin="round">
+  <g transform="translate(416 518) scale(0.74)" filter="url(#glyphShadow)" fill="none" stroke="#FFFFFF" stroke-width="54" stroke-linecap="round" stroke-linejoin="round">
     <path d="M24 24 H236"/>
     <path d="M24 112 H236"/>
     <path d="M24 24 H112 C194 24 216 66 216 112 C216 158 178 190 112 190 H36 L208 308"/>
