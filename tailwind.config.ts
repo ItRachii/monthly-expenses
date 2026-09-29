@@ -1,5 +1,7 @@
 import type { Config } from "tailwindcss";
 
+const tone = (name: string) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   // hover: styles only where a mouse can hover. A tap fakes :hover on touch
@@ -7,16 +9,23 @@ const config: Config = {
   future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
+      // Every colour is a CSS variable holding RGB channels, set per theme
+      // in globals.css ([data-theme]), so opacity modifiers (bg-ink/5) and
+      // the same class work in light and dark.
       colors: {
-        // Mirrors the Streamlit theme in legacy-streamlit/.streamlit/config.toml
-        background: "#0E1117",
-        surface: "#1C1F26",
-        primary: "#4C72B0",
-        // The primary blue lightened for text on dark surfaces (7:1 on surface).
-        "primary-light": "#8FB0E6",
-        accent: "#DD8452",
-        ink: "#FAFAFA",
-        muted: "#8B9DB8",
+        background: tone("background"),
+        surface: tone("surface"),
+        primary: tone("primary"),
+        // Primary for text and icons: lighter on dark, deeper on light, 7:1
+        // on the surface either way.
+        "primary-light": tone("primary-light"),
+        accent: tone("accent"),
+        ink: tone("ink"),
+        muted: tone("muted"),
+        // Money and state colours, readable on both surfaces.
+        positive: tone("positive"),
+        negative: tone("negative"),
+        warning: tone("warning"),
       },
       // Motion tokens, the same curves as --ease-out and --ease-drawer in
       // globals.css. ease-out replaces Tailwind's weak default of that name.

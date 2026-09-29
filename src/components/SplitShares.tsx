@@ -73,7 +73,7 @@ export function SplitShares({
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-white/10 p-3">
+    <div className="space-y-2 rounded-lg border border-ink/10 p-3">
       {members.map((m) => (
         <div key={m.value} className="flex items-center gap-3">
           <label htmlFor={`share-${m.value}`} className="min-w-0 flex-1 truncate text-sm">
@@ -99,8 +99,8 @@ export function SplitShares({
             !valid
               ? "text-muted"
               : Math.abs(left) <= SETTLE_EPS
-                ? "text-emerald-400"
-                : "text-red-400"
+                ? "text-positive"
+                : "text-negative"
           }
         >
           {!valid

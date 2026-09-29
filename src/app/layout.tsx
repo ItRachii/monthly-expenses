@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { PWARegister } from "@/components/PWARegister";
+import { ThemeSync } from "@/components/ThemeSync";
+import { THEME_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "Ledger: monthly expenses",
@@ -34,9 +36,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    // data-theme is dark on the server and replaced before first paint by
+    // THEME_SCRIPT, hence suppressHydrationWarning on this one element.
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="font-sans antialiased">
         {children}
+        <ThemeSync />
         <PWARegister />
       </body>
     </html>

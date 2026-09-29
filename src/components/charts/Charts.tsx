@@ -32,9 +32,14 @@ import { DRAW_MS, useCountUp, useReducedMotion } from "./motion";
 const HUES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9"];
 export const OTHER = "Other";
 const OTHER_HUE = "#6e737d";
-const MUTED = "#8B9DB8";
-const INK = "#FAFAFA";
-const GRID = "rgba(255,255,255,0.08)";
+// Theme colours for SVG attributes and styles: CSS variables, so the charts
+// follow the light or dark theme (globals.css, [data-theme]).
+const MUTED = "rgb(var(--c-muted))";
+const INK = "rgb(var(--c-ink))";
+const GRID = "rgb(var(--c-ink) / 0.08)";
+const RISE = "rgb(var(--c-negative))";
+const FALL = "rgb(var(--c-positive))";
+const PRIMARY = "rgb(var(--c-primary))";
 
 export interface Palette {
   /** The named categories, biggest first. Anything else is "Other". */
@@ -84,7 +89,7 @@ function compactINR(n: number): string {
   return `₹${Math.round(n)}`;
 }
 
-const tooltipBox = "rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm shadow-xl";
+const tooltipBox = "rounded-lg border border-ink/10 bg-surface px-3 py-2 text-sm shadow-xl";
 
 /** Card chrome shared by the three charts: title left, optional control right. */
 function ChartCard({
@@ -229,8 +234,8 @@ export function StatCard({
       : tone === "neutral"
         ? MUTED
         : up === (tone === "spend")
-          ? "#f87171"
-          : "#34d399";
+          ? RISE
+          : FALL;
   const Arrow = up ? TrendingUpIcon : TrendingDownIcon;
 
   return (
@@ -250,7 +255,7 @@ export function StatCard({
           {percent ? "%" : ""}
         </div>
         <div className="max-sm:hidden">
-          <Sparkline values={history} colour={colour === MUTED ? "#4C72B0" : colour} />
+          <Sparkline values={history} colour={colour === MUTED ? PRIMARY : colour} />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
@@ -385,7 +390,7 @@ export function MonthlyTrend({
               minTickGap={8}
             />
             <YAxis tickFormatter={compactINR} tick={{ fill: MUTED, fontSize: 12 }} tickLine={false} axisLine={false} width={48} />
-            <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} content={<TrendTooltip keys={keys} palette={palette} />} />
+            <Tooltip cursor={{ fill: "rgb(var(--c-ink) / 0.04)" }} content={<TrendTooltip keys={keys} palette={palette} />} />
             {keys.map((k, i) => (
               <Bar
                 key={k}
@@ -829,7 +834,7 @@ export function CategoryBars({
               axisLine={false}
             />
             <Tooltip
-              cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              cursor={{ fill: "rgb(var(--c-ink) / 0.04)" }}
               content={({ active, payload }) => {
                 const d = active ? (payload?.[0]?.payload as { category: string; amount: number } | undefined) : undefined;
                 if (!d) return null;

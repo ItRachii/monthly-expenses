@@ -143,7 +143,7 @@ export function SpaceView({
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-white/10">
+      <div className="border-b border-ink/10">
         <Tabs label={isPersonal ? "Personal expenses" : "Group"} tabs={tabs} value={tab} onChange={setTab} />
       </div>
 

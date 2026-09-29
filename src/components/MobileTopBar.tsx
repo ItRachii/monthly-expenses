@@ -12,13 +12,13 @@ export function MobileTopBar({
   unreadCount: number;
 }) {
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-background/80 px-4 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur md:hidden">
+    <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-ink/10 bg-background/80 px-4 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur md:hidden">
       <span className="text-base font-bold">Ledger</span>
       <div className="flex items-center gap-1">
         <Link
           href="/notifications"
           aria-label="Notifications"
-          className="relative grid h-10 w-10 place-items-center rounded-lg text-2xl leading-none transition hover:bg-white/5"
+          className="relative grid h-10 w-10 place-items-center rounded-lg text-2xl leading-none transition hover:bg-ink/5"
         >
           <span aria-hidden>
             <NotificationsIcon />

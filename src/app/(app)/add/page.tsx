@@ -28,7 +28,7 @@ export default async function AddPage({
         <div className="space-y-2">
           <Link
             href="/add?ctx=personal"
-            className="card flex items-center gap-3 transition hover:border-white/20 hover:bg-white/5"
+            className="card flex items-center gap-3 transition hover:border-ink/20 hover:bg-ink/5"
           >
             <span aria-hidden className="text-2xl leading-none">
               <ProfileIcon />
@@ -42,7 +42,7 @@ export default async function AddPage({
             <Link
               key={g.id}
               href={`/add?ctx=${encodeURIComponent(g.id)}`}
-              className="card flex items-center gap-3 transition hover:border-white/20 hover:bg-white/5"
+              className="card flex items-center gap-3 transition hover:border-ink/20 hover:bg-ink/5"
             >
               <span aria-hidden className="text-2xl leading-none">
                 <GroupsIcon />

@@ -110,8 +110,8 @@ export function OfflineSync({ ownerTag }: { ownerTag: string }) {
         ) : null}
         {failed.map((f) => (
           <div key={f.id} className="flex items-center gap-3">
-            <AlertTriangleIcon className="h-5 w-5 text-red-300" />
-            <span className="flex-1 text-red-300">
+            <AlertTriangleIcon className="h-5 w-5 text-negative" />
+            <span className="flex-1 text-negative">
               Couldn&apos;t sync &quot;{f.item}&quot; — {f.error}
             </span>
             <button

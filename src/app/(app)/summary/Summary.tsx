@@ -230,7 +230,7 @@ export function Summary({
               ) : null}
             </div>
             {detailOpen ? (
-              <div className="overflow-x-auto border-t border-white/10">
+              <div className="overflow-x-auto border-t border-ink/10">
                 <table className="data-table">
                   <thead>
                     <tr>

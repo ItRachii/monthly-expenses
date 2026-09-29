@@ -12,7 +12,7 @@ function GroupCard({ g }: { g: GroupBalance }) {
   return (
     <Link
       href={`/g/${encodeURIComponent(g.id)}`}
-      className="card block transition hover:border-white/20 hover:bg-white/5"
+      className="card block transition hover:border-ink/20 hover:bg-ink/5"
     >
       <div className="truncate text-lg font-semibold">{g.name}</div>
       <div className="mt-2">
