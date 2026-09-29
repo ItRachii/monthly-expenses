@@ -56,9 +56,12 @@ export function FinanceCard({ f, incomeSet }: { f: MonthView; incomeSet: boolean
           )}
         </Figure>
       </div>
-      <p className="text-xs text-muted">
-        This month: {formatINR(f.personal)} personal + {formatINR(f.groups)} your share in groups.
-      </p>
+      {/* The split only means something when some of it came from groups. */}
+      {f.groups > 0 ? (
+        <p className="text-xs text-muted">
+          This month: {formatINR(f.personal)} personal + {formatINR(f.groups)} your share in groups.
+        </p>
+      ) : null}
       {!incomeSet ? (
         // Highlighted until set: the popup is skippable, this is the way back.
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3">

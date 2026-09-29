@@ -40,6 +40,36 @@
   h1 {
     @apply text-2xl font-bold;
   }
+  /* Disclosures: the browser's triangle sits on a line of its own above a
+     block title. Swap it for a muted chevron beside the title that turns to
+     point down when open. */
+  summary {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    cursor: pointer;
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  summary::before {
+    content: "";
+    flex-shrink: 0;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-left: 0.125rem;
+    border-right: 2px solid theme("colors.muted");
+    border-bottom: 2px solid theme("colors.muted");
+    transform: rotate(-45deg);
+    transition: transform 150ms var(--ease-out);
+  }
+  details[open] > summary::before {
+    transform: rotate(45deg);
+  }
+  summary > * {
+    min-width: 0;
+  }
 }
 
 @layer components {

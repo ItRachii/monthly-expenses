@@ -18,6 +18,12 @@ const config: Config = {
         ink: "#FAFAFA",
         muted: "#8B9DB8",
       },
+      // Motion tokens, the same curves as --ease-out and --ease-drawer in
+      // globals.css. ease-out replaces Tailwind's weak default of that name.
+      transitionTimingFunction: {
+        out: "var(--ease-out)",
+        drawer: "var(--ease-drawer)",
+      },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
       },

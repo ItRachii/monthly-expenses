@@ -290,8 +290,9 @@ export function ReceiptScanner({
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full bg-primary transition-[width]"
-              style={{ width: `${Math.round((progress?.progress ?? 0) * 100)}%` }}
+              // scaleX, not width: the bar moves on the GPU with no relayout.
+              className="h-full w-full origin-left bg-primary transition-transform duration-200 ease-linear"
+              style={{ transform: `scaleX(${progress?.progress ?? 0})` }}
             />
           </div>
           <div className="text-xs text-muted">

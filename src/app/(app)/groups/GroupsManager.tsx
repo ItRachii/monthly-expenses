@@ -128,7 +128,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div>
-          <label className="label">Group Name *</label>
+          <label className="label">Group name *</label>
           <input
             className="input"
             value={name}
@@ -153,7 +153,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={pending}>
-            {pending ? "Creating…" : "Create Group"}
+            {pending ? "Creating…" : "Create group"}
           </button>
         </div>
       </form>

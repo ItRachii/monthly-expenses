@@ -165,7 +165,7 @@ export function GroupsNav({ groups, collapsed }: { groups: SidebarGroup[]; colla
       <div
         id={listId}
         inert={!open}
-        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none ${
+        className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${
           open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
         }`}
       >

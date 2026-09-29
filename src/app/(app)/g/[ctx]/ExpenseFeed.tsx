@@ -369,6 +369,9 @@ function ExpenseRow({
   };
 
   return (
+    // 700ms is on purpose: past the 300ms UI budget, but this is the slow
+    // fade-out of the "just added" highlight, not a reply to a tap. Faster
+    // and the eye misses which row was new.
     <div
       {...(isDesktop ? {} : pressable)}
       className={`flex items-center gap-3 px-3 py-2.5 transition-colors duration-700 ${

@@ -293,7 +293,7 @@ export function AddExpenseForm({
       ) : null}
 
       <button type="submit" className="btn-primary w-full" disabled={pending}>
-        {pending ? "Saving…" : "Add Expense"}
+        {pending ? "Saving…" : "Add expense"}
       </button>
     </form>
   );

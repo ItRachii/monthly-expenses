@@ -186,20 +186,24 @@ export function StatCard({
   const Arrow = up ? TrendingUpIcon : TrendingDownIcon;
 
   return (
-    <div className="card flex min-w-0 flex-col gap-3">
-      <div className="truncate text-sm text-muted">{title}</div>
+    // Phones fit two per row: tighter padding, smaller figure, and the
+    // sparkline goes (the change line below still says which way it moved).
+    <div className="card flex min-w-0 flex-col gap-3 max-sm:gap-2 max-sm:p-4">
+      <div className="truncate text-sm text-muted max-sm:text-xs">{title}</div>
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 truncate text-2xl font-semibold tabular-nums">
+        <div className="min-w-0 truncate text-2xl font-semibold tabular-nums max-sm:text-lg">
           {money && !percent ? "₹" : ""}
           {whole}
           {frac ? <span className="text-sm font-medium text-muted">.{frac}</span> : null}
           {percent ? "%" : ""}
         </div>
-        <Sparkline values={history} colour={colour === MUTED ? "#4C72B0" : colour} />
+        <div className="max-sm:hidden">
+          <Sparkline values={history} colour={colour === MUTED ? "#4C72B0" : colour} />
+        </div>
       </div>
-      <div className="flex items-center gap-1.5 text-xs">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
         {change === null ? (
-          <span className="text-muted">No earlier month to compare</span>
+          <span className="text-muted">No earlier month</span>
         ) : (
           <>
             <span className="flex items-center gap-1 font-semibold" style={{ color: colour }}>
