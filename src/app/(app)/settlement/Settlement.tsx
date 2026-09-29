@@ -19,6 +19,21 @@ import {
 import { formatINR } from "@/lib/format";
 import { Metric } from "@/components/Metric";
 import { MonthSelect, monthLabel } from "@/components/MonthSelect";
+import { DateBadge } from "@/components/DateBadge";
+import { StatusPill, tableDate } from "@/components/table/Table";
+
+/**
+ * When a payment was recorded, in India time: the day (YYYY-MM-DD) and the
+ * time ("11:02 pm"). Worked out by hand from the UTC instant, not with the
+ * locale formatter, so the server render and the browser always agree.
+ */
+function settledAt(iso: string): { day: string; time: string } {
+  const t = new Date(new Date(iso).getTime() + 330 * 60 * 1000); // UTC+5:30
+  const day = t.toISOString().slice(0, 10);
+  const h = t.getUTCHours();
+  const m = String(t.getUTCMinutes()).padStart(2, "0");
+  return { day, time: `${h % 12 || 12}:${m} ${h < 12 ? "am" : "pm"}` };
+}
 import { settleAction } from "@/lib/actions/settlements";
 
 interface Member {
@@ -129,9 +144,9 @@ export function Settlement({
   }, [settlements, rows, memberKeys]);
 
   function progressText(entry: LineageEntry | undefined): string {
-    if (!entry || entry.owed <= SETTLE_EPS) return "—";
+    if (!entry || entry.owed <= SETTLE_EPS) return "";
     if (entry.remaining > SETTLE_EPS)
-      return `${formatINR(entry.paidToDate)} of ${formatINR(entry.owed)} — ${formatINR(entry.remaining)} left`;
+      return `${formatINR(entry.paidToDate)} of ${formatINR(entry.owed)}, ${formatINR(entry.remaining)} left`;
     return `${formatINR(entry.owed)} fully recovered`;
   }
 
@@ -153,7 +168,7 @@ export function Settlement({
     }
     if (amount > pairRemaining + SETTLE_EPS) {
       setError(
-        `Amount exceeds the outstanding ${formatINR(pairRemaining)} — a payment can't be more than what's owed.`,
+        `Amount exceeds the outstanding ${formatINR(pairRemaining)}. A payment can't be more than what's owed.`,
       );
       return;
     }
@@ -197,14 +212,14 @@ export function Settlement({
             <Metric label="Expenses" value={String(monthRows.length)} />
           </div>
           <div className="alert-info">
-            Personal expenses are yours alone — there&apos;s nothing to settle here.
+            Personal expenses are yours alone, so there&apos;s nothing to settle here.
             Settlements apply to <strong>group</strong> expenses.
           </div>
         </div>
       ) : fullySettled ? (
         <div className="space-y-3">
           <div className="alert-success">
-            This month is <strong>fully settled</strong> — {formatINR(owedTotal)} recovered
+            This month is <strong>fully settled</strong>: {formatINR(owedTotal)} recovered
             across {monthPayments.length} payment{monthPayments.length === 1 ? "" : "s"}.
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -221,46 +236,80 @@ export function Settlement({
           {nMembers ? (
             <>
               <p className="text-sm text-muted">Equal share per member: {formatINR(total / nMembers)}</p>
-              <div className="card overflow-x-auto p-0">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Member</th>
-                      <th className="text-right">Paid (₹)</th>
-                      <th className="text-right">Owes (₹)</th>
-                      <th className="text-right">Net (₹)</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {balances.map((b) => {
-                      // Status reflects settlement payments already made, so a
-                      // part-paid debt shows only what is still to be recovered.
-                      const owesNow = round2(
-                        remainingTransfers.filter((t) => t.from === b.id).reduce((s, t) => s + t.amount, 0),
-                      );
-                      const getsNow = round2(
-                        remainingTransfers.filter((t) => t.to === b.id).reduce((s, t) => s + t.amount, 0),
-                      );
-                      const status =
-                        getsNow > SETTLE_EPS
-                          ? `Gets back ${formatINR(getsNow)}`
-                          : owesNow > SETTLE_EPS
-                          ? `Owes ${formatINR(owesNow)}`
-                          : "Settled";
-                      return (
-                        <tr key={b.id}>
-                          <td>{b.displayName}</td>
-                          <td className="text-right">{b.paid.toFixed(2)}</td>
-                          <td className="text-right">{b.owes.toFixed(2)}</td>
-                          <td className="text-right">{b.net.toFixed(2)}</td>
-                          <td>{status}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {(() => {
+                // Status reflects settlement payments already made, so a
+                // part-paid debt shows only what is still to be recovered.
+                const members = balances.map((b) => {
+                  const owesNow = round2(
+                    remainingTransfers.filter((t) => t.from === b.id).reduce((s, t) => s + t.amount, 0),
+                  );
+                  const getsNow = round2(
+                    remainingTransfers.filter((t) => t.to === b.id).reduce((s, t) => s + t.amount, 0),
+                  );
+                  const status =
+                    getsNow > SETTLE_EPS ? (
+                      <StatusPill tone="positive">Gets back {formatINR(getsNow)}</StatusPill>
+                    ) : owesNow > SETTLE_EPS ? (
+                      <StatusPill tone="negative">Owes {formatINR(owesNow)}</StatusPill>
+                    ) : (
+                      <StatusPill tone="neutral">Settled</StatusPill>
+                    );
+                  return { b, status };
+                });
+                return (
+                  <>
+                    {/* Phones: one row per member, the status beside the name. */}
+                    <ul className="card divide-y divide-ink/5 p-0 md:hidden">
+                      {members.map(({ b, status }) => (
+                        <li key={b.id} className="space-y-1 px-3 py-2.5">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="min-w-0 truncate text-sm font-medium">{b.displayName}</span>
+                            {status}
+                          </div>
+                          <div className="text-xs tabular-nums text-muted">
+                            Paid {formatINR(b.paid)} · Share {formatINR(b.owes)} · Net{" "}
+                            <span className={b.net > SETTLE_EPS ? "text-positive" : b.net < -SETTLE_EPS ? "text-negative" : ""}>
+                              {formatINR(b.net)}
+                            </span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* Desktop: the table. */}
+                    <div className="card hidden overflow-x-auto p-0 md:block">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Member</th>
+                            <th className="text-right">Paid</th>
+                            <th className="text-right">Share</th>
+                            <th className="text-right">Net</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {members.map(({ b, status }) => (
+                            <tr key={b.id}>
+                              <td>{b.displayName}</td>
+                              <td className="whitespace-nowrap text-right tabular-nums">{formatINR(b.paid)}</td>
+                              <td className="whitespace-nowrap text-right tabular-nums">{formatINR(b.owes)}</td>
+                              <td
+                                className={`whitespace-nowrap text-right tabular-nums ${
+                                  b.net > SETTLE_EPS ? "text-positive" : b.net < -SETTLE_EPS ? "text-negative" : ""
+                                }`}
+                              >
+                                {formatINR(b.net)}
+                              </td>
+                              <td>{status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* Bottom line: who still owes whom, after part payments. */}
               {remainingTransfers.length > 0 ? (
@@ -274,7 +323,7 @@ export function Settlement({
                         <strong>{formatINR(t.amount)}</strong>
                         {paidPair > SETTLE_EPS ? (
                           <span className="text-muted">
-                            {" "}— {formatINR(paidPair)} of {formatINR(owedPair)} already paid
+                            {", "}{formatINR(paidPair)} of {formatINR(owedPair)} already paid
                           </span>
                         ) : null}
                       </p>
@@ -282,7 +331,7 @@ export function Settlement({
                   })}
                   {isPartial ? (
                     <p className="text-xs text-muted">
-                      Partially settled — {formatINR(outstanding)} still to be recovered.
+                      Partially settled: {formatINR(outstanding)} still to be recovered.
                     </p>
                   ) : null}
                 </div>
@@ -296,7 +345,7 @@ export function Settlement({
                 <form onSubmit={settle} className="card space-y-4">
                   <h3 className="section-title">Record a Settlement Payment</h3>
                   <p className="text-xs text-muted">
-                    Part payments are fine — the month stays open until the full
+                    Part payments are fine: the month stays open until the full
                     amount is recovered.
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -332,7 +381,7 @@ export function Settlement({
                     <label className="label">
                       Amount (₹)
                       {pairRemaining > SETTLE_EPS ? (
-                        <span className="text-muted"> — outstanding {formatINR(pairRemaining)}</span>
+                        <span className="text-muted">, outstanding {formatINR(pairRemaining)}</span>
                       ) : null}
                     </label>
                     <input
@@ -371,34 +420,66 @@ export function Settlement({
         {settlements.length === 0 ? (
           <div className="alert-info">No settlements recorded yet.</div>
         ) : (
-          <div className="card overflow-x-auto p-0">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Month</th>
-                  <th>Settled At</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th className="text-right">Paid (₹)</th>
-                  <th>Progress</th>
-                  <th>Note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {settlements.map((s) => (
-                  <tr key={s.id}>
-                    <td>{s.month}</td>
-                    <td>{s.settledAt.slice(0, 16).replace("T", " ")}</td>
-                    <td>{nameOf(s.settledBy)}</td>
-                    <td>{s.settledTo ? nameOf(s.settledTo) : "—"}</td>
-                    <td className="text-right">{s.amount.toFixed(2)}</td>
-                    <td className="whitespace-nowrap">{progressText(lineageById.get(s.id))}</td>
-                    <td>{s.note ?? ""}</td>
+          <>
+            {/* Phones: one row per payment, dated like the expense list. */}
+            <ul className="card divide-y divide-ink/5 p-0 md:hidden">
+              {settlements.map((s) => {
+                const at = settledAt(s.settledAt);
+                const progress = progressText(lineageById.get(s.id));
+                return (
+                  <li key={s.id} className="flex items-center gap-3 px-3 py-2.5">
+                    <DateBadge iso={at.day} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">
+                        {nameOf(s.settledBy)} paid{s.settledTo ? ` ${nameOf(s.settledTo)}` : ""}
+                      </div>
+                      <div className="truncate text-xs text-muted">
+                        For {monthLabel(s.month)} · {at.time}
+                        {s.note ? ` · ${s.note}` : ""}
+                      </div>
+                      {progress ? <div className="truncate text-xs text-muted">{progress}</div> : null}
+                    </div>
+                    <div className="shrink-0 text-sm font-semibold tabular-nums">{formatINR(s.amount)}</div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Desktop: the table. */}
+            <div className="card hidden overflow-x-auto p-0 md:block">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Settled at</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th className="text-right">Paid</th>
+                    <th>Progress</th>
+                    <th>Note</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {settlements.map((s) => {
+                    const at = settledAt(s.settledAt);
+                    return (
+                      <tr key={s.id}>
+                        <td className="whitespace-nowrap">{monthLabel(s.month)}</td>
+                        <td className="whitespace-nowrap">
+                          {tableDate(at.day)}, {at.time}
+                        </td>
+                        <td>{nameOf(s.settledBy)}</td>
+                        <td>{s.settledTo ? nameOf(s.settledTo) : ""}</td>
+                        <td className="whitespace-nowrap text-right tabular-nums">{formatINR(s.amount)}</td>
+                        <td className="whitespace-nowrap">{progressText(lineageById.get(s.id))}</td>
+                        <td>{s.note ?? ""}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
