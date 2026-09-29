@@ -197,8 +197,7 @@ export function StatCard({
   money = true,
   unit,
 }: {
-  /** Text, or a member's photo plus text. */
-  title: React.ReactNode;
+  title: string;
   value: number;
   /** Values for the sparkline, oldest first, ending with this month. */
   history: number[];
@@ -244,7 +243,7 @@ export function StatCard({
     // Phones fit two per row: tighter padding, smaller figure, and the
     // sparkline goes (the change line below still says which way it moved).
     <div className="card flex min-w-0 flex-col gap-3 max-sm:gap-2 max-sm:p-4">
-      <div className="flex min-w-0 items-center gap-1.5 truncate text-sm text-muted max-sm:text-xs">{title}</div>
+      <div className="truncate text-sm text-muted max-sm:text-xs">{title}</div>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 truncate text-2xl font-semibold tabular-nums max-sm:text-lg">
           {money && !percent ? "₹" : ""}

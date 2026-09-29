@@ -168,11 +168,7 @@ export function Summary({
           members.map((m) => (
             <StatCard
               key={m.key}
-              title={
-                <>
-                  <PersonAvatar id={m.key} /> paid
-                </>
-              }
+              title={`${m.displayName} paid`}
               tone="neutral"
               {...series((r) => r.payer === m.key)}
             />
