@@ -14,6 +14,8 @@ import type { SaveStatementInput } from "@/lib/cards";
 import { applyKeys, lineagePayload, lineageWarnings, resolveLineage, type KnownInstalment } from "@/lib/statements/lineage";
 import { getAddSetupAction } from "@/lib/actions/expenses";
 import { CategorySelect } from "@/components/CategorySelect";
+import { Tabs } from "@/components/Tabs";
+import { FileDropzone } from "@/components/FileDropzone";
 import { ChevronDownIcon, ReceiptIcon, XIcon } from "@/components/Icons";
 import { mergeCategories } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
@@ -25,9 +27,9 @@ interface Opt {
 
 type Phase = "pick" | "reading" | "review";
 
-const TABS: { id: RowKind; label: string }[] = [
+const TABS: { id: RowKind; label: string; shortLabel?: string }[] = [
   { id: "domestic", label: "Domestic" },
-  { id: "international", label: "International" },
+  { id: "international", label: "International", shortLabel: "Intl." },
   { id: "emi", label: "EMI" },
 ];
 
@@ -291,16 +293,21 @@ export function StatementImport({
             </div>
           </div>
 
-          <label className="block">
-            <span className="label">Statement file</span>
-            <input
-              type="file"
-              accept="application/pdf,.pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.csv,text/csv"
-              className="input"
-              disabled={phase === "reading"}
-              onChange={(e) => pick(e.target.files?.[0] ?? null)}
-            />
-          </label>
+          <FileDropzone
+            label="Statement file"
+            accept=".pdf,application/pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.csv,text/csv"
+            disabled={phase === "reading"}
+            onFiles={(fs) => pick(fs[0] ?? null)}
+            onReject={(fs) => setError(`${fs[0].name} is not a PDF, Excel (.xlsx) or CSV file.`)}
+            hint="Supported formats: PDF, Excel (.xlsx), CSV. Read on this device, never uploaded."
+          >
+            {file ? (
+              <span className="max-w-full truncate rounded-full bg-white/[0.06] px-3 py-1 text-xs text-ink">
+                {phase === "reading" ? "Reading " : ""}
+                {file.name}
+              </span>
+            ) : null}
+          </FileDropzone>
 
           {needPassword && file ? (
             <form
@@ -410,34 +417,35 @@ export function StatementImport({
           ) : null}
 
           <section className="card space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <div className="flex overflow-x-auto border-b border-white/10" role="tablist">
-                {TABS.map((t) => (
-                  <button
-                    key={t.id}
-                    role="tab"
-                    aria-selected={tab === t.id}
-                    className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition ${
-                      tab === t.id ? "border-primary font-semibold text-ink" : "border-transparent text-muted hover:text-ink"
-                    }`}
-                    onClick={() => setTab(t.id)}
-                  >
-                    {t.label}
-                    <span className="ml-1 text-xs text-muted">{rows.filter((r) => r.kind === t.id).length}</span>
-                  </button>
-                ))}
-              </div>
+            {/* The border runs the full width of the card; the tab underline sits on it. */}
+            <div className="flex items-end justify-between gap-4 border-b border-white/10">
+              <Tabs
+                label="Statement rows"
+                tabs={TABS.map((t) => ({ ...t, count: rows.filter((r) => r.kind === t.id).length }))}
+                value={tab}
+                onChange={setTab}
+              />
               {tabRows.length > 0 ? (
-                <div className="flex gap-3 whitespace-nowrap text-xs">
-                  <button type="button" className="text-muted hover:text-ink" onClick={() => setAllInTab(true)}>
+                <div className="hidden gap-3 whitespace-nowrap pb-2.5 text-xs sm:flex">
+                  <button type="button" className="text-muted transition-colors hover:text-ink" onClick={() => setAllInTab(true)}>
                     Select all
                   </button>
-                  <button type="button" className="text-muted hover:text-ink" onClick={() => setAllInTab(false)}>
+                  <button type="button" className="text-muted transition-colors hover:text-ink" onClick={() => setAllInTab(false)}>
                     None
                   </button>
                 </div>
               ) : null}
             </div>
+            {tabRows.length > 0 ? (
+              <div className="flex justify-end gap-3 whitespace-nowrap text-xs sm:hidden">
+                <button type="button" className="text-muted transition-colors hover:text-ink" onClick={() => setAllInTab(true)}>
+                  Select all
+                </button>
+                <button type="button" className="text-muted transition-colors hover:text-ink" onClick={() => setAllInTab(false)}>
+                  None
+                </button>
+              </div>
+            ) : null}
 
             {tab === "emi" && parsed.loans.length > 0 ? (
               <div className="rounded-lg border border-white/10 p-3 text-sm" data-loans>

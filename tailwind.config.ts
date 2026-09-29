@@ -9,6 +9,8 @@ const config: Config = {
         background: "#0E1117",
         surface: "#1C1F26",
         primary: "#4C72B0",
+        // The primary blue lightened for text on dark surfaces (7:1 on surface).
+        "primary-light": "#8FB0E6",
         accent: "#DD8452",
         ink: "#FAFAFA",
         muted: "#8B9DB8",
