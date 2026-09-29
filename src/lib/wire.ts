@@ -45,6 +45,7 @@ export interface WireMember {
   displayName: string;
   role: string;
   isSelf: boolean;
+  image: string | null;
 }
 
 export interface Wire {
@@ -52,6 +53,8 @@ export interface Wire {
   members: WireMember[];
   /** key -> display name, for labelling row values on the client. */
   nameMap: Record<string, string>;
+  /** key -> Google photo URL, for members who have one. */
+  imageMap: Record<string, string>;
   /** Server-side only: maps a stored email to its wire key. */
   toKey: (email: string) => string;
 }
@@ -68,9 +71,13 @@ export function buildWire(scope: string, members: MemberDTO[], selfEmail: string
     displayName: safeLabel(m.displayName, m.email),
     role: m.role,
     isSelf: m.email === selfEmail,
+    image: m.image ?? null,
   }));
   const nameMap: Record<string, string> = Object.fromEntries(
     wireMembers.map((w) => [w.key, w.displayName]),
+  );
+  const imageMap: Record<string, string> = Object.fromEntries(
+    wireMembers.flatMap((w) => (w.image ? [[w.key, w.image]] : [])),
   );
   const toKey = (email: string) => {
     const key = wireKey(scope, email);
@@ -79,20 +86,21 @@ export function buildWire(scope: string, members: MemberDTO[], selfEmail: string
     if (!(key in nameMap)) nameMap[key] = labelForUnknown(email);
     return key;
   };
-  return { members: wireMembers, nameMap, toKey };
+  return { members: wireMembers, nameMap, imageMap, toKey };
 }
 
 /** Personal context: the only person is the signed-in user. */
-export function buildPersonalWire(selfEmail: string, displayName: string): Wire {
+export function buildPersonalWire(selfEmail: string, displayName: string, image: string | null = null): Wire {
   const SELF_KEY = "me";
   const nameMap: Record<string, string> = { [SELF_KEY]: displayName };
+  const imageMap: Record<string, string> = image ? { [SELF_KEY]: image } : {};
   const toKey = (email: string) => {
     if (email === selfEmail) return SELF_KEY;
     const key = wireKey("personal", email);
     if (!(key in nameMap)) nameMap[key] = labelForUnknown(email);
     return key;
   };
-  return { members: [], nameMap, toKey };
+  return { members: [], nameMap, imageMap, toKey };
 }
 
 /** Resolves a wire key sent back by a client to a participant's email. */

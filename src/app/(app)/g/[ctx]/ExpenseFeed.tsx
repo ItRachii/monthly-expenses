@@ -12,6 +12,7 @@ import { formatINR } from "@/lib/format";
 import { deleteExpenseAction } from "@/lib/actions/expenses";
 import { EditExpenseModal } from "../../log/ExpenseLog";
 import { ExportButton } from "./ExportDialog";
+import { PersonAvatar } from "@/components/Person";
 
 interface Opt {
   value: string;
@@ -282,7 +283,7 @@ export function ExpenseFeed({
                 <SortHeader label="Date" sortKey="date" sort={sort} onSort={onSort} className="w-28" />
                 <SortHeader label="Item" sortKey="item" sort={sort} onSort={onSort} />
                 <SortHeader label="Category" sortKey="category" sort={sort} onSort={onSort} className="w-32" />
-                {isPersonal ? null : <Th className="w-28">Paid by</Th>}
+                {isPersonal ? null : <Th className="w-20">Paid by</Th>}
                 {isPersonal ? null : <Th className="w-36">Status</Th>}
                 <SortHeader label="Amount" sortKey="amount" sort={sort} onSort={onSort} align="right" className="w-32" />
                 <Th align="center" className="w-24">
@@ -297,7 +298,7 @@ export function ExpenseFeed({
                   row={r}
                   checked={selected.has(r.id)}
                   isNew={fresh.has(r.id)}
-                  paidBy={isPersonal ? null : payerLabel(r.payer)}
+                  paidBy={isPersonal ? null : r.payer}
                   inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
                   pending={pending}
                   onToggle={() => toggle(r.id)}
@@ -322,7 +323,7 @@ export function ExpenseFeed({
                   flag={r.flag}
                   date={r.date}
                   amount={r.amount}
-                  paidBy={isPersonal ? null : payerLabel(r.payer)}
+                  paidBy={isPersonal ? null : r.payer}
                   category={r.category || "Uncategorised"}
                   inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
                   isDesktop={false}
@@ -353,6 +354,7 @@ export function ExpenseFeed({
       {actionsFor ? (
         <ExpenseActions
           expense={actionsFor.expense}
+          paidBy={isPersonal ? null : payerLabel(actionsFor.expense.payer)}
           startConfirming={actionsFor.confirm}
           pending={pending}
           onEdit={() => {
@@ -395,6 +397,7 @@ function ExpenseTableRow({
   row: ExpenseDTO;
   checked: boolean;
   isNew: boolean;
+  /** Payer's member key; null in Personal. */
   paidBy: string | null;
   inv: ReturnType<typeof involvement> | null;
   pending: boolean;
@@ -426,7 +429,11 @@ function ExpenseTableRow({
         {row.flag && flagOpen ? <PendingFlagNote reason={row.flag} /> : null}
       </td>
       <td className="truncate text-muted">{row.category || "Uncategorised"}</td>
-      {paidBy !== null ? <td className="truncate text-muted">{paidBy}</td> : null}
+      {paidBy !== null ? (
+        <td>
+          <PersonAvatar id={paidBy} />
+        </td>
+      ) : null}
       {inv ? (
         <td>
           <StatusPill tone={inv.tone === "lent" ? "positive" : inv.tone === "borrowed" ? "negative" : "neutral"}>
@@ -543,7 +550,7 @@ function ExpenseRow({
   /** ISO date, shown as the month over the day. */
   date: string;
   amount: number;
-  /** Payer's display name; null in Personal, where there is only you. */
+  /** Payer's member key; null in Personal, where there is only you. */
   paidBy: string | null;
   category: string;
   inv: ReturnType<typeof involvement> | null;
@@ -644,7 +651,12 @@ function ExpenseRow({
         {flag && flagOpen ? <PendingFlagNote reason={flag} /> : null}
         <div className="mt-0.5 truncate text-xs text-muted">
           <span className="md:hidden">
-            {paidBy ? `${paidBy} paid ` : null}
+            {paidBy ? (
+              <>
+                <PersonAvatar id={paidBy} size="xs" interactive={false} className="mr-1 align-[-3px]" />
+                paid{" "}
+              </>
+            ) : null}
             <span className="text-sm font-semibold text-ink">{formatINR(amount)}</span>
             {" · "}
           </span>
@@ -653,7 +665,16 @@ function ExpenseRow({
       </div>
       {/* Desktop only: who paid and the full amount as its own column. */}
       <div className="hidden w-28 shrink-0 text-right md:block">
-        <div className="truncate text-[11px] text-muted">{paidBy ? `${paidBy} paid` : "spent"}</div>
+        <div className="truncate text-[11px] text-muted">
+          {paidBy ? (
+            <>
+              <PersonAvatar id={paidBy} size="xs" interactive={false} className="mr-1 align-[-3px]" />
+              paid
+            </>
+          ) : (
+            "spent"
+          )}
+        </div>
         <div className="text-sm font-semibold text-ink">{formatINR(amount)}</div>
       </div>
       {inv ? (
@@ -694,6 +715,7 @@ function ExpenseRow({
 /** Bottom sheet (centred dialog on desktop) with Edit and a confirmed Delete. */
 function ExpenseActions({
   expense,
+  paidBy,
   startConfirming = false,
   pending,
   onEdit,
@@ -701,6 +723,8 @@ function ExpenseActions({
   onClose,
 }: {
   expense: ExpenseDTO;
+  /** Payer's name, since rows show only their photo; null in Personal. */
+  paidBy: string | null;
   /** Open directly on the delete confirmation (desktop trash icon). */
   startConfirming?: boolean;
   pending: boolean;
@@ -761,6 +785,7 @@ function ExpenseActions({
           <div className="truncate font-semibold">{expense.item}</div>
           <div className="text-xs text-muted">
             {formatINR(expense.amount)} · {MONTH_SHORT[(m ?? 1) - 1]} {d}
+            {paidBy ? ` · Paid by ${paidBy}` : ""}
           </div>
         </div>
 

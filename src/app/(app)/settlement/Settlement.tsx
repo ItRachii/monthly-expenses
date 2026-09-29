@@ -21,6 +21,7 @@ import { Metric } from "@/components/Metric";
 import { MonthSelect, monthLabel } from "@/components/MonthSelect";
 import { DateBadge } from "@/components/DateBadge";
 import { StatusPill, tableDate } from "@/components/table/Table";
+import { PersonAvatar } from "@/components/Person";
 
 /**
  * When a payment was recorded, in India time: the day (YYYY-MM-DD) and the
@@ -85,7 +86,7 @@ export function Settlement({
   // Expense-derived balances and debts for the month, then subtract every
   // recorded payment. The month is only "settled" when nothing remains.
   const nets = computeNets(monthRows, memberKeys);
-  const balances = nets.map((n) => ({ ...n, displayName: nameOf(n.id) }));
+  const balances = nets;
   const expenseTransfers = simplifyDebts(nets);
   const monthPayments: PaymentLike[] = settlements
     .filter((s) => s.month === selectedMonth)
@@ -263,7 +264,7 @@ export function Settlement({
                       {members.map(({ b, status }) => (
                         <li key={b.id} className="space-y-1 px-3 py-2.5">
                           <div className="flex items-center justify-between gap-3">
-                            <span className="min-w-0 truncate text-sm font-medium">{b.displayName}</span>
+                            <PersonAvatar id={b.id} size="md" />
                             {status}
                           </div>
                           <div className="text-xs tabular-nums text-muted">
@@ -291,7 +292,9 @@ export function Settlement({
                         <tbody>
                           {members.map(({ b, status }) => (
                             <tr key={b.id}>
-                              <td>{b.displayName}</td>
+                              <td>
+                                <PersonAvatar id={b.id} />
+                              </td>
                               <td className="whitespace-nowrap text-right tabular-nums">{formatINR(b.paid)}</td>
                               <td className="whitespace-nowrap text-right tabular-nums">{formatINR(b.owes)}</td>
                               <td
@@ -318,12 +321,12 @@ export function Settlement({
                     const owedPair = pairAmount(expenseTransfers, t.from, t.to);
                     const paidPair = round2(owedPair - t.amount);
                     return (
-                      <p key={idx} className="text-sm">
-                        <strong>{nameOf(t.from)}</strong> owes <strong>{nameOf(t.to)}</strong>{" "}
+                      <p key={idx} className="flex flex-wrap items-center gap-x-1.5 text-sm">
+                        <PersonAvatar id={t.from} /> owes <PersonAvatar id={t.to} />
                         <strong>{formatINR(t.amount)}</strong>
                         {paidPair > SETTLE_EPS ? (
                           <span className="text-muted">
-                            {", "}{formatINR(paidPair)} of {formatINR(owedPair)} already paid
+                            ({formatINR(paidPair)} of {formatINR(owedPair)} already paid)
                           </span>
                         ) : null}
                       </p>
@@ -430,8 +433,9 @@ export function Settlement({
                   <li key={s.id} className="flex items-center gap-3 px-3 py-2.5">
                     <DateBadge iso={at.day} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {nameOf(s.settledBy)} paid{s.settledTo ? ` ${nameOf(s.settledTo)}` : ""}
+                      <div className="flex items-center gap-1.5 text-sm font-medium">
+                        <PersonAvatar id={s.settledBy} /> paid
+                        {s.settledTo ? <PersonAvatar id={s.settledTo} /> : null}
                       </div>
                       <div className="truncate text-xs text-muted">
                         For {monthLabel(s.month)} · {at.time}
@@ -468,8 +472,10 @@ export function Settlement({
                         <td className="whitespace-nowrap">
                           {tableDate(at.day)}, {at.time}
                         </td>
-                        <td>{nameOf(s.settledBy)}</td>
-                        <td>{s.settledTo ? nameOf(s.settledTo) : ""}</td>
+                        <td>
+                          <PersonAvatar id={s.settledBy} />
+                        </td>
+                        <td>{s.settledTo ? <PersonAvatar id={s.settledTo} /> : null}</td>
                         <td className="whitespace-nowrap text-right tabular-nums">{formatINR(s.amount)}</td>
                         <td className="whitespace-nowrap">{progressText(lineageById.get(s.id))}</td>
                         <td>{s.note ?? ""}</td>

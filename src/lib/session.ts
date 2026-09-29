@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { ownEmail, registerUserIfNeeded } from "@/lib/users";
+import { ownEmail, registerUserIfNeeded, syncUserImage } from "@/lib/users";
 import { wireKey } from "@/lib/wire";
 
 export interface CurrentUser {
@@ -23,7 +23,9 @@ export const requireUser = cache(async (): Promise<CurrentUser> => {
   const email = session.user.email;
   const name = session.user.name ?? "User";
   const appUser = await registerUserIfNeeded(email, name);
-  return { email, name, image: session.user.image ?? null, appUser };
+  const image = session.user.image ?? null;
+  if (appUser) await syncUserImage(email, appUser.image, image);
+  return { email, name, image, appUser };
 });
 
 /**
