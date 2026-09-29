@@ -290,3 +290,48 @@
     animation: none;
   }
 }
+
+/* Names that do not fit (SlidingName.tsx): the end fades out at rest; on
+   hover or keyboard focus of the row (.slide-trigger) the name slides along
+   at a steady reading pace, holds, and slides back. Linear, since it is
+   constant motion to read along with, not a response to the pointer. */
+.slide-name {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.slide-name-text {
+  display: inline-block;
+}
+.slide-name[data-overflow] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .slide-trigger:hover .slide-name[data-overflow] .slide-name-text {
+    animation: slide-name var(--slide-time) linear 250ms infinite alternate;
+  }
+  .slide-trigger:hover .slide-name[data-overflow] {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 8px, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 8px, #000 calc(100% - 18px), transparent);
+  }
+}
+.slide-trigger:focus-visible .slide-name[data-overflow] .slide-name-text {
+  animation: slide-name var(--slide-time) linear 250ms infinite alternate;
+}
+@keyframes slide-name {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+  88%,
+  100% {
+    transform: translateX(var(--slide-shift));
+  }
+}
+/* Reduced motion: no slide; the tooltip carries the full name. */
+@media (prefers-reduced-motion: reduce) {
+  .slide-trigger .slide-name[data-overflow] .slide-name-text {
+    animation: none !important;
+  }
+}

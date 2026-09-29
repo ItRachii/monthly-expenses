@@ -28,8 +28,12 @@ export function Sidebar({
 
   return (
     <aside
+      // Open, the sidebar is exactly as wide as its widest page link (icon,
+      // label, badge). Your name, the group names and Sign out are kept out
+      // of that measure ([contain:inline-size]): they fit the width, they
+      // never set it.
       className={`hidden w-full shrink-0 border-b border-white/10 bg-surface/40 md:block md:border-b-0 md:border-r ${
-        collapsed ? "md:w-16" : "md:w-64"
+        collapsed ? "md:w-16" : "md:w-max"
       }`}
     >
       {/* Stretches to the full page height (flex parent), while this inner
@@ -60,7 +64,8 @@ export function Sidebar({
             )}
           </Link>
           <span
-            className={`flex-1 truncate text-sm font-semibold ${
+            title={name}
+            className={`min-w-0 flex-1 truncate text-sm font-semibold [contain:inline-size] ${
               collapsed ? "md:hidden" : ""
             }`}
           >
@@ -107,7 +112,7 @@ export function Sidebar({
 
         <form
           action={doSignOut}
-          className={`mt-auto w-full ${collapsed ? "hidden md:block" : ""}`}
+          className={`mt-auto w-full [contain:inline-size] ${collapsed ? "hidden md:block" : ""}`}
         >
           <button
             type="submit"

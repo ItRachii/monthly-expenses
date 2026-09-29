@@ -6,6 +6,7 @@ import { useEffect, useId, useState } from "react";
 import { GroupsIcon } from "./NavIcons";
 import { MinusIcon, PlusIcon } from "./Icons";
 import type { SidebarGroup } from "@/lib/groups";
+import { SlidingName } from "./SlidingName";
 
 /** How many recent groups the sidebar lists before "All groups". */
 const RECENT = 5;
@@ -161,11 +162,13 @@ export function GroupsNav({ groups, collapsed }: { groups: SidebarGroup[]; colla
         </button>
       </div>
 
-      {/* Grid rows animate the height from 0 to its content. */}
+      {/* Grid rows animate the height from 0 to its content. Kept out of the
+          sidebar's width measure: group names fit the width the page links
+          set, and slide to show the rest. */}
       <div
         id={listId}
         inert={!open}
-        className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${
+        className={`grid [contain:inline-size] transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${
           open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
         }`}
       >
@@ -180,12 +183,12 @@ export function GroupsNav({ groups, collapsed }: { groups: SidebarGroup[]; colla
                   <Link
                     href={href(g.id)}
                     aria-current={isActive ? "page" : undefined}
-                    className={`group/item flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/70 ${
+                    className={`slide-trigger group/item flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/70 ${
                       isActive ? "bg-white/[0.07] font-medium text-ink" : "text-muted hover:bg-white/[0.04] hover:text-ink"
                     }`}
                   >
                     <GroupAvatar name={g.name} active={isActive} />
-                    <span className="min-w-0 truncate">{g.name}</span>
+                    <SlidingName text={g.name} className="min-w-0 flex-1" />
                     {g.unread > 0 ? (
                       <span
                         className="shrink-0 rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[11px] font-medium leading-none tabular-nums text-ink/80"
