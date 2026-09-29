@@ -81,7 +81,9 @@ export function NavLinks({
             </span>
             {showBadge ? (
               <span
-                className={`rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-white ${
+                // A fixed minimum width, so the sidebar (sized to its links)
+                // does not shift as the count goes from 9 to 10.
+                className={`min-w-[2.25rem] rounded-full bg-primary px-2 py-0.5 text-center text-xs font-semibold tabular-nums text-white ${
                   collapsed ? "md:hidden" : ""
                 }`}
               >
