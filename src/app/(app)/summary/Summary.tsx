@@ -7,6 +7,7 @@ import type { ExpenseDTO } from "@/lib/expenses";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { MonthSelect, monthLabel } from "@/components/MonthSelect";
 import { tableDate } from "@/components/table/Table";
+import { DateBadge } from "@/components/DateBadge";
 import { formatINR } from "@/lib/format";
 import { financeFor, type FinanceData } from "@/components/PersonalFinance";
 import {
@@ -246,7 +247,13 @@ export function Summary({
                   <tbody>
                     {detailRows.map((r) => (
                       <tr key={r.id}>
-                        <td className="whitespace-nowrap">{tableDate(r.date)}</td>
+                        {/* Phones: the expense list's date badge; wider screens the full date. */}
+                        <td className="whitespace-nowrap">
+                          <span className="md:hidden">
+                            <DateBadge iso={r.date} />
+                          </span>
+                          <span className="max-md:hidden">{tableDate(r.date)}</span>
+                        </td>
                         <td>{categoryName(r.category)}</td>
                         <td>{r.item}</td>
                         <td className="whitespace-nowrap text-right tabular-nums">{formatINR(r.amount)}</td>

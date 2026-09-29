@@ -3,6 +3,7 @@
 import { AlertTriangleIcon, CalendarIcon, DownloadIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
 import { RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
+import { DateBadge } from "@/components/DateBadge";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
@@ -313,15 +314,13 @@ export function ExpenseFeed({
           <p className="text-xs text-muted">Press and hold an expense to edit or delete it.</p>
           <div className="card divide-y divide-ink/5 p-0">
             {shown.map((r) => {
-              const [, m, d] = r.date.split("-").map(Number);
               return (
                 <ExpenseRow
                   key={r.id}
                   item={r.item}
                   receiptMerchant={r.receiptMerchant}
                   flag={r.flag}
-                  month={MONTH_SHORT[(m ?? 1) - 1]}
-                  day={String(d).padStart(2, "0")}
+                  date={r.date}
                   amount={r.amount}
                   paidBy={isPersonal ? null : payerLabel(r.payer)}
                   category={r.category || "Uncategorised"}
@@ -525,8 +524,7 @@ function ExpenseRow({
   item,
   receiptMerchant,
   flag,
-  month,
-  day,
+  date,
   amount,
   paidBy,
   category,
@@ -542,8 +540,8 @@ function ExpenseRow({
   receiptMerchant: string | null;
   /** Why the row needs attention, shown behind a warning icon; null when nothing is pending. */
   flag: string | null;
-  month: string;
-  day: string;
+  /** ISO date, shown as the month over the day. */
+  date: string;
   amount: number;
   /** Payer's display name; null in Personal, where there is only you. */
   paidBy: string | null;
@@ -629,10 +627,7 @@ function ExpenseRow({
           : "cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-ink/5 active:bg-ink/5"
       }`}
     >
-      <div className="w-9 shrink-0 text-center leading-tight">
-        <div className="text-[10px] uppercase text-muted">{month}</div>
-        <div className="text-base font-semibold">{day}</div>
-      </div>
+      <DateBadge iso={date} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">
           {item}
