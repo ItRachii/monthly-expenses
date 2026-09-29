@@ -162,6 +162,44 @@ export async function getUserGroups(userEmail: string): Promise<GroupDTO[]> {
   }));
 }
 
+/** A group in the sidebar: its name and the member's unread notifications in it. */
+export interface SidebarGroup {
+  id: string;
+  name: string;
+  unread: number;
+}
+
+/**
+ * The member's groups for the sidebar, most recently opened first. Groups
+ * never opened follow, newest first. Each carries its unread notifications.
+ */
+export async function getSidebarGroups(userEmail: string): Promise<SidebarGroup[]> {
+  const [memberships, unread] = await Promise.all([
+    prisma.groupMember.findMany({
+      where: { email: userEmail, group: { active: 1 } },
+      select: { lastVisitedAt: true, group: { select: { id: true, name: true, createdAt: true } } },
+    }),
+    prisma.notification.groupBy({
+      by: ["groupId"],
+      where: { recipientEmail: userEmail, isRead: false },
+      _count: { _all: true },
+    }),
+  ]);
+  const unreadBy = new Map(unread.map((u) => [u.groupId, u._count._all]));
+  return memberships
+    .sort((a, b) => {
+      const va = a.lastVisitedAt?.getTime() ?? -1;
+      const vb = b.lastVisitedAt?.getTime() ?? -1;
+      return vb - va || b.group.createdAt.getTime() - a.group.createdAt.getTime();
+    })
+    .map((m) => ({ id: m.group.id, name: m.group.name, unread: unreadBy.get(m.group.id) ?? 0 }));
+}
+
+/** Records that the member opened the group. */
+export async function touchGroupVisit(userEmail: string, groupId: string): Promise<void> {
+  await prisma.groupMember.updateMany({ where: { email: userEmail, groupId }, data: { lastVisitedAt: new Date() } });
+}
+
 export async function getGroup(groupId: string): Promise<GroupDTO | null> {
   const g = await prisma.group.findFirst({ where: { id: groupId, active: 1 } });
   if (!g) return null;

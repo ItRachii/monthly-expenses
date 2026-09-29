@@ -7,7 +7,7 @@ import { getSettlements } from "@/lib/settlements";
 import { maskExpenses, maskSettlements } from "@/lib/wire";
 import { getOutstandingAllMonths, linesForUser } from "@/lib/balances";
 import { SPLIT_CUSTOM, SPLIT_EQUAL, mergeCategories } from "@/lib/constants";
-import { getUserGroups } from "@/lib/groups";
+import { getUserGroups, touchGroupVisit } from "@/lib/groups";
 import { buildGroupView, type GroupView } from "@/lib/groupView";
 import { getGroupSharesByMonth, getIncomeHistory } from "@/lib/income";
 import { monthKey } from "@/lib/format";
@@ -54,6 +54,8 @@ export default async function SpacePage({
           }),
         )
       : Promise.resolve(null),
+    // Feeds the sidebar's recent groups.
+    r.isPersonal ? Promise.resolve() : touchGroupVisit(user.email, r.ctxValue),
   ]);
   const rows = maskExpenses(rowsRaw, r.wire);
   const settlements = maskSettlements(settlementsRaw, r.wire);

@@ -196,6 +196,14 @@ export function AlertTriangleIcon(p: IconProps) {
   );
 }
 
+export function MinusIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M5 12h14" />
+    </Base>
+  );
+}
+
 export function PlusIcon(p: IconProps) {
   return (
     <Base {...p}>
