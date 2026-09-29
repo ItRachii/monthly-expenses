@@ -18,7 +18,7 @@ import {
 } from "@/lib/settlementMath";
 import { formatINR } from "@/lib/format";
 import { Metric } from "@/components/Metric";
-import { MonthSelect } from "@/components/MonthSelect";
+import { MonthSelect, monthLabel } from "@/components/MonthSelect";
 import { settleAction } from "@/lib/actions/settlements";
 
 interface Member {
@@ -288,7 +288,7 @@ export function Settlement({
                 </div>
               ) : (
                 <div className="alert-success">
-                  Everyone is settled up for {selectedMonth}.
+                  Everyone is settled up for {monthLabel(selectedMonth)}.
                 </div>
               )}
 

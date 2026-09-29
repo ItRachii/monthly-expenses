@@ -5,7 +5,9 @@ import { useMemo, useState } from "react";
 import { ChevronDownIcon, XIcon } from "@/components/Icons";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
-import { MonthSelect } from "@/components/MonthSelect";
+import { MonthSelect, monthLabel } from "@/components/MonthSelect";
+import { tableDate } from "@/components/table/Table";
+import { formatINR } from "@/lib/format";
 import { financeFor, type FinanceData } from "@/components/PersonalFinance";
 import {
   CategoryBars,
@@ -15,7 +17,6 @@ import {
   StatCard,
   buildPalette,
   categoryName,
-  monthShort,
 } from "@/components/charts/Charts";
 
 interface Member {
@@ -178,7 +179,7 @@ export function Summary({
 
       {/* Personal months can hold only group spending: nothing to chart. */}
       {monthRows.length === 0 ? (
-        <div className="alert-info">No personal expenses in {monthShort(selectedMonth)}.</div>
+        <div className="alert-info">No personal expenses in {monthLabel(selectedMonth)}.</div>
       ) : (
         <>
           {/* All charts at once: trend full width, then donut + bars. */}
@@ -216,7 +217,7 @@ export function Summary({
                   {selectedCategory ? `: ${selectedCategory}` : ""}
                 </span>
                 <span className="shrink-0 text-sm text-muted">
-                  {detailRows.length} in {monthShort(selectedMonth)}
+                  {detailRows.length} in {monthLabel(selectedMonth)}
                 </span>
               </button>
               {selectedCategory ? (
@@ -237,7 +238,7 @@ export function Summary({
                       <th>Date</th>
                       <th>Category</th>
                       <th>Item</th>
-                      <th className="text-right">Amount (₹)</th>
+                      <th className="text-right">Amount</th>
                       <th>Payer</th>
                       <th>Split</th>
                     </tr>
@@ -245,10 +246,10 @@ export function Summary({
                   <tbody>
                     {detailRows.map((r) => (
                       <tr key={r.id}>
-                        <td className="whitespace-nowrap">{r.date}</td>
+                        <td className="whitespace-nowrap">{tableDate(r.date)}</td>
                         <td>{categoryName(r.category)}</td>
                         <td>{r.item}</td>
-                        <td className="text-right tabular-nums">{r.amount.toFixed(2)}</td>
+                        <td className="whitespace-nowrap text-right tabular-nums">{formatINR(r.amount)}</td>
                         <td>{payerLabel(r.payer)}</td>
                         <td>{splitLabel(r.split)}</td>
                       </tr>
