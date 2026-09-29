@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import { useId } from "react";
 
 // Shared avatar: the Google photo, or a gradient person fallback.
 export function UserAvatar({
@@ -8,6 +9,9 @@ export function UserAvatar({
   image: string | null;
   className?: string;
 }) {
+  // Unique per copy: with fixed ids, a hidden copy (the phone top bar on a
+  // desktop) owns the gradient and the visible one draws blank.
+  const u = useId().replace(/:/g, "");
   if (image) {
     return (
       <img
@@ -21,20 +25,20 @@ export function UserAvatar({
   return (
     <svg viewBox="0 0 24 24" className={`${className} rounded-full`} aria-hidden>
       <defs>
-        <linearGradient id="uavBg" gradientUnits="userSpaceOnUse" x1="4" y1="20" x2="20" y2="4">
+        <linearGradient id={`${u}bg`} gradientUnits="userSpaceOnUse" x1="4" y1="20" x2="20" y2="4">
           <stop offset="0%" stopColor="#1E5FCF" />
           <stop offset="100%" stopColor="#1FB8B0" />
         </linearGradient>
-        <linearGradient id="uavPerson" gradientUnits="userSpaceOnUse" x1="12" y1="6" x2="12" y2="23">
+        <linearGradient id={`${u}person`} gradientUnits="userSpaceOnUse" x1="12" y1="6" x2="12" y2="23">
           <stop offset="0%" stopColor="#6FE0EA" />
           <stop offset="100%" stopColor="#2E84F5" />
         </linearGradient>
-        <clipPath id="uavClip">
+        <clipPath id={`${u}clip`}>
           <circle cx="12" cy="12" r="12" />
         </clipPath>
       </defs>
-      <circle cx="12" cy="12" r="12" fill="url(#uavBg)" />
-      <g clipPath="url(#uavClip)" fill="url(#uavPerson)">
+      <circle cx="12" cy="12" r="12" fill={`url(#${u}bg)`} />
+      <g clipPath={`url(#${u}clip)`} fill={`url(#${u}person)`}>
         <circle cx="12" cy="9" r="3.1" />
         <path d="M4.6 23.6 A7.4 8.6 0 0 1 19.4 23.6 Z" />
       </g>
