@@ -8,12 +8,21 @@ import { useAddExpense } from "./AddExpense";
 // Mobile bottom tab bar (md+ uses the sidebar). The old per-page tabs merged
 // into the Splitwise-style home screen, so the bar is just the app shell now.
 // "Add" opens the add-expense overlay on top of the current screen.
+// Notifications is not a tab: the bell in the top bar holds it, with the
+// unread count, so the slot goes to Groups.
 const BASE_ITEMS = [
   { href: "/", label: "Home" },
   { href: "/add", label: "Add" },
-  { href: "/notifications", label: "Notifications" },
+  { href: "/groups", label: "Groups" },
   { href: "/profile", label: "Profile" },
 ];
+
+/** The tab for the screen on show: a group's own page counts as Groups, Personal as Home. */
+function isActive(href: string, pathname: string): boolean {
+  if (href === "/groups") return pathname === "/groups" || (pathname.startsWith("/g/") && pathname !== "/g/personal");
+  if (href === "/") return pathname === "/" || pathname === "/g/personal";
+  return pathname === href;
+}
 const STATEMENTS = { href: "/statements", label: "Statements" };
 
 export function MobileBottomNav({ statements = false }: { statements?: boolean }) {
@@ -24,7 +33,7 @@ export function MobileBottomNav({ statements = false }: { statements?: boolean }
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-white/10 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       {items.map((it) => {
-        const active = pathname === it.href;
+        const active = isActive(it.href, pathname);
         const Icon = NAV_ICONS[it.href];
         const className = `relative flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px] transition active:scale-95 ${
           active ? "font-semibold text-ink" : "text-muted"

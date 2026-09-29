@@ -9,7 +9,6 @@ import {
 } from "@/lib/balances";
 import { SETTLE_EPS } from "@/lib/settlementMath";
 import { formatINR, monthKey } from "@/lib/format";
-import { PlusIcon } from "@/components/Icons";
 import { AddExpenseButton } from "@/components/AddExpense";
 import { getGroupSharesByMonth, getIncomeHistory } from "@/lib/income";
 import { incomeForMonth, monthFinance, savingsPercent } from "@/lib/incomeMath";
@@ -55,14 +54,6 @@ export default async function HomePage() {
             "You are all settled up"
           )}
         </h1>
-        <Link
-          href="/groups"
-          aria-label="Create or manage groups"
-          title="Create or manage groups"
-          className="icon-btn rounded-full border border-white/10"
-        >
-          <PlusIcon />
-        </Link>
       </header>
 
       {pending.length > 0 ? <PendingInvites invites={pending} /> : null}
