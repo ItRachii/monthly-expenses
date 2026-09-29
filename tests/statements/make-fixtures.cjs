@@ -3,7 +3,7 @@
 // pipeline. Needs Playwright on the path:
 //   node tests/statements/make-fixtures.cjs
 // Then lock a copy with pypdf (python3 -m pip install pypdf):
-//   python3 -c "from pypdf import PdfReader, PdfWriter; r=PdfReader('tests/statements/fixtures/hdfc.pdf'); w=PdfWriter(); [w.add_page(p) for p in r.pages]; w.encrypt(user_password='RACH0705', owner_password='owner', algorithm='RC4-128'); w.write(open('tests/statements/fixtures/hdfc-locked.pdf','wb'))"
+//   python3 -c "from pypdf import PdfReader, PdfWriter; r=PdfReader('tests/statements/fixtures/hdfc.pdf'); w=PdfWriter(); [w.add_page(p) for p in r.pages]; w.encrypt(user_password='TEST0101', owner_password='owner', algorithm='RC4-128'); w.write(open('tests/statements/fixtures/hdfc-locked.pdf','wb'))"
 const { chromium } = require("playwright");
 const fs = require("fs");
 const out = process.argv[2] || __dirname + "/fixtures";
@@ -110,23 +110,38 @@ const icici = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</s
 function hdfc2026(month, rows, box) {
   const tr = (r) => `<tr><td>${r[0]}</td><td>${r[1] ? '<span style="background:#2ecc71;color:#fff;border-radius:8px;padding:0 5px;margin-right:6px">EMI</span>' : ""}${r[2]}</td><td class="r">${r[3]}</td><td>${r[4] || ""}</td></tr>`;
   return `<!doctype html><html><head><meta charset="utf-8"><style>${css}
-  .box { background:#1f4e9c; color:#fff; padding:10px; border-radius:8px; }
-  .box table td, .box table th { color:#fff; border:none; }
+  /* The 2026 blue box as HDFC prints it: labels vertically centred in
+     fixed-height cells, so a two-line label sits above and below the
+     height of a one-line one; the total due in its own taller box. */
+  .box2 { display:flex; gap:12px; background:#1f4e9c; color:#fff; padding:10px; border-radius:8px; font-size:9.5px; }
+  .left { flex:3; } .right { flex:1; padding:6px 8px; }
+  .hdr, .fig { display:flex; align-items:center; text-align:center; }
+  .hdr > div { flex:1; height:30px; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+  .fig > div { flex:1; height:22px; display:flex; align-items:center; justify-content:center; }
+  .fig > div.op { flex:0 0 14px; }
+  .right .lbl { font-weight:bold; height:30px; display:flex; align-items:center; }
+  .right .big { font-size:24px; font-weight:bold; height:22px; display:flex; align-items:center; margin-bottom:8px; }
+  .two { display:flex; gap:16px; } .two .val { height:18px; display:flex; align-items:center; }
   </style></head><body>
 <h1>HDFC Bank Millennia Credit Card Statement</h1>
 <div class="cols"><div><div>MR RACHIT AWASTHI</div><div>Flat 12, Sunrise Residency, Indiranagar, Bengaluru 560038</div></div>
 <div><div><b>Statement Date:</b> ${month.statementDate}</div></div></div>
-<div class="box"><table>
-<tr><th>PREVIOUS STATEMENT DUES</th><th>PAYMENTS/CREDITS</th><th>PURCHASES/DEBIT</th><th>FINANCE CHARGES</th><th>TOTAL AMOUNT DUE</th></tr>
-<tr><td></td><td>RECEIVED</td><td>(Current Billing Cycle)</td><td></td><td></td></tr>
-<tr><td>₹${box.prev}</td><td>₹${box.paid}</td><td>₹${box.purchases}</td><td>₹0.00</td><td>₹${box.due}</td></tr>
-<tr><th>TOTAL CREDIT LIMIT</th><th>AVAILABLE CREDIT LIMIT</th><th>AVAILABLE CASH LIMIT</th><th>MINIMUM DUE</th><th>DUE DATE</th></tr>
-<tr><td>(Including Cash)</td><td></td><td></td><td></td><td></td></tr>
-<tr><td>₹2,77,000</td><td>₹${box.avail}</td><td>₹1,10,800</td><td>₹${box.min}</td><td>${box.dueDate}</td></tr>
-</table></div>
+<div class="box2">
+<div class="left">
+<div class="hdr"><div>PREVIOUS STATEMENT DUES</div><div>PAYMENTS/CREDITS<br>RECEIVED</div><div>PURCHASES/DEBIT<br>(Current Billing Cycle)</div><div>FINANCE CHARGES</div></div>
+<div class="fig"><div>₹${box.prev}</div><div class="op">−</div><div>₹${box.paid}</div><div class="op">+</div><div>₹${box.purchases}</div><div class="op">+</div><div>₹0.00</div><div class="op">=</div></div>
+<div class="hdr"><div>TOTAL CREDIT LIMIT<br>(Including Cash)</div><div>AVAILABLE CREDIT LIMIT</div><div>AVAILABLE CASH LIMIT</div></div>
+<div class="fig"><div>₹2,77,000</div><div>₹${box.avail}</div><div>₹1,10,800</div></div>
+</div>
+<div class="right">
+<div class="lbl">TOTAL AMOUNT DUE</div>
+<div class="big">₹${box.due}</div>
+<div class="two"><div><div class="lbl">MINIMUM DUE</div><div class="val">₹${box.min}</div></div><div><div class="lbl">DUE DATE</div><div class="val">${box.dueDate}</div></div></div>
+</div>
+</div>
 <h2>Domestic Transactions</h2>
 <table><tr><th>DATE &amp; TIME</th><th>TRANSACTION DESCRIPTION</th><th class="r">AMOUNT</th><th>PI</th></tr>
-<tr><td></td><td>RACHIT AWASTHI [CKYC ID : 20096929017763 ]</td><td></td><td></td></tr>
+<tr><td></td><td>RACHIT AWASTHI [CKYC ID : 30017735524418 ]</td><td></td><td></td></tr>
 ${rows.map(tr).join("\n")}
 </table>
 <p class="small">*Transaction time captured in IST Zone.</p>
@@ -136,24 +151,24 @@ ${rows.map(tr).join("\n")}
 const aug2026 = hdfc2026(
   { statementDate: "24/08/2026" },
   [
-    ["11/08/2026| 00:00", false, "OFFUS EMI,PROCNG FEE,00000000001441 (Ref# 09999999980811000848011)", "₹ 299.00"],
-    ["11/08/2026| 00:00", false, "IGST-VPS2722433500047-RATE 18.0 -23 (Ref# 09999999980811000848011)", "₹ 53.82"],
+    ["11/08/2026| 00:00", false, "OFFUS EMI,PROCNG FEE,00000000003662 (Ref# 05555555520811777191700)", "₹ 299.00"],
+    ["11/08/2026| 00:00", false, "IGST-VPS5810321388904-RATE 18.0 -23 (Ref# 05555555520811777191700)", "₹ 53.82"],
     ["14/08/2026| 01:00", true, "INDIGO AIRLINEGURGAON", "₹ 5,859.00", "●"],
     ["15/08/2026| 01:12", true, "INDIGO AIRLINEGURGAON", "₹ 6,133.00", "●"],
-    ["22/08/2026| 00:00", false, "OFFUS EMI,PRIN NB:01,00000144148470 (Ref# 09999999980822004044671)", "₹ 982.00"],
-    ["22/08/2026| 00:00", false, "OFFUS EMI,INT NBR:01,00000144148470 (Ref# 09999999980822004044689)", "₹ 193.00"],
+    ["22/08/2026| 00:00", false, "OFFUS EMI,PRIN NB:01,00000266258470 (Ref# 05555555520822779799580)", "₹ 982.00"],
+    ["22/08/2026| 00:00", false, "OFFUS EMI,INT NBR:01,00000266258470 (Ref# 05555555520822779799514)", "₹ 193.00"],
   ],
   { prev: "12,400.00", paid: "12,400.00", purchases: "13,519.82", due: "13,520.00", avail: "2,52,681", min: "1,229.00", dueDate: "12 Sep, 2026" },
 );
 const sep2026 = hdfc2026(
   { statementDate: "24/09/2026" },
   [
-    ["22/08/2026| 00:00", false, "IGST-VPS2723574016786-RATE 18.0 -23 (Ref# 09999999980822004044689)", "₹ 34.74"],
+    ["22/08/2026| 00:00", false, "IGST-VPS5811462039786-RATE 18.0 -23 (Ref# 05555555520822779799514)", "₹ 34.74"],
     ["02/09/2026| 01:25", false, "NETFLIXMUMBAI", "₹ 199.00", "●"],
-    ["04/09/2026| 08:32", false, "CREDIT CARD PAYMENTNet Banking (Ref# 00000000000904016163381)", "+ ₹ 13,520.00"],
+    ["04/09/2026| 08:32", false, "CREDIT CARD PAYMENTNet Banking (Ref# 00000000000904027274492)", "+ ₹ 13,520.00"],
     ["13/09/2026| 08:05", true, "RAZ*IRCTChttps://www.", "₹ 14,074.55", "●"],
-    ["22/09/2026| 00:00", false, "OFFUS EMI,PRIN NB:02,00000144148470 (Ref# 09999999980922004049488)", "₹ 996.00"],
-    ["22/09/2026| 00:00", false, "OFFUS EMI,INT NBR:02,00000144148470 (Ref# 09999999980922004049496)", "₹ 167.00"],
+    ["22/09/2026| 00:00", false, "OFFUS EMI,PRIN NB:02,00000266258470 (Ref# 05555555520922779794911)", "₹ 996.00"],
+    ["22/09/2026| 00:00", false, "OFFUS EMI,INT NBR:02,00000266258470 (Ref# 05555555520922779794945)", "₹ 167.00"],
   ],
   { prev: "13,520.00", paid: "13,520.00", purchases: "15,471.29", due: "15,471.00", avail: "2,38,992", min: "1,406.00", dueDate: "12 Oct, 2026" },
 );

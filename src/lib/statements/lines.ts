@@ -22,7 +22,39 @@ interface Row {
   cells: Cell[];
 }
 
-export function itemsToLines(items: PositionedText[]): string[] {
+/** Where a run of characters in a row's text sits on the page. */
+export interface TextSpan {
+  at: number;
+  end: number;
+  x0: number;
+  x1: number;
+}
+
+/** One reading-order row: its text, its position, and where each part of the text sits. */
+export interface TextRow {
+  y: number;
+  /** Font height of the row's tallest item. */
+  h: number;
+  text: string;
+  spans: TextSpan[];
+}
+
+/** A page: its lines, and the same lines with positions for column-aware reading. */
+export interface PageText {
+  lines: string[];
+  rows: TextRow[];
+}
+
+/** The x position of a character of a row's text, interpolated within its item. */
+export function xAt(row: TextRow, index: number): number {
+  const span = row.spans.find((s) => index >= s.at && index < s.end) ?? row.spans.find((s) => s.at > index) ?? row.spans[row.spans.length - 1];
+  if (!span) return 0;
+  const n = Math.max(1, span.end - span.at);
+  const k = Math.min(Math.max(index - span.at, 0), n);
+  return span.x0 + ((span.x1 - span.x0) * k) / n;
+}
+
+export function itemsToRows(items: PositionedText[]): TextRow[] {
   const rows: Row[] = [];
   for (const it of items) {
     if (!it.str || !it.str.trim()) continue;
@@ -42,12 +74,29 @@ export function itemsToLines(items: PositionedText[]): string[] {
     row.cells.sort((a, b) => a.x - b.x);
     let out = "";
     let end = Number.NEGATIVE_INFINITY;
+    const spans: TextSpan[] = [];
     for (const c of row.cells) {
+      const str = c.str.replace(/\s+/g, " ");
       const gap = c.x - end;
       if (out && (gap > c.h * 0.25 || out.endsWith(" ") === false && gap > 1)) out += " ";
-      out += c.str;
+      if (out.endsWith(" ") && str.startsWith(" ")) out = out.slice(0, -1);
+      const at = out.length;
+      out += str;
+      spans.push({ at, end: out.length, x0: c.x, x1: c.x + c.w });
       end = c.x + c.w;
     }
-    return out.replace(/\s+/g, " ").trim();
+    const text = out.trimEnd();
+    return { y: row.y, h: Math.max(...row.cells.map((c) => c.h)), text, spans };
   });
+}
+
+/** Lines per page, in reading order. */
+export function itemsToLines(items: PositionedText[]): string[] {
+  return itemsToRows(items).map((r) => r.text);
+}
+
+/** Lines and positioned rows of a page. */
+export function itemsToPage(items: PositionedText[]): PageText {
+  const rows = itemsToRows(items);
+  return { lines: rows.map((r) => r.text), rows };
 }

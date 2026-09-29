@@ -7,6 +7,12 @@ one file per bank:
 - [hdfc.md](./hdfc.md)
 - [icici.md](./icici.md)
 
+Three file formats are read: PDF, Excel (.xlsx) and CSV. PDFs go through
+text extraction and a line grammar. Spreadsheets are read as a grid, by
+column header and cell label, which needs no guessing. Both end in the same
+row builder, so EMI pairing, GST joins and forex markup follow one set of
+rules.
+
 Code: `src/lib/statements/` (pipeline), `src/lib/cards.ts` and
 `src/lib/loans.ts` (storage), `src/app/(app)/statements/` (screen).
 Tests: `npm run test:statements` (`tests/statements/run.ts`), which runs the
@@ -35,17 +41,21 @@ key. The salt is sent to the browser for that user only.
 ## Pipeline
 
 ```
-PDF ──pdf.js──▶ positioned text items ──lines.ts──▶ lines per page
-   ──redact.ts──▶ allow-list + masking ──parse.ts──▶ rows, summary, card
-   ──lineage.ts (browser)──▶ keyed hashes, GST traced to instalments on record
-   ──actions──▶ expenses, card statement summary, EMI instalments
+PDF  ──pdf.js──▶ positioned text items ──lines.ts──▶ lines per page
+     ──redact.ts──▶ allow-list + masking ──parse.ts──▶ transaction lines ─┐
+XLSX ──exceljs (xlsx.ts)──▶ grid ─┐                                        ├─▶ buildRows ─▶ rows, summary, card
+CSV  ──parseCsv (sheet.ts)──▶ grid ┴─▶ sheet.ts: header columns, labels ──┘
+     ──lineage.ts (browser)──▶ keyed hashes, GST traced to instalments on record
+     ──actions──▶ expenses, card statement summary, EMI instalments
 ```
 
 ### 1. Text extraction (`lines.ts`, `pdf.ts`)
 
 pdf.js gives text items with coordinates in drawing order. Items are
 grouped into rows by their y position (tolerance 35% of the font size) and
-joined by x gaps. The legacy pdf.js build is used in the browser because
+joined by x gaps. Each row also keeps where every item sits on the page
+(`itemsToPage`), which the summary reader uses to pair figures with the
+label printed above them; nothing else uses positions. The legacy pdf.js build is used in the browser because
 its encrypted-file path needs `Map.prototype.getOrInsertComputed`, which
 older phone browsers lack.
 
@@ -91,14 +101,52 @@ Rows are then built:
   international rows the printed and effective exchange rates.
 
 The summary box is read from labels and figures only (`summary.ts`): on
-one line, or a label row followed by a figure row. The card is identified
+one line, or a label row followed by a figure row. With positions, a label
+takes the first figure below it in its own column, which is what HDFC's
+2026 box needs (see hdfc.md); from lines alone, figures follow labels in
+reading order. The card is identified
 by its last four digits, from the masked number or from HDFC's file name,
 never more.
+
+### 3b. Spreadsheets (`sheet.ts`, `xlsx.ts`)
+
+A workbook is read with exceljs, loaded on first use like pdf.js. A CSV is
+split by `parseCsv` (quotes, CRLF, comma, semicolon or tab). Both become a
+grid of cells; the other cells of a merged area are blank.
+
+- **Transaction table**: found by its header row. Every header cell must be
+  a known column: date, description, amount, debit and credit, Dr/Cr,
+  transaction type, foreign amount, or one that is never read (name,
+  customer, rewards, reference, serial). The table ends at a title row or a
+  row with no date.
+- **What is read**: only the date, description, amount, Dr/Cr and type
+  cells of each row. The description is redacted with the same deny-list as
+  a PDF line before anything looks at it. The customer-name column, which
+  holds the name and CKYC ID on HDFC's export, is never read.
+- **Summary**: a cell whose text is a summary label, with its figure in the
+  next cell to the right, else the cell below. Labels are not read inside
+  reward-point, loan or GST blocks, whose "Opening Balance" or "Total" mean
+  something else. A label whose value cell is blank is not a title.
+- **Card**: only cells that mention "card" are passed on, for the last four
+  digits.
+- **Loan summary** and **GST summary** tables are read when present. Loans
+  are shown on the EMI tab, with the loan number's last four digits only,
+  and not stored. The GST summary's total is checked against the GST lines
+  read, and a difference is a warning.
+- Dates: `dd/mm/yyyy`, `dd Mon, yyyy`, ISO `yyyy-mm-dd`, and date cells.
+  Amounts: numbers, Indian grouping, `₹`, `Cr`/`Dr` suffixes, a minus sign
+  or brackets for credits.
+- A password-protected workbook and old `.xls` files cannot be read; the
+  screen says to save an unprotected `.xlsx` or CSV copy.
 
 ### 4. Lineage (`lineage.ts`, browser)
 
 - Loan numbers and references become stable keyed hashes (`applyKeys`), and
-  the digits are dropped from memory.
+  the digits are dropped from memory. Leading zeros are dropped before
+  keying (`canonicalDigits`), because formats differ: the PDF prints a loan
+  as `00000266258470`, the spreadsheet as `0 0000266258470`, its loan
+  summary as the number `266258470`. A statement read from a PDF and the
+  next one read from a spreadsheet therefore trace to each other.
 - A lone GST charge is traced to an instalment on record (`resolveLineage`):
   exact by reference first; by date and 18% of interest only when no
   reference is printed and exactly one instalment fits.
@@ -141,3 +189,7 @@ user's own id, never a group.
 - Tracing a pending GST charge renames the expense even if its description
   was edited in between. The amount, date and category are never touched.
 - Scanned (image) PDFs are not read.
+- Spreadsheet exports carry no foreign-currency amount on HDFC, so
+  international rows from a spreadsheet show no exchange rate. The PDF has it.
+- Add-on card rows are not told apart: the column that says whose card it
+  was is the name column, which is never read.

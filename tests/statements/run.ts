@@ -3,13 +3,15 @@
 //
 // The fixtures are synthetic statements printed from HTML (make-fixtures.cjs)
 // with made-up personal details, so the PII checks can prove nothing leaks.
-// hdfc-locked.pdf is hdfc.pdf encrypted with the user password RACH0705.
+// hdfc-locked.pdf is hdfc.pdf encrypted with the user password TEST0101.
 import { readFileSync } from "fs";
 import { join } from "path";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
-import { itemsToLines, type PositionedText } from "../../src/lib/statements/lines";
+import { itemsToPage, type PageText, type PositionedText } from "../../src/lib/statements/lines";
 import { parseStatement } from "../../src/lib/statements/parse";
-import { applyKeys, gstLineageName, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
+import { amountCell, parseCsv, parseSheet, type Grid } from "../../src/lib/statements/sheet";
+import { readXlsx } from "../../src/lib/statements/xlsx";
+import { applyKeys, canonicalDigits, gstLineageName, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
 
 const dir = join(__dirname, "fixtures");
 let failures = 0;
@@ -18,16 +20,16 @@ const check = (name: string, ok: boolean, detail = "") => {
   if (!ok) failures++;
 };
 
-async function pagesOf(path: string, password?: string): Promise<string[][]> {
+async function pagesOf(path: string, password?: string): Promise<PageText[]> {
   const data = new Uint8Array(readFileSync(path));
   const task = pdfjs.getDocument({ data, password });
   try {
     const doc = await task.promise;
-    const pages: string[][] = [];
+    const pages: PageText[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
-      pages.push(itemsToLines(content.items.filter((it): it is PositionedText & typeof it => "str" in it)));
+      pages.push(itemsToPage(content.items.filter((it): it is PositionedText & typeof it => "str" in it)));
     }
     return pages;
   } finally {
@@ -139,11 +141,11 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   const twoLoans = [
     "HDFC Bank",
     "Domestic Transactions",
-    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,00000144148470 (Ref# 09999999980922004049488) C 996.00 l",
-    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:05,00000177777777 (Ref# 09999999980922004049490) C 2,500.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,00000266258470 (Ref# 05555555520922779794911) C 996.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:05,00000177777777 (Ref# 05555555520922779794947) C 2,500.00 l",
     "02/09/2026| 01:25 NETFLIXMUMBAI C 199.00 l",
-    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,00000144148470 (Ref# 09999999980922004049496) C 167.00 l",
-    "22/09/2026| 00:00 OFFUS EMI,INT NBR:05,00000177777777 (Ref# 09999999980922004049497) C 310.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,00000266258470 (Ref# 05555555520922779794945) C 167.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,INT NBR:05,00000177777777 (Ref# 05555555520922779794948) C 310.00 l",
   ];
   const t = parseStatement([twoLoans]);
   console.log("\n== two loans ==");
@@ -151,9 +153,9 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   const temi = t.rows.filter((r) => r.kind === "emi").sort((a, b) => a.total - b.total);
   check("two loans: two EMI rows paired by loan number: 1163 (#2) and 2810 (#5)", temi.length === 2 && temi[0].total === 1163 && temi[0].installment === "#2" && temi[1].total === 2810 && temi[1].installment === "#5", JSON.stringify(temi.map((e) => [e.total, e.installment, e.parts.map((p) => p.kind)])));
   check("two loans: no loan number or token in descriptions", !t.rows.some((r) => /\d{8,}|\[ref/.test(r.description)), t.rows.map((r) => r.description).join(" | "));
-  check("two loans: before keying, raw numbers live only in tokenDigits", !/00000144148470|00000177777777|0999999998/.test(JSON.stringify({ ...t, tokenDigits: {} })) && Object.keys(t.tokenDigits).length >= 2);
+  check("two loans: before keying, raw numbers live only in tokenDigits", !/00000266258470|00000177777777|0555555552/.test(JSON.stringify({ ...t, tokenDigits: {} })) && Object.keys(t.tokenDigits).length >= 2);
   await applyKeys(t, "salt");
-  check("two loans: after keying, raw numbers absent from all output", !/00000144148470|00000177777777|0999999998/.test(JSON.stringify(t)));
+  check("two loans: after keying, raw numbers absent from all output", !/00000266258470|00000177777777|0555555552/.test(JSON.stringify(t)));
   check("two loans: same number gives the same token within the parse", (() => { const toks = t.redactedLines.map((l) => l.match(/NBR?:\d\d,(\[ref:[0-9a-f]{4}\])/)?.[1]).filter(Boolean); return toks.length === 4 && toks[0] === toks[2] && toks[1] === toks[3] && toks[0] !== toks[1]; })(), t.redactedLines.join(" || "));
   const t2 = parseStatement([twoLoans]);
   check("two loans: tokens differ between uploads", t.redactedLines.join() !== t2.redactedLines.join());
@@ -167,7 +169,42 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("icici: summary total due and dates", c.summary?.totalDue === 33691.6 && c.summary?.statementDate === "2026-08-12" && c.summary?.dueDate === "2026-09-01", JSON.stringify(c.summary));
   check("icici: card last4 9012", c.card?.last4 === "9012", JSON.stringify(c.card));
 
-  // HDFC 2026 blue box: label rows, continuation rows, then figure rows.
+  // HDFC 2026 blue box as the text layer really delivers it: positioned
+  // items. A two-line label ("PAYMENTS/CREDITS" over "RECEIVED") sits above
+  // and below the height of a one-line label, so the labels of one visual
+  // row arrive as three text rows, and the big total is a row of its own.
+  // Reading order pairs the figures with the wrong labels; columns do not.
+  const it = (str: string, x: number, y: number, h = 7.1): PositionedText => ({ str, transform: [h, 0, 0, h, x, y], width: str.length * h * 0.5, height: h });
+  const realBox = [
+    it("HDFC Bank Millennia Credit Card Statement", 21, 811, 12),
+    it("PAYMENTS/CREDITS", 138, 768.6), it("PURCHASES/DEBIT", 237, 768.6),
+    it("PREVIOUS STATEMENT DUES", 36, 764.1), it("FINANCE CHARGES", 334, 764.1), it("TOTAL AMOUNT DUE", 450, 764.5),
+    it("RECEIVED", 156, 760.4), it("(Current Billing Cycle)", 234, 760.4),
+    it("₹", 53.7, 744.6), it("63,817.22", 58.2, 744.6), it("−", 118, 744.6), it("₹", 151, 744.6), it("63,817.00", 155.4, 744.6), it("+", 215.5, 744.6),
+    it("₹", 248, 744.6), it("27,235.51", 252.6, 744.6), it("+", 312.7, 744.6), it("₹", 354, 744.6), it("0.00", 358.7, 744.6), it("=", 410, 744.6),
+    it("₹27,236.00", 450, 742, 18),
+    it("TOTAL CREDIT LIMIT", 57, 729.6), it("AVAILABLE CREDIT LIMIT", 150, 725), it("AVAILABLE CASH LIMIT", 260, 725), it("MINIMUM DUE", 450, 723.5), it("DUE DATE", 520, 723.5),
+    it("(Including Cash)", 65, 721.4),
+    it("₹2,473.00", 450, 706), it("12 Oct, 2026", 520, 706),
+    it("₹2,77,000", 60, 702), it("₹2,38,992", 165, 702), it("₹1,10,800", 275, 702),
+    it("Past Dues", 30, 680), it("OVER LIMIT", 90, 680), it("3 MONTHS +", 150, 680), it("2 MONTHS", 210, 680), it("1 MONTH", 270, 680), it("CURRENT DUES", 330, 680), it("MINIMUM DUES", 400, 680),
+    it("(if any)", 30, 668), it("₹0.00", 90, 668), it("₹0.00", 150, 668), it("₹0.00", 210, 668), it("₹0.00", 270, 668), it("₹2,473.00", 330, 668), it("₹2,473.00", 400, 668),
+    it("Domestic Transactions", 30, 640, 9),
+    it("02/09/2026| 01:25", 30, 620), it("NETFLIXMUMBAI", 120, 620), it("C", 400, 620), it("199.00", 410, 620), it("l", 440, 620),
+  ];
+  const rb = parseStatement([itemsToPage(realBox)], { filename: "Sep2026_BilledStatements_7043_24-09-26_15.51.pdf" });
+  check("real box: labels split over three text rows, all nine figures by column", !!rb.summary && rb.summary.previousDues === 63817.22 && rb.summary.paymentsCredits === 63817 && rb.summary.purchases === 27235.51 && rb.summary.financeCharges === 0 && rb.summary.totalDue === 27236 && rb.summary.creditLimit === 277000 && rb.summary.availableCredit === 238992 && rb.summary.availableCash === 110800 && rb.summary.minimumDue === 2473, JSON.stringify(rb.summary));
+  check("real box: due date 12 Oct 2026 from the right-hand box", rb.summary?.dueDate === "2026-10-12", String(rb.summary?.dueDate));
+  check("real box: rows text as reading order delivers it", itemsToPage(realBox).lines[1] === "PAYMENTS/CREDITS PURCHASES/DEBIT" && itemsToPage(realBox).lines[2] === "PREVIOUS STATEMENT DUES FINANCE CHARGES TOTAL AMOUNT DUE", JSON.stringify(itemsToPage(realBox).lines.slice(1, 4)));
+  check("real box: 'MINIMUM DUES' in the Past Dues table is not the minimum due", parseStatement([["Past Dues OVER LIMIT 3 MONTHS + 2 MONTHS 1 MONTH CURRENT DUES MINIMUM DUES", "C 0.00 C 0.00 C 0.00 C 0.00 C 2,025.00 C 2,025.00"]]).summary === null);
+  check("real box: 'PREVIOUS STATEMENT' wrapped over 'DUES' still labels the previous dues", parseStatement([["PREVIOUS STATEMENT", "DUES", "C 63,817.22 − C 63,817.00"]]).summary?.previousDues === 63817.22);
+  const sepPdf = parseStatement(await pagesOf(`${dir}/Sep2026_BilledStatements_7043_24-09-26.pdf`), { filename: "Sep2026_BilledStatements_7043_24-09-26.pdf" });
+  check("sep pdf: nine figures and due date from the printed box", !!sepPdf.summary && sepPdf.summary.previousDues === 13520 && sepPdf.summary.paymentsCredits === 13520 && sepPdf.summary.purchases === 15471.29 && sepPdf.summary.financeCharges === 0 && sepPdf.summary.totalDue === 15471 && sepPdf.summary.creditLimit === 277000 && sepPdf.summary.availableCredit === 238992 && sepPdf.summary.availableCash === 110800 && sepPdf.summary.minimumDue === 1406 && sepPdf.summary.dueDate === "2026-10-12", JSON.stringify(sepPdf.summary));
+  check("sep pdf: card 7043 from the file name, 5 rows", sepPdf.card?.last4 === "7043" && sepPdf.rows.length === 5, JSON.stringify([sepPdf.card, sepPdf.rows.length]));
+  const augPdf = parseStatement(await pagesOf(`${dir}/Aug2026_BilledStatements_7043_24-08-26.pdf`), { filename: "Aug2026_BilledStatements_7043_24-08-26.pdf" });
+  check("aug pdf: nine figures and due date from the printed box", !!augPdf.summary && augPdf.summary.previousDues === 12400 && augPdf.summary.paymentsCredits === 12400 && augPdf.summary.purchases === 13519.82 && augPdf.summary.financeCharges === 0 && augPdf.summary.totalDue === 13520 && augPdf.summary.creditLimit === 277000 && augPdf.summary.availableCredit === 252681 && augPdf.summary.availableCash === 110800 && augPdf.summary.minimumDue === 1229 && augPdf.summary.dueDate === "2026-09-12", JSON.stringify(augPdf.summary));
+
+  // HDFC 2026 blue box from lines alone: label rows, continuation rows, then figure rows.
   const box = [
     "HDFC Bank Millennia Credit Card Statement",
     "PREVIOUS STATEMENT DUES PAYMENTS/CREDITS PURCHASES/DEBIT FINANCE CHARGES TOTAL AMOUNT DUE",
@@ -193,18 +230,18 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   // August's own processing-fee IGST cites the fee's Ref# (…848011).
   const aug = [
     "HDFC Bank", "Domestic Transactions",
-    "11/08/2026| 00:00 OFFUS EMI,PROCNG FEE,00000000001441 (Ref# 09999999980811000848011) C 299.00 l",
-    "11/08/2026| 00:00 IGST-VPS2722433500047-RATE 18.0 -23 (Ref# 09999999980811000848011) C 53.82 l",
+    "11/08/2026| 00:00 OFFUS EMI,PROCNG FEE,00000000003662 (Ref# 05555555520811777191700) C 299.00 l",
+    "11/08/2026| 00:00 IGST-VPS5810321388904-RATE 18.0 -23 (Ref# 05555555520811777191700) C 53.82 l",
     "14/08/2026| 01:00 EMI INDIGO AIRLINEGURGAON C 5,859.00 l",
-    "22/08/2026| 00:00 OFFUS EMI,PRIN NB:01,00000144148470 (Ref# 09999999980822004044671) C 982.00 l",
-    "22/08/2026| 00:00 OFFUS EMI,INT NBR:01,00000144148470 (Ref# 09999999980822004044689) C 193.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,PRIN NB:01,00000266258470 (Ref# 05555555520822779799580) C 982.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,INT NBR:01,00000266258470 (Ref# 05555555520822779799514) C 193.00 l",
   ];
   const sep = [
     "HDFC Bank", "Domestic Transactions",
-    "22/08/2026| 00:00 IGST-VPS2723574016786-RATE 18.0 -23 (Ref# 09999999980822004044689) C 34.74 l",
+    "22/08/2026| 00:00 IGST-VPS5811462039786-RATE 18.0 -23 (Ref# 05555555520822779799514) C 34.74 l",
     "02/09/2026| 01:25 NETFLIXMUMBAI C 199.00 l",
-    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,00000144148470 (Ref# 09999999980922004049488) C 996.00 l",
-    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,00000144148470 (Ref# 09999999980922004049496) C 167.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,00000266258470 (Ref# 05555555520922779794911) C 996.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,00000266258470 (Ref# 05555555520922779794945) C 167.00 l",
   ];
   const SALT = "user-salt-A";
   const a1 = parseStatement([aug]);
@@ -215,16 +252,16 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("aug: instalment #1 982 + 193 with the interest line's reference token", e1.loan?.instalmentNo === 1 && e1.total === 1175 && !!e1.parts.find((p) => p.kind === "interest")?.ref, JSON.stringify(e1.parts));
   await applyKeys(a1, SALT);
   const augPayload = lineagePayload(a1.rows, "2026-08")!;
-  const refAug = await refKeyFor(SALT, "09999999980822004044689");
-  check("aug: payload carries the interest reference key, not the number", augPayload.instalments[0].refKey === refAug && !/0999999998/.test(JSON.stringify(augPayload)), JSON.stringify(augPayload.instalments[0]));
-  const kA = await loanKeyFor(SALT, "00000144148470");
-  check("keys: stable per user and salt, different under another salt", (await loanKeyFor(SALT, "00000144148470")) === kA && (await loanKeyFor("other", "00000144148470")) !== kA && augPayload.instalments[0].loanKey === kA);
+  const refAug = await refKeyFor(SALT, "05555555520822779799514");
+  check("aug: payload carries the interest reference key, not the number", augPayload.instalments[0].refKey === refAug && !/0555555552/.test(JSON.stringify(augPayload)), JSON.stringify(augPayload.instalments[0]));
+  const kA = await loanKeyFor(SALT, "00000266258470");
+  check("keys: stable per user and salt, different under another salt", (await loanKeyFor(SALT, "00000266258470")) === kA && (await loanKeyFor("other", "00000266258470")) !== kA && augPayload.instalments[0].loanKey === kA);
 
   // September without August on record: untraced, #1 reported missing.
   const s1 = parseStatement([sep]);
   check("sep: lone IGST flagged untraced with the reference it cites", s1.rows.filter((r) => r.untraced).length === 1 && !!s1.rows.find((r) => r.untraced)?.taxRef);
   await applyKeys(s1, SALT);
-  check("sep: digits cleared after keying", Object.keys(s1.tokenDigits).length === 0 && !/0999999998|00000144148470/.test(JSON.stringify(s1)));
+  check("sep: digits cleared after keying", Object.keys(s1.tokenDigits).length === 0 && !/0555555552|00000266258470/.test(JSON.stringify(s1)));
   const bare = resolveLineage(s1.rows, []);
   check("sep: no record -> untraced 1, missing #1 for Aug 2026", bare.untraced.length === 1 && bare.missing.length === 1 && bare.missing[0].instalmentNo === 1 && bare.missing[0].period === "2026-08" && bare.missing[0].loanLast4 === "8470", JSON.stringify(bare.missing));
   const warn = lineageWarnings(bare);
@@ -250,10 +287,10 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   // Two loans, same interest, same day: only the reference can tell the GST charges apart.
   const twin = [
     "HDFC Bank", "Domestic Transactions",
-    "22/08/2026| 00:00 OFFUS EMI,PRIN NB:01,00000144148470 (Ref# 09999999980822004044671) C 982.00 l",
-    "22/08/2026| 00:00 OFFUS EMI,INT NBR:01,00000144148470 (Ref# 09999999980822004044689) C 193.00 l",
-    "22/08/2026| 00:00 OFFUS EMI,PRIN NB:01,00000155555555 (Ref# 09999999980822004055001) C 982.00 l",
-    "22/08/2026| 00:00 OFFUS EMI,INT NBR:01,00000155555555 (Ref# 09999999980822004055002) C 193.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,PRIN NB:01,00000266258470 (Ref# 05555555520822779799580) C 982.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,INT NBR:01,00000266258470 (Ref# 05555555520822779799514) C 193.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,PRIN NB:01,00000155555555 (Ref# 05555555520822779722770) C 982.00 l",
+    "22/08/2026| 00:00 OFFUS EMI,INT NBR:01,00000155555555 (Ref# 05555555520822779722773) C 193.00 l",
   ];
   const tw = parseStatement([twin]);
   await applyKeys(tw, SALT);
@@ -261,8 +298,8 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("twins: two instalments recorded with distinct reference keys", twinKnown.length === 2 && twinKnown[0].refKey !== twinKnown[1].refKey && twinKnown.every((k) => k.interest === 193));
   const later = parseStatement([[
     "HDFC Bank", "Domestic Transactions",
-    "22/08/2026| 00:00 IGST-VPS2723574016786-RATE 18.0 -23 (Ref# 09999999980822004055002) C 34.74 l",
-    "22/08/2026| 00:00 IGST-VPS2723574016787-RATE 18.0 -23 (Ref# 09999999980822004044689) C 34.74 l",
+    "22/08/2026| 00:00 IGST-VPS5811462039786-RATE 18.0 -23 (Ref# 05555555520822779722773) C 34.74 l",
+    "22/08/2026| 00:00 IGST-VPS5811462039787-RATE 18.0 -23 (Ref# 05555555520822779799514) C 34.74 l",
   ]]);
   await applyKeys(later, SALT);
   const tres = resolveLineage(later.rows, twinKnown);
@@ -278,10 +315,10 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   // Same-day GST printed apart from its instalment attaches in the parser (by reference).
   const sameDay = parseStatement([[
     "HDFC Bank", "Domestic Transactions",
-    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,00000144148470 (Ref# 09999999980922004049488) C 996.00 l",
+    "22/09/2026| 00:00 OFFUS EMI,PRIN NB:02,00000266258470 (Ref# 05555555520922779794911) C 996.00 l",
     "22/09/2026| 01:00 SWIGGY BANGALORE C 300.00 l",
-    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,00000144148470 (Ref# 09999999980922004049496) C 167.00 l",
-    "22/09/2026| 00:00 IGST-VPS2723574016799-RATE 18.0 -23 (Ref# 09999999980922004049496) C 30.06 l",
+    "22/09/2026| 00:00 OFFUS EMI,INT NBR:02,00000266258470 (Ref# 05555555520922779794945) C 167.00 l",
+    "22/09/2026| 00:00 IGST-VPS5811462039799-RATE 18.0 -23 (Ref# 05555555520922779794945) C 30.06 l",
   ]]);
   const sd = sameDay.rows.find((r) => r.kind === "emi")!;
   check("parser: same-day GST citing the interest reference folds into the EMI row", sd.parts.length === 3 && sd.total === 1193.06 && !sameDay.rows.some((r) => r.untraced), JSON.stringify(sd.parts));
@@ -301,8 +338,71 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   }
   check("locked: asks for a password", needed);
   check("locked: rejects a wrong password with code 2", wrong);
-  const l = parseStatement(await pagesOf(`${dir}/hdfc-locked.pdf`, "RACH0705"));
+  const l = parseStatement(await pagesOf(`${dir}/hdfc-locked.pdf`, "TEST0101"));
   check("locked: parses with the right password, same 9 rows", l.rows.length === 9, String(l.rows.length));
+
+
+  // ---- Spreadsheet exports (.xlsx, CSV) --------------------------------------
+  console.log("\n== sheets ==");
+  const SHEET = "Sep2026_BilledStatements_7043_28-09-26";
+  const xbuf = readFileSync(`${dir}/${SHEET}.xlsx`);
+  const xlsx = parseSheet(await readXlsx(xbuf.buffer.slice(xbuf.byteOffset, xbuf.byteOffset + xbuf.byteLength)), { filename: `${SHEET}.xlsx` });
+  const csv = parseSheet([parseCsv(readFileSync(`${dir}/${SHEET}.csv`, "utf8"))], { filename: `${SHEET}.csv` });
+  const SHEET_PII = ["ANANYA", "VERMA", "INDIRANAGAR", "BENGALURU", "560038", "30017735524418", "4011223344556677889", "552233", "33AAAAA0000A1Z5", "CKYC"];
+  for (const [label, x] of [["xlsx", xlsx], ["csv", csv]] as const) {
+    for (const r of x.rows) console.log(`${label.padEnd(5)} ${r.kind.padEnd(13)} ${r.date} ${r.description.padEnd(40)} ${r.total.toFixed(2).padStart(10)} ${r.credit ? "Cr" : "  "} [${r.parts.map((p) => `${p.label} ${p.amount}`).join("; ")}]`);
+    const sm = x.summary;
+    check(`${label}: all eleven summary figures`, !!sm && sm.previousDues === 63817.22 && sm.paymentsCredits === 63817 && sm.purchases === 27235.51 && sm.financeCharges === 0 && sm.totalDue === 27236 && sm.minimumDue === 2473 && sm.creditLimit === 277000 && sm.availableCredit === 238992 && sm.availableCash === 110800 && sm.statementDate === "2026-09-22" && sm.dueDate === "2026-10-12", JSON.stringify(sm));
+    check(`${label}: HDFC, card 7043 from the masked number, period Sept`, x.bank === "hdfc" && x.card?.last4 === "7043" && x.period === "2026-09", JSON.stringify([x.bank, x.card, x.period]));
+    check(`${label}: six rows, no warnings, nothing unparsed`, x.rows.length === 6 && x.warnings.length === 0 && x.unparsed.length === 0, JSON.stringify([x.rows.length, x.warnings, x.unparsed]));
+    const pay = x.rows.find((r) => /CREDIT CARD PAYMENT/.test(r.description));
+    check(`${label}: payment is a credit from the Debit / Credit column`, !!pay && pay.credit && pay.total === 63817);
+    const emi = x.rows.filter((r) => r.kind === "emi");
+    check(`${label}: EMI principal 996 + interest 167, #2, loan …8470, description without the split loan digits`, emi.length === 1 && emi[0].total === 1163 && emi[0].installment === "#2" && emi[0].loan?.last4 === "8470" && emi[0].description === "OFFUS EMI,PRIN NB:02", JSON.stringify(emi.map((e) => [e.description, e.total, e.loan])));
+    const anth = x.rows.find((r) => /ANTHROPIC/.test(r.description));
+    check(`${label}: forex purchase with its markup ("MARKU P") and the markup's GST, 11764.22`, !!anth && anth.kind === "international" && anth.total === 11764.22 && anth.parts.some((p) => p.kind === "markup" && p.amount === 395.42) && anth.parts.some((p) => p.kind === "gst" && p.amount === 71.18), JSON.stringify(anth?.parts));
+    check(`${label}: no rupee rate: the export has no foreign amount column`, anth?.foreign === null);
+    const lone = x.rows.find((r) => r.untraced);
+    check(`${label}: IGST 34.74 dated 22/08 is untraced and keeps the reference it cites`, !!lone && lone.total === 34.74 && lone.date === "2026-08-22" && !!lone.taxRef);
+    check(`${label}: loan summary: Smart EMI …8470, 12749.80 over 12 months at 17%, 10771.80 + 857 left, 10 months`, x.loans.length === 1 && JSON.stringify(x.loans[0]) === JSON.stringify({ type: "Smart EMI", last4: "8470", bookedOn: "2026-08-10", amount: 12749.8, tenureMonths: 12, ratePct: 17, principalOutstanding: 10771.8, interestPayable: 857, remainingMonths: 10 }), JSON.stringify(x.loans));
+    check(`${label}: GST summary 105.92 agrees with the GST lines read`, x.gstBilled === 105.92 && x.redactedLines.includes("## gst: statement says 105.92, lines read add up to 105.92"));
+    const blob = [...x.redactedLines, ...x.rows.map((r) => r.description), JSON.stringify(x.loans), JSON.stringify(x.card)].join("\n");
+    const hits = SHEET_PII.filter((w) => blob.includes(w));
+    check(`${label}: no name, address, CKYC, account number, BIN or GSTN in anything the parser produced`, hits.length === 0, hits.join(","));
+    check(`${label}: no raw reference or loan digits outside tokenDigits`, !/\d{8,}/.test(blob), blob.match(/\d{8,}/)?.[0]);
+  }
+  check("xlsx and csv produce the same rows", JSON.stringify(xlsx.rows.map((r) => [r.kind, r.date, r.description, r.total, r.credit])) === JSON.stringify(csv.rows.map((r) => [r.kind, r.date, r.description, r.total, r.credit])));
+
+  // Across formats: August from the PDF, September from the spreadsheet.
+  check("keys: leading zeros do not matter (PDF 00000266258470, sheet 0 0000266258470, loan summary 266258470)", canonicalDigits("00000266258470") === "266258470" && (await loanKeyFor(SALT, "266258470")) === kA && (await loanKeyFor(SALT, "0000266258470")) === kA);
+  await applyKeys(xlsx, SALT);
+  const xRes = resolveLineage(xlsx.rows, known);
+  const xGst = xlsx.rows.find((r) => r.gstFor);
+  check("xlsx after the August PDF: IGST traced to instalment #1 by reference", xRes.byRef === 1 && xRes.untraced.length === 0 && xRes.missing.length === 0 && xGst?.description === "GST on EMI #1 interest (loan …8470, Aug 2026)", JSON.stringify([xRes.byRef, xRes.untraced.length, xRes.missing, xGst?.description]));
+  const xEmi = xlsx.rows.find((r) => r.kind === "emi")!;
+  check("xlsx: the loan keys the same as in the August PDF", xEmi.loan?.key === augPayload.instalments[0].loanKey, JSON.stringify([xEmi.loan?.key, augPayload.instalments[0].loanKey]));
+
+  // Other layouts: generic CSV exports.
+  const g1 = parseSheet([parseCsv("Date,Transaction Details,Amount (in Rs.),Reference Number\r\n12/07/2026,AMAZON PAY INDIA,\"1,234.00\",10921307256\r\n20/07/2026,PAYMENT RECEIVED,\"25,000.00 Cr\",10925553129\r\n")]);
+  check("csv: generic header, Cr suffix, reference column never read", g1.rows.length === 2 && g1.rows[0].total === 1234 && g1.rows[1].credit && !g1.redactedLines.join(" ").includes("1092"), JSON.stringify(g1.redactedLines));
+  const g2 = parseSheet([parseCsv("Txn Date;Narration;Debit;Credit\n14/07/2026;OPENAI *CHATGPT SUBSCR;1760.30;\n15/07/2026;REFUND FLIPKART;;499.00\n")]);
+  check("csv: semicolons, separate Debit and Credit columns", g2.rows.length === 2 && !g2.rows[0].credit && g2.rows[0].total === 1760.3 && g2.rows[1].credit && g2.rows[1].total === 499, JSON.stringify(g2.rows.map((r) => [r.description, r.total, r.credit])));
+  const g3 = parseSheet([parseCsv("Posting Date\tDescription\tAmount\n2026-07-18\tSWIGGY BANGALORE\t-350.00\n2026-07-19\tZOMATO\t(120.00)\n")]);
+  check("csv: tabs, negative and bracketed amounts are credits", g3.rows.length === 2 && g3.rows.every((r) => r.credit), JSON.stringify(g3.rows.map((r) => [r.date, r.total, r.credit])));
+  check("amounts: rupee sign, Indian grouping, Dr suffix", amountCell("₹ 2,77,000")?.amount === 277000 && amountCell("1,234.50 Dr")?.credit === false && amountCell(63817)?.amount === 63817);
+  const rewardsFirst: Grid = [["Reward Points Summary"], ["Opening Balance", null, "Earned"], ["2,046", null, "1,385"], ["Account Summary"], ["Credit Limit", "2,77,000"]];
+  const rf = parseSheet([rewardsFirst]).summary;
+  check("sheet: reward points' Opening Balance is not the previous dues; a later titled block still reads", rf?.previousDues === null && rf?.creditLimit === 277000, JSON.stringify(rf));
+  const gstGap: Grid = [
+    ["Transaction type", "Date & Time", "Description", "AMT"],
+    ["Domestic", "22/08/2026 / 00:00", "IGST-VPS RATE 18.0", "34.74"],
+    [null],
+    ["GST Summary"],
+    ["IGST", "CGST", "SGST", "Total"],
+    ["105.92", "0", "0", "105.92"],
+  ];
+  const gg = parseSheet([gstGap]);
+  check("sheet: a GST summary that disagrees with the lines read is flagged", gg.gstBilled === 105.92 && gg.warnings.some((w) => /GST summary says ₹105\.92.*₹34\.74/.test(w)), JSON.stringify(gg.warnings));
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
   process.exit(failures === 0 ? 0 : 1);
