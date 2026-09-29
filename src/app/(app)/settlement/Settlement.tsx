@@ -21,7 +21,6 @@ import { Metric } from "@/components/Metric";
 import { MonthSelect, monthLabel } from "@/components/MonthSelect";
 import { DateBadge } from "@/components/DateBadge";
 import { StatusPill, tableDate } from "@/components/table/Table";
-import { PersonAvatar } from "@/components/Person";
 
 /**
  * When a payment was recorded, in India time: the day (YYYY-MM-DD) and the
@@ -431,9 +430,8 @@ export function Settlement({
                   <li key={s.id} className="flex items-center gap-3 px-3 py-2.5">
                     <DateBadge iso={at.day} />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-sm font-medium">
-                        <PersonAvatar id={s.settledBy} /> paid
-                        {s.settledTo ? <PersonAvatar id={s.settledTo} /> : null}
+                      <div className="truncate text-sm font-medium">
+                        {nameOf(s.settledBy)} paid{s.settledTo ? ` ${nameOf(s.settledTo)}` : ""}
                       </div>
                       <div className="truncate text-xs text-muted">
                         For {monthLabel(s.month)} · {at.time}
@@ -470,10 +468,8 @@ export function Settlement({
                         <td className="whitespace-nowrap">
                           {tableDate(at.day)}, {at.time}
                         </td>
-                        <td>
-                          <PersonAvatar id={s.settledBy} />
-                        </td>
-                        <td>{s.settledTo ? <PersonAvatar id={s.settledTo} /> : null}</td>
+                        <td>{nameOf(s.settledBy)}</td>
+                        <td>{s.settledTo ? nameOf(s.settledTo) : ""}</td>
                         <td className="whitespace-nowrap text-right tabular-nums">{formatINR(s.amount)}</td>
                         <td className="whitespace-nowrap">{progressText(lineageById.get(s.id))}</td>
                         <td>{s.note ?? ""}</td>
