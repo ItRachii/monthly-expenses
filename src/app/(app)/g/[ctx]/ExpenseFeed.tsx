@@ -1,6 +1,8 @@
 "use client";
 
-import { ChevronDownIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
+import { DownloadIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
+import { Tabs } from "@/components/Tabs";
+import { RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -16,19 +18,10 @@ interface Opt {
   label: string;
 }
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 const MONTH_SHORT = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
-
-function monthLabel(key: string): string {
-  const [y, m] = key.split("-").map(Number);
-  return `${MONTH_NAMES[(m ?? 1) - 1]} ${y}`;
-}
 
 /** Your involvement in a group expense row, Splitwise-style. */
 function involvement(
@@ -56,9 +49,21 @@ const TONE = {
   muted: "text-muted",
 } as const;
 
-// Splitwise-style expense feed: rows grouped by month, each month section
-// collapsible (latest month open by default). Edit/delete live in an action
-// sheet opened by long-pressing a row (or right-click / keyboard), plus Excel export.
+type SortKey = "date" | "item" | "category" | "amount";
+const FLAGGED = "flagged";
+const ALL = "all";
+
+/** "2026-09" to "Sep 2026". */
+function monthTab(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  return `${MONTH_SHORT[(m ?? 1) - 1]} ${y}`;
+}
+
+// The expenses list. Filter tabs (the two latest months, All, and Flagged
+// when something needs attention), a toolbar with the count and total,
+// bulk delete, export and search. Desktop shows a sortable table with a
+// checkbox per row and edit/delete at the end; phones keep compact rows,
+// where a long press opens edit and delete.
 export function ExpenseFeed({
   ctx,
   rows,
@@ -86,31 +91,64 @@ export function ExpenseFeed({
   const [actionsFor, setActionsFor] = useState<{ expense: ExpenseDTO; confirm: boolean } | null>(
     null,
   );
-  const isDesktop = useIsDesktop();
-  // Months the user explicitly toggled; anything untouched follows the
-  // default of "latest month open, the rest minimised".
-  const [toggled, setToggled] = useState<Record<string, boolean>>({});
+  const [query, setQuery] = useState("");
+  const [sort, onSort] = useSort<SortKey>({ key: "date", dir: "desc" }, ["date", "amount"]);
+  const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  const [confirmBulk, setConfirmBulk] = useState(false);
 
-  const sections = useMemo(() => {
-    const map = new Map<string, ExpenseDTO[]>();
-    for (const r of rows) {
-      const k = r.date.slice(0, 7);
-      const list = map.get(k);
-      if (list) list.push(r);
-      else map.set(k, [r]);
-    }
-    return Array.from(map.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([key, list]) => ({
-        key,
-        list,
-        total: round2(list.reduce((s, r) => s + r.amount, 0)),
-      }));
-  }, [rows]);
+  // Tabs: the two latest months with expenses, then All, then Flagged.
+  const months = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a)),
+    [rows],
+  );
+  const flaggedCount = rows.filter((r) => r.flag).length;
+  const tabs = [
+    ...months.slice(0, 2).map((m) => ({ id: m, label: monthTab(m), count: rows.filter((r) => r.date.startsWith(m)).length })),
+    { id: ALL, label: "All", count: rows.length },
+    ...(flaggedCount > 0 ? [{ id: FLAGGED, label: "Flagged", count: flaggedCount }] : []),
+  ];
+  const [tabPick, setTab] = useState<string | null>(null);
+  // Until one is picked, the latest month; a pick that disappears (its last
+  // expense deleted) falls back the same way.
+  const tab = tabPick && tabs.some((t) => t.id === tabPick) ? tabPick : (tabs[0]?.id ?? ALL);
+
+  const payerLabel = (v: string) => nameMap[v] ?? v;
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const inTab = rows.filter(
+      (r) =>
+        (tab === ALL || (tab === FLAGGED ? Boolean(r.flag) : r.date.startsWith(tab))) &&
+        (!q ||
+          r.item.toLowerCase().includes(q) ||
+          (r.category || "").toLowerCase().includes(q) ||
+          (r.receiptMerchant ?? "").toLowerCase().includes(q) ||
+          (!isPersonal && payerLabel(r.payer).toLowerCase().includes(q))),
+    );
+    return sortRows(inTab, sort, (r, k) =>
+      k === "date" ? r.date : k === "amount" ? r.amount : k === "category" ? r.category || "Uncategorised" : r.item,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, tab, query, sort, isPersonal, nameMap]);
+  const shownTotal = round2(shown.reduce((s, r) => s + r.amount, 0));
+
+  // Selection only covers rows still on show; a deleted or filtered-out row drops out.
+  const picked = shown.filter((r) => selected.has(r.id));
+  const pickedTotal = round2(picked.reduce((s, r) => s + r.amount, 0));
+  function toggle(id: number) {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function setAllShown(on: boolean) {
+    setSelected(on ? new Set(shown.map((r) => r.id)) : new Set());
+  }
 
   // Rows that appeared since the last render (your own add, or another
-  // member's picked up by the live refresh) glow briefly, and their month
-  // opens so the new expense is actually visible.
+  // member's picked up by the live refresh) glow briefly.
   const seen = useRef<Set<number> | null>(null);
   const [fresh, setFresh] = useState<Set<number>>(() => new Set());
   useEffect(() => {
@@ -127,12 +165,6 @@ export function ExpenseFeed({
     const t = window.setTimeout(() => setFresh(new Set()), 4000);
     return () => window.clearTimeout(t);
   }, [rows]);
-  const freshMonths = new Set(rows.filter((r) => fresh.has(r.id)).map((r) => r.date.slice(0, 7)));
-
-  const latest = sections[0]?.key;
-  const isOpen = (key: string) => freshMonths.has(key) || (toggled[key] ?? key === latest);
-
-  const payerLabel = (v: string) => nameMap[v] ?? v;
 
   // rows arrive newest first, so the range bounds are the ends of the list.
   const maxDate = rows[0]?.date ?? "";
@@ -142,6 +174,17 @@ export function ExpenseFeed({
     startTransition(async () => {
       await deleteExpenseAction(id);
       setActionsFor(null);
+      router.refresh();
+    });
+  }
+
+  /** Deletes the ticked expenses one by one, each with the same checks as a single delete. */
+  function removePicked() {
+    const ids = picked.map((r) => r.id);
+    startTransition(async () => {
+      for (const id of ids) await deleteExpenseAction(id);
+      setSelected(new Set());
+      setConfirmBulk(false);
       router.refresh();
     });
   }
@@ -156,66 +199,134 @@ export function ExpenseFeed({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted md:hidden">Press and hold an expense to edit or delete it.</p>
-      {sections.map((sec) => (
-        <section key={sec.key} className="space-y-1">
-          <button
-            type="button"
-            className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-left transition hover:bg-ink/5"
-            aria-expanded={isOpen(sec.key)}
-            onClick={() => setToggled((t) => ({ ...t, [sec.key]: !isOpen(sec.key) }))}
-          >
-            <span className="text-sm font-semibold text-muted">
-              {monthLabel(sec.key)}
-              <span className="ml-2 font-normal">
-                · {sec.list.length} expense{sec.list.length === 1 ? "" : "s"}
-              </span>
-            </span>
-            <span className="flex items-center gap-2 text-sm text-muted">
-              {formatINR(sec.total)}
-              <span
-                aria-hidden
-                className={`inline-flex transition-transform ${
-                  isOpen(sec.key) ? "rotate-180" : ""
-                }`}
-              >
-                <ChevronDownIcon className="h-5 w-5" />
-              </span>
-            </span>
-          </button>
+      <div className="border-b border-ink/10">
+        <Tabs
+          label="Expenses shown"
+          tabs={tabs}
+          value={tab}
+          onChange={(t) => {
+            setTab(t);
+            setSelected(new Set());
+          }}
+        />
+      </div>
 
-          {isOpen(sec.key) ? (
-            <div className="card divide-y divide-ink/5 p-0">
-              {sec.list.map((r) => {
-                const [, m, d] = r.date.split("-").map(Number);
-                const inv = isPersonal ? null : involvement(r, selfKey, memberCount);
-                return (
-                  <ExpenseRow
-                    key={r.id}
-                    item={r.item}
-                    receiptMerchant={r.receiptMerchant}
-                    flag={r.flag}
-                    month={MONTH_SHORT[(m ?? 1) - 1]}
-                    day={String(d).padStart(2, "0")}
-                    amount={r.amount}
-                    paidBy={isPersonal ? null : payerLabel(r.payer)}
-                    category={r.category || "Uncategorised"}
-                    inv={inv}
-                    isDesktop={isDesktop}
-                    isNew={fresh.has(r.id)}
-                    pending={pending}
-                    onOpenActions={() => setActionsFor({ expense: r, confirm: false })}
-                    onEdit={() => setEditing(r)}
-                    onDelete={() => setActionsFor({ expense: r, confirm: true })}
-                  />
-                );
-              })}
-            </div>
-          ) : null}
-        </section>
-      ))}
+      {/* Toolbar: count and total (or the selection's), bulk delete, export, search. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm text-muted" aria-live="polite">
+          {picked.length > 0 ? (
+            <>
+              <span className="font-semibold text-ink">{picked.length} selected</span> · {formatINR(pickedTotal)}
+            </>
+          ) : (
+            <>
+              {shown.length} expense{shown.length === 1 ? "" : "s"} · <span className="font-semibold text-ink">{formatINR(shownTotal)}</span>
+            </>
+          )}
+        </span>
+        <button
+          type="button"
+          className="chip-btn max-md:hidden"
+          disabled={picked.length === 0 || pending}
+          onClick={() => setConfirmBulk(true)}
+        >
+          <TrashIcon className="h-4 w-4 text-negative" />
+          Delete
+        </button>
+        <ExportButton ctx={ctx} minDate={minDate} maxDate={maxDate} className="chip-btn">
+          <DownloadIcon className="h-4 w-4 text-muted" />
+          Export
+        </ExportButton>
+        <SearchBox value={query} onChange={setQuery} placeholder="Search expenses" className="w-full sm:ml-auto sm:w-64" />
+      </div>
 
-      <ExportButton ctx={ctx} minDate={minDate} maxDate={maxDate} />
+      {shown.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted">
+          {query.trim() ? `No expenses match "${query.trim()}".` : "No expenses here."}
+        </p>
+      ) : (
+        <>
+        {/* Desktop: the table. Both layouts are in the page and CSS picks one,
+            so there is no flash of the wrong one before scripts run. */}
+        <div className="hidden overflow-hidden rounded-xl border border-ink/10 md:block">
+          <table className="list-table">
+            <thead>
+              <tr>
+                <th scope="col" className="w-12 px-3 py-3">
+                  <SelectAllCheckbox selected={picked.length} total={shown.length} onChange={setAllShown} label="Select all expenses shown" />
+                </th>
+                <SortHeader label="Date" sortKey="date" sort={sort} onSort={onSort} className="w-28" />
+                <SortHeader label="Item" sortKey="item" sort={sort} onSort={onSort} />
+                <SortHeader label="Category" sortKey="category" sort={sort} onSort={onSort} className="w-32" />
+                {isPersonal ? null : <Th className="w-28">Paid by</Th>}
+                {isPersonal ? null : <Th className="w-36">Status</Th>}
+                <SortHeader label="Amount" sortKey="amount" sort={sort} onSort={onSort} align="right" className="w-32" />
+                <Th align="center" className="w-24">
+                  Action
+                </Th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((r) => (
+                <ExpenseTableRow
+                  key={r.id}
+                  row={r}
+                  checked={selected.has(r.id)}
+                  isNew={fresh.has(r.id)}
+                  paidBy={isPersonal ? null : payerLabel(r.payer)}
+                  inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
+                  pending={pending}
+                  onToggle={() => toggle(r.id)}
+                  onEdit={() => setEditing(r)}
+                  onDelete={() => setActionsFor({ expense: r, confirm: true })}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Phones: compact rows; a long press opens edit and delete. */}
+        <div className="space-y-2 md:hidden">
+          <p className="text-xs text-muted">Press and hold an expense to edit or delete it.</p>
+          <div className="card divide-y divide-ink/5 p-0">
+            {shown.map((r) => {
+              const [, m, d] = r.date.split("-").map(Number);
+              return (
+                <ExpenseRow
+                  key={r.id}
+                  item={r.item}
+                  receiptMerchant={r.receiptMerchant}
+                  flag={r.flag}
+                  month={MONTH_SHORT[(m ?? 1) - 1]}
+                  day={String(d).padStart(2, "0")}
+                  amount={r.amount}
+                  paidBy={isPersonal ? null : payerLabel(r.payer)}
+                  category={r.category || "Uncategorised"}
+                  inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
+                  isDesktop={false}
+                  isNew={fresh.has(r.id)}
+                  pending={pending}
+                  onOpenActions={() => setActionsFor({ expense: r, confirm: false })}
+                  onEdit={() => setEditing(r)}
+                  onDelete={() => setActionsFor({ expense: r, confirm: true })}
+                />
+              );
+            })}
+          </div>
+        </div>
+        </>
+      )}
+
+      {confirmBulk ? (
+        <BulkDeleteDialog
+          count={picked.length}
+          total={pickedTotal}
+          grouped={!isPersonal}
+          pending={pending}
+          onConfirm={removePicked}
+          onClose={() => setConfirmBulk(false)}
+        />
+      ) : null}
 
       {actionsFor ? (
         <ExpenseActions
@@ -247,24 +358,137 @@ export function ExpenseFeed({
   );
 }
 
+/** One expense as a table row (desktop). */
+function ExpenseTableRow({
+  row,
+  checked,
+  isNew,
+  paidBy,
+  inv,
+  pending,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  row: ExpenseDTO;
+  checked: boolean;
+  isNew: boolean;
+  paidBy: string | null;
+  inv: ReturnType<typeof involvement> | null;
+  pending: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [flagOpen, setFlagOpen] = useState(false);
+  return (
+    // 700ms is on purpose: past the 300ms UI budget, but this is the slow
+    // fade-out of the "just added" highlight, not a reply to a click.
+    <tr data-selected={checked || undefined} className={`duration-700 hover:bg-ink/[0.03] ${isNew ? "!bg-primary/15" : ""}`}>
+      <td>
+        <RowCheckbox checked={checked} onChange={onToggle} label={`Select ${row.item}`} />
+      </td>
+      <td className="whitespace-nowrap text-muted">{tableDate(row.date)}</td>
+      <td className="max-w-0">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-semibold" title={row.item}>
+            {row.item}
+          </span>
+          {row.receiptMerchant ? (
+            <span className="shrink-0 rounded bg-ink/5 px-1 py-0.5 text-[10px] text-muted" title={`From scanned receipt: ${row.receiptMerchant}`}>
+              <ReceiptIcon className="inline h-3 w-3 align-[-1px]" />
+            </span>
+          ) : null}
+          {row.flag ? <PendingFlagButton reason={row.flag} open={flagOpen} onToggle={() => setFlagOpen((o) => !o)} /> : null}
+        </div>
+        {row.flag && flagOpen ? <PendingFlagNote reason={row.flag} /> : null}
+      </td>
+      <td className="truncate text-muted">{row.category || "Uncategorised"}</td>
+      {paidBy !== null ? <td className="truncate text-muted">{paidBy}</td> : null}
+      {inv ? (
+        <td>
+          <StatusPill tone={inv.tone === "lent" ? "positive" : inv.tone === "borrowed" ? "negative" : "neutral"}>
+            {inv.amount !== null ? `${inv.label.replace(/^you/, "You")} ${formatINR(inv.amount)}` : inv.label.replace(/^./, (c) => c.toUpperCase())}
+          </StatusPill>
+        </td>
+      ) : null}
+      <td className="whitespace-nowrap text-right font-semibold tabular-nums">{formatINR(row.amount)}</td>
+      <td>
+        <div className="flex items-center justify-center gap-1">
+          <button type="button" className="icon-btn" onClick={onEdit} disabled={pending} aria-label={`Edit ${row.item}`} title="Edit">
+            <PencilIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-btn text-negative hover:text-negative"
+            onClick={onDelete}
+            disabled={pending}
+            aria-label={`Delete ${row.item}`}
+            title="Delete"
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/** Confirms deleting the ticked expenses. */
+function BulkDeleteDialog({
+  count,
+  total,
+  grouped,
+  pending,
+  onConfirm,
+  onClose,
+}: {
+  count: number;
+  total: number;
+  grouped: boolean;
+  pending: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const cancel = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    cancel.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="bulk-delete-title"
+        className="modal-pop card w-full max-w-sm space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="bulk-delete-title" className="section-title">
+          Delete {count} expense{count === 1 ? "" : "s"}?
+        </h2>
+        <p className="text-sm text-muted">
+          {formatINR(total)} in total. This cannot be undone{grouped ? ", and everyone in the group is told" : ""}.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button ref={cancel} type="button" className="btn-secondary" onClick={onClose} disabled={pending}>
+            Cancel
+          </button>
+          <button type="button" className="btn-danger" onClick={onConfirm} disabled={pending}>
+            {pending ? "Deleting…" : `Delete ${count}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const LONG_PRESS_MS = 450;
 const MOVE_TOLERANCE_PX = 10;
-// Same breakpoint as the app shell (Tailwind md): below it the phone layout
-// and bottom nav show, at or above it the desktop sidebar does.
-const DESKTOP_QUERY = "(min-width: 768px)";
-
-/** True on desktop widths. False during SSR and the first client render. */
-function useIsDesktop(): boolean {
-  const [desktop, setDesktop] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia(DESKTOP_QUERY);
-    const update = () => setDesktop(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-  return desktop;
-}
 
 /**
  * One expense row, two layouts:

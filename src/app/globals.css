@@ -76,7 +76,7 @@
      point down when open. */
   summary {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.625rem;
     cursor: pointer;
     list-style: none;
@@ -90,6 +90,8 @@
     width: 0.45rem;
     height: 0.45rem;
     margin-left: 0.125rem;
+    /* Level with the first line of the title, even when it wraps. */
+    margin-top: 0.45em;
     border-right: 2px solid theme("colors.muted");
     border-bottom: 2px solid theme("colors.muted");
     transform: rotate(-45deg);
@@ -154,6 +156,30 @@
   }
   .data-table td {
     @apply border-b border-ink/5 px-3 py-2 text-ink/90;
+  }
+  /* Toolbar action over a list: a rounded chip with an icon (bulk actions,
+     export). */
+  .chip-btn {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-ink/15 bg-surface px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-ink/5 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100;
+  }
+  /* The list tables: a tinted header row, hairline rows, selected rows
+     tinted, the same in both themes. */
+  .list-table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+  /* Title-case headings, as sortable ones are buttons (which do not
+     inherit text-transform) and must read the same as plain ones. */
+  .list-table thead tr {
+    @apply bg-primary/[0.07] text-[13px] text-ink/80;
+  }
+  .list-table tbody tr {
+    @apply border-b border-ink/[0.06] transition-colors;
+  }
+  .list-table tbody tr[data-selected] {
+    @apply bg-primary/[0.06];
+  }
+  .list-table td {
+    @apply px-3 py-3 align-middle;
   }
   .pill {
     @apply rounded-full border border-ink/10 bg-ink/5 px-2.5 py-0.5 text-xs;
