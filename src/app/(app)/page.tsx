@@ -43,12 +43,12 @@ export default async function HomePage() {
           {overall > SETTLE_EPS ? (
             <>
               Overall, you are owed{" "}
-              <span className="text-emerald-400">{formatINR(overall)}</span>
+              <span className="text-positive">{formatINR(overall)}</span>
             </>
           ) : overall < -SETTLE_EPS ? (
             <>
               Overall, you owe{" "}
-              <span className="text-red-400">{formatINR(Math.abs(overall))}</span>
+              <span className="text-negative">{formatINR(Math.abs(overall))}</span>
             </>
           ) : (
             "You are all settled up"
@@ -62,7 +62,7 @@ export default async function HomePage() {
 
       <Link
         href="/g/personal"
-        className="card block transition hover:border-white/20 hover:bg-white/5"
+        className="card block transition hover:border-ink/20 hover:bg-ink/5"
       >
         <div className="flex items-baseline justify-between gap-2">
           <span className="font-semibold">Personal expenses</span>
@@ -85,12 +85,12 @@ export default async function HomePage() {
           ) : savedPct === null ? null : (
             savedPct < 0 ? (
               <>
-                Spent <span className="font-medium text-red-400">{-savedPct}% more</span> than your
+                Spent <span className="font-medium text-negative">{-savedPct}% more</span> than your
                 income this month{month.groups > 0 ? <>, including {formatINR(month.groups)} in groups</> : null}
               </>
             ) : (
               <>
-                Saved <span className="font-medium text-emerald-400">{savedPct}%</span> of your income
+                Saved <span className="font-medium text-positive">{savedPct}%</span> of your income
                 this month{month.groups > 0 ? <>, after {formatINR(month.groups)} in groups</> : null}
               </>
             )

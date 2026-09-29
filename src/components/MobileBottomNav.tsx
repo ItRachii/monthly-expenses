@@ -31,7 +31,7 @@ export function MobileBottomNav({ statements = false }: { statements?: boolean }
   const items = statements ? [...BASE_ITEMS.slice(0, 2), STATEMENTS, ...BASE_ITEMS.slice(2)] : BASE_ITEMS;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-white/10 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-ink/10 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       {items.map((it) => {
         const active = isActive(it.href, pathname);
         const Icon = NAV_ICONS[it.href];

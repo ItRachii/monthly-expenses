@@ -185,7 +185,7 @@ export function ExpenseLog({
                   {r.item}
                   {r.receiptMerchant ? (
                     <span
-                      className="ml-1 rounded bg-white/5 px-1.5 py-0.5 text-xs text-muted"
+                      className="ml-1 rounded bg-ink/5 px-1.5 py-0.5 text-xs text-muted"
                       title={`From scanned receipt: ${r.receiptMerchant}`}
                     >
                       <ReceiptIcon className="inline h-3 w-3 align-[-1px]" /> {r.receiptMerchant}
@@ -211,7 +211,7 @@ export function ExpenseLog({
                       <PencilIcon />
                     </button>
                     <button
-                      className="icon-btn text-red-400 hover:text-red-300"
+                      className="icon-btn text-negative hover:text-negative"
                       onClick={() => remove(r.id)}
                       disabled={pending}
                       aria-label="Delete expense"

@@ -100,7 +100,7 @@ function CardBlock({ card }: { card: CardView }) {
                   <td>
                     <button
                       type="button"
-                      className="icon-btn text-red-400 hover:text-red-300"
+                      className="icon-btn text-negative hover:text-negative"
                       disabled={pending}
                       aria-label={`Delete ${monthLabel(s.period)} statement`}
                       title="Delete statement"

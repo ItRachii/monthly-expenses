@@ -24,6 +24,7 @@ const NAMES = [
   "refresh", "schedule", "wifi_off", "warning", "visibility", "visibility_off",
   "remove", "add", "keyboard_arrow_down", "trending_up", "trending_down", "group_add",
   "add_circle", "payments", "mail", "account_balance_wallet-fill",
+  "light_mode", "dark_mode", "brightness_auto",
   // Navigation, outlined and filled (filled marks the current page).
   "home", "home-fill", "add_circle-fill", "list_alt", "list_alt-fill",
   "bar_chart", "bar_chart-fill", "handshake", "handshake-fill",

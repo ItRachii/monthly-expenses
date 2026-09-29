@@ -49,7 +49,7 @@ export function FinanceCard({ f, incomeSet }: { f: MonthView; incomeSet: boolean
           {f.savingsPct === null ? (
             <span className="text-muted">-</span>
           ) : (
-            <span className={negative ? "text-red-400" : "text-emerald-400"}>
+            <span className={negative ? "text-negative" : "text-positive"}>
               {Math.abs(f.savingsPct)}%
               <span className="ml-1 text-xs font-normal text-muted">of income</span>
             </span>
@@ -65,7 +65,7 @@ export function FinanceCard({ f, incomeSet }: { f: MonthView; incomeSet: boolean
       {!incomeSet ? (
         // Highlighted until set: the popup is skippable, this is the way back.
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3">
-          <p className="text-sm text-amber-200">
+          <p className="text-sm text-warning">
             Add your monthly income to see what you save each month.
           </p>
           <AddIncomeButton className="btn-primary shrink-0 px-3 py-1.5 text-sm">

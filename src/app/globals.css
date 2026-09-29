@@ -11,6 +11,37 @@
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+/* Themes. Channels, not colours, so Tailwind can add opacity (bg-ink/5).
+   <html data-theme> is set before first paint by the script in layout.tsx;
+   an element can pin its own subtree (the login hero stays dark). */
+:root,
+[data-theme="dark"] {
+  --c-background: 14 17 23;
+  --c-surface: 28 31 38;
+  --c-primary: 76 114 176;
+  --c-primary-light: 143 176 230;
+  --c-accent: 221 132 82;
+  --c-ink: 250 250 250;
+  --c-muted: 139 157 184;
+  --c-positive: 52 211 153;
+  --c-negative: 248 113 113;
+  --c-warning: 253 230 138;
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --c-background: 243 245 248;
+  --c-surface: 255 255 255;
+  --c-primary: 76 114 176;
+  --c-primary-light: 44 82 145;
+  --c-accent: 196 98 45;
+  --c-ink: 17 24 39;
+  --c-muted: 82 96 118;
+  --c-positive: 4 120 87;
+  --c-negative: 185 28 28;
+  --c-warning: 146 64 14;
+  color-scheme: light;
+}
+
 @layer base {
   html,
   body {
@@ -74,7 +105,7 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-white/10 bg-surface p-5;
+    @apply rounded-xl border border-ink/10 bg-surface p-5;
   }
   .btn {
     @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
@@ -83,25 +114,25 @@
     @apply btn bg-primary text-white hover:bg-primary/90;
   }
   .btn-secondary {
-    @apply btn border border-white/15 bg-white/5 text-ink hover:bg-white/10;
+    @apply btn border border-ink/15 bg-ink/5 text-ink hover:bg-ink/10;
   }
   .btn-danger {
-    @apply btn border border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20;
+    @apply btn border border-red-500/40 bg-red-500/10 text-negative hover:bg-red-500/20;
   }
   /* Icon-only control: 36px hit area around a 20px stroke icon (Icons.tsx). */
   .icon-btn {
-    @apply grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition hover:bg-white/5 hover:text-ink active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
+    @apply grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition hover:bg-ink/5 hover:text-ink active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
   }
   .input,
   .select,
   .textarea {
-    @apply w-full rounded-lg border border-white/10 bg-background px-3 py-2 text-sm text-ink outline-none transition focus:border-primary;
+    @apply w-full rounded-lg border border-ink/10 bg-background px-3 py-2 text-sm text-ink outline-none transition focus:border-primary;
   }
   .label {
     @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted;
   }
   .metric-card {
-    @apply rounded-xl border border-white/10 bg-surface px-4 py-3;
+    @apply rounded-xl border border-ink/10 bg-surface px-4 py-3;
   }
   .metric-label {
     @apply text-xs text-muted;
@@ -119,28 +150,28 @@
     @apply w-full border-collapse text-left text-sm;
   }
   .data-table th {
-    @apply border-b border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted;
+    @apply border-b border-ink/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted;
   }
   .data-table td {
-    @apply border-b border-white/5 px-3 py-2 text-ink/90;
+    @apply border-b border-ink/5 px-3 py-2 text-ink/90;
   }
   .pill {
-    @apply rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs;
+    @apply rounded-full border border-ink/10 bg-ink/5 px-2.5 py-0.5 text-xs;
   }
   .alert {
     @apply rounded-lg border px-4 py-3 text-sm;
   }
   .alert-success {
-    @apply alert border-green-500/30 bg-green-500/10 text-green-300;
+    @apply alert border-green-500/30 bg-green-500/10 text-positive;
   }
   .alert-warning {
-    @apply alert border-amber-500/30 bg-amber-500/10 text-amber-200;
+    @apply alert border-amber-500/30 bg-amber-500/10 text-warning;
   }
   .alert-error {
-    @apply alert border-red-500/30 bg-red-500/10 text-red-300;
+    @apply alert border-red-500/30 bg-red-500/10 text-negative;
   }
   .alert-info {
-    @apply alert border-primary/30 bg-primary/10 text-primary;
+    @apply alert border-primary/30 bg-primary/10 text-primary-light;
   }
   /* Hide the native number-input spinner arrows on all .input fields. */
   .input {

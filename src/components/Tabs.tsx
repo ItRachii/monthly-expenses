@@ -90,7 +90,7 @@ export function Tabs<T extends string>({
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(t.id)}
             className={`relative inline-flex items-center gap-2 whitespace-nowrap rounded-t-lg px-4 py-2.5 text-sm outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/70 max-sm:min-w-0 max-sm:flex-1 max-sm:justify-center max-sm:gap-1.5 max-sm:px-1.5 max-sm:text-[13px] ${
-              active ? "font-semibold text-ink" : "text-muted hover:bg-white/[0.04] hover:text-ink"
+              active ? "font-semibold text-ink" : "text-muted hover:bg-ink/[0.04] hover:text-ink"
             } ${active && !bar ? "shadow-[inset_0_-2px_0_theme(colors.primary)]" : ""}`}
           >
             {t.shortLabel ? (
@@ -104,7 +104,7 @@ export function Tabs<T extends string>({
             {t.count !== undefined ? (
               <span
                 className={`inline-flex min-w-[1.375rem] justify-center rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-none tabular-nums transition-colors duration-200 max-sm:min-w-[1.125rem] max-sm:px-1 max-sm:text-[10px] max-[359px]:hidden ${
-                  active ? "bg-primary/20 text-ink" : "bg-white/[0.06] text-muted"
+                  active ? "bg-primary/20 text-ink" : "bg-ink/[0.06] text-muted"
                 }`}
               >
                 {t.count}

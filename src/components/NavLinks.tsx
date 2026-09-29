@@ -61,7 +61,7 @@ export function NavLinks({
             className={`flex items-center gap-3 rounded-lg px-3 py-2 text-base transition ${
               active
                 ? "bg-primary/15 font-semibold text-ink"
-                : "text-muted hover:bg-white/5 hover:text-ink"
+                : "text-muted hover:bg-ink/5 hover:text-ink"
             } ${collapsed ? "md:justify-center md:px-2" : ""}`}
           >
             <span

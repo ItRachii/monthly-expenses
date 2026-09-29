@@ -20,8 +20,8 @@ export interface GroupItem {
 }
 
 function Position({ net }: { net: number }) {
-  if (net > SETTLE_EPS) return <span className="text-emerald-400">You are owed {formatINR(net)}</span>;
-  if (net < -SETTLE_EPS) return <span className="text-red-400">You owe {formatINR(-net)}</span>;
+  if (net > SETTLE_EPS) return <span className="text-positive">You are owed {formatINR(net)}</span>;
+  if (net < -SETTLE_EPS) return <span className="text-negative">You owe {formatINR(-net)}</span>;
   return <span>Settled up</span>;
 }
 
@@ -44,7 +44,7 @@ export function GroupsManager({ groups }: { groups: GroupItem[] }) {
             <Link
               key={g.id}
               href={`/g/${encodeURIComponent(g.id)}`}
-              className="card flex items-center gap-3 transition hover:bg-white/5 active:scale-[0.99]"
+              className="card flex items-center gap-3 transition hover:bg-ink/5 active:scale-[0.99]"
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold">{g.name}</div>
@@ -72,7 +72,7 @@ export function GroupsManager({ groups }: { groups: GroupItem[] }) {
         onClick={() => setShowCreate(true)}
         aria-label="Create a group"
         title="Create a group"
-        className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 grid h-14 w-14 place-items-center rounded-full border border-white/15 bg-surface shadow-xl transition hover:bg-white/5 active:scale-95 md:bottom-6 md:right-6"
+        className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 grid h-14 w-14 place-items-center rounded-full border border-ink/15 bg-surface shadow-xl transition hover:bg-ink/5 active:scale-95 md:bottom-6 md:right-6"
       >
         <GroupAddIcon className="h-7 w-7 text-primary-light" />
       </button>

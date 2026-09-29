@@ -109,7 +109,7 @@ export function AddExpenseProvider({
           role="status"
           className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4 md:bottom-8"
         >
-          <div className="toast-in rounded-lg border border-emerald-500/30 bg-surface px-4 py-2.5 text-sm text-emerald-300 shadow-xl">
+          <div className="toast-in rounded-lg border border-emerald-500/30 bg-surface px-4 py-2.5 text-sm text-positive shadow-xl">
             {toast}
           </div>
         </div>
@@ -255,7 +255,7 @@ function AddExpenseOverlay({
         ) : !setup ? (
           <div className="space-y-3" aria-busy="true">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-10 animate-pulse rounded-lg bg-white/5" />
+              <div key={i} className="h-10 animate-pulse rounded-lg bg-ink/5" />
             ))}
           </div>
         ) : (

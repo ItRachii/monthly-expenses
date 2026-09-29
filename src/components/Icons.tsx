@@ -55,3 +55,6 @@ export const AddCircleIcon = icon("add_circle");
 export const PaymentsIcon = icon("payments");
 export const MailIcon = icon("mail");
 export const WalletIcon = icon("account_balance_wallet-fill");
+export const SunIcon = icon("light_mode");
+export const MoonIcon = icon("dark_mode");
+export const AutoThemeIcon = icon("brightness_auto");

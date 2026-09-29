@@ -51,8 +51,8 @@ function involvement(
 }
 
 const TONE = {
-  lent: "text-emerald-400",
-  borrowed: "text-red-400",
+  lent: "text-positive",
+  borrowed: "text-negative",
   muted: "text-muted",
 } as const;
 
@@ -161,7 +161,7 @@ export function ExpenseFeed({
         <section key={sec.key} className="space-y-1">
           <button
             type="button"
-            className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-left transition hover:bg-white/5"
+            className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-left transition hover:bg-ink/5"
             aria-expanded={isOpen(sec.key)}
             onClick={() => setToggled((t) => ({ ...t, [sec.key]: !isOpen(sec.key) }))}
           >
@@ -185,7 +185,7 @@ export function ExpenseFeed({
           </button>
 
           {isOpen(sec.key) ? (
-            <div className="card divide-y divide-white/5 p-0">
+            <div className="card divide-y divide-ink/5 p-0">
               {sec.list.map((r) => {
                 const [, m, d] = r.date.split("-").map(Number);
                 const inv = isPersonal ? null : involvement(r, selfKey, memberCount);
@@ -379,7 +379,7 @@ function ExpenseRow({
       } ${
         isDesktop
           ? ""
-          : "cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-white/5 active:bg-white/5"
+          : "cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-ink/5 active:bg-ink/5"
       }`}
     >
       <div className="w-9 shrink-0 text-center leading-tight">
@@ -391,7 +391,7 @@ function ExpenseRow({
           {item}
           {receiptMerchant ? (
             <span
-              className="ml-1 rounded bg-white/5 px-1 py-0.5 text-[10px] text-muted"
+              className="ml-1 rounded bg-ink/5 px-1 py-0.5 text-[10px] text-muted"
               title={`From scanned receipt: ${receiptMerchant}`}
             >
               <ReceiptIcon className="inline h-3 w-3 align-[-1px]" />
@@ -436,7 +436,7 @@ function ExpenseRow({
         </button>
         <button
           type="button"
-          className="icon-btn text-red-400 hover:text-red-300"
+          className="icon-btn text-negative hover:text-negative"
           onClick={onDelete}
           disabled={pending}
           aria-label={`Delete ${item}`}
@@ -490,7 +490,7 @@ function ExpenseActions({
   }, []);
 
   const [, m, d] = expense.date.split("-").map(Number);
-  const row = "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-base transition hover:bg-white/5 disabled:opacity-50";
+  const row = "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-base transition hover:bg-ink/5 disabled:opacity-50";
 
   return (
     <div
@@ -554,7 +554,7 @@ function ExpenseActions({
             </button>
             <button
               type="button"
-              className={`${row} text-red-400`}
+              className={`${row} text-negative`}
               onClick={() => setConfirming(true)}
             >
               <TrashIcon />

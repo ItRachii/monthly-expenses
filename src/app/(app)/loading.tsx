@@ -5,11 +5,11 @@
 export default function Loading() {
   return (
     <div className="animate-pulse space-y-6">
-      <div className="h-8 w-48 rounded bg-white/10" />
-      <div className="h-10 w-full max-w-xs rounded bg-white/10" />
+      <div className="h-8 w-48 rounded bg-ink/10" />
+      <div className="h-10 w-full max-w-xs rounded bg-ink/10" />
       <div className="space-y-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-14 w-full rounded-lg bg-white/10" />
+          <div key={i} className="h-14 w-full rounded-lg bg-ink/10" />
         ))}
       </div>
     </div>

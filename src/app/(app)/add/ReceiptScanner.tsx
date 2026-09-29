@@ -43,7 +43,7 @@ function Thumb({ file }: { file: File }) {
     // eslint-disable-next-line @next/next/no-img-element
     <img src={url} alt="receipt preview" className="h-16 w-16 rounded-md object-cover" />
   ) : (
-    <div className="h-16 w-16 rounded-md bg-white/5" />
+    <div className="h-16 w-16 rounded-md bg-ink/5" />
   );
 }
 
@@ -288,7 +288,7 @@ export function ReceiptScanner({
           <div className="text-sm">
             Reading image {progress?.file ?? 1} of {progress?.files ?? files.length}…
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-ink/10">
             <div
               // scaleX, not width: the bar moves on the GPU with no relayout.
               className="h-full w-full origin-left bg-primary transition-transform duration-200 ease-linear"
@@ -401,7 +401,7 @@ export function ReceiptScanner({
                     <td className="text-right">
                       <button
                         type="button"
-                        className="icon-btn text-red-400 hover:text-red-300"
+                        className="icon-btn text-negative hover:text-negative"
                         aria-label="Remove item"
                         onClick={() => removeRow(i)}
                       >

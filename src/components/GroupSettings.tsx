@@ -67,7 +67,7 @@ function GroupSettingsBody({ group }: { group: GroupView }) {
                 <td className="text-right">
                   {group.isAdmin && !m.isSelf ? (
                     <button
-                      className="text-red-400 hover:text-red-300"
+                      className="text-negative hover:text-negative"
                       disabled={pending}
                       onClick={() => run(() => removeMemberAction(group.id, m.key))}
                     >
@@ -108,7 +108,7 @@ function GroupSettingsBody({ group }: { group: GroupView }) {
       ) : null}
 
       {/* Danger zone */}
-      <div className="border-t border-white/10 pt-4">
+      <div className="border-t border-ink/10 pt-4">
         {!group.isCreator ? (
           <button
             className="btn-danger"

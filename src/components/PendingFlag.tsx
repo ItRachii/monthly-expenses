@@ -12,7 +12,7 @@ export function PendingFlagButton({ reason, open, onToggle }: { reason: string; 
   return (
     <button
       type="button"
-      className="ml-1 inline-flex rounded p-0.5 align-[-2px] text-amber-300 hover:bg-amber-400/10"
+      className="ml-1 inline-flex rounded p-0.5 align-[-2px] text-warning hover:bg-amber-400/10"
       title={reason}
       aria-label="Needs attention"
       aria-expanded={open}
@@ -30,7 +30,7 @@ export function PendingFlagButton({ reason, open, onToggle }: { reason: string; 
 
 export function PendingFlagNote({ reason }: { reason: string }) {
   return (
-    <div className="mt-1 whitespace-normal rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-1 text-xs text-amber-200" data-flag-note>
+    <div className="mt-1 whitespace-normal rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-1 text-xs text-warning" data-flag-note>
       {reason}
     </div>
   );

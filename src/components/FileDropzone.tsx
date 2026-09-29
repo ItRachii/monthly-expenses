@@ -92,7 +92,7 @@ export function FileDropzone({
       }}
       className={`group relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 px-6 py-8 text-center transition-[border-color,box-shadow,background-color] duration-200 ease-out motion-reduce:transition-none ${
         disabled
-          ? "cursor-wait border-white/10 opacity-60"
+          ? "cursor-wait border-ink/10 opacity-60"
           : dragging
             ? // One border class per state: two would fight and the fainter could win.
               "cursor-copy border-primary bg-primary/[0.08] shadow-[0_0_0_5px_rgba(76,114,176,0.25),0_0_36px_rgba(76,114,176,0.45)]"

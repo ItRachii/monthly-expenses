@@ -217,7 +217,7 @@ export function ProfileForm({
                 ) : null}
               </>
             ) : (
-              <span className="text-red-400">Not set</span>
+              <span className="text-negative">Not set</span>
             )}
           </Field>
           <Field label="Email address">

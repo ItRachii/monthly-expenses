@@ -32,7 +32,7 @@ export function Sidebar({
       // label, badge). Your name, the group names and Sign out are kept out
       // of that measure ([contain:inline-size]): they fit the width, they
       // never set it.
-      className={`hidden w-full shrink-0 border-b border-white/10 bg-surface/40 md:block md:border-b-0 md:border-r ${
+      className={`hidden w-full shrink-0 border-b border-ink/10 bg-surface/40 md:block md:border-b-0 md:border-r ${
         collapsed ? "md:w-16" : "md:w-max"
       }`}
     >
@@ -97,7 +97,7 @@ export function Sidebar({
             collapsed rail where the icon alone has to carry it. */}
         <div
           className={`w-full ${
-            collapsed ? "hidden md:block md:border-t md:border-white/10 md:pt-3" : ""
+            collapsed ? "hidden md:block md:border-t md:border-ink/10 md:pt-3" : ""
           }`}
         >
           <h2

@@ -302,7 +302,7 @@ export function StatementImport({
             hint="Supported formats: PDF, Excel (.xlsx), CSV. Read on this device, never uploaded."
           >
             {file ? (
-              <span className="max-w-full truncate rounded-full bg-white/[0.06] px-3 py-1 text-xs text-ink">
+              <span className="max-w-full truncate rounded-full bg-ink/[0.06] px-3 py-1 text-xs text-ink">
                 {phase === "reading" ? "Reading " : ""}
                 {file.name}
               </span>
@@ -364,7 +364,7 @@ export function StatementImport({
                 const rs = rows.filter((r) => r.kind === t.id && !r.credit);
                 const total = rs.reduce((s, r) => s + r.total, 0);
                 return (
-                  <div key={t.id} className="rounded-lg bg-white/5 p-3">
+                  <div key={t.id} className="rounded-lg bg-ink/5 p-3">
                     <div className="truncate text-xs uppercase tracking-wide text-muted">{t.label}</div>
                     <div className="font-semibold">{formatINR(total)}</div>
                     <div className="text-xs text-muted">
@@ -418,7 +418,7 @@ export function StatementImport({
 
           <section className="card space-y-3">
             {/* The border runs the full width of the card; the tab underline sits on it. */}
-            <div className="flex items-end justify-between gap-4 border-b border-white/10">
+            <div className="flex items-end justify-between gap-4 border-b border-ink/10">
               <Tabs
                 label="Statement rows"
                 tabs={TABS.map((t) => ({ ...t, count: rows.filter((r) => r.kind === t.id).length }))}
@@ -448,7 +448,7 @@ export function StatementImport({
             ) : null}
 
             {tab === "emi" && parsed.loans.length > 0 ? (
-              <div className="rounded-lg border border-white/10 p-3 text-sm" data-loans>
+              <div className="rounded-lg border border-ink/10 p-3 text-sm" data-loans>
                 <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Loans on this card, as the statement lists them</div>
                 <ul className="space-y-1">
                   {parsed.loans.map((l, i) => (
@@ -504,7 +504,7 @@ export function StatementImport({
               </div>
             )}
 
-            <div className="flex flex-col gap-3 border-t border-white/10 pt-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-3 border-t border-ink/10 pt-3 sm:flex-row sm:items-end sm:justify-between">
               <label className="block sm:w-64">
                 <span className="label">Add to</span>
                 <select className="select" value={ctx} onChange={(e) => setCtx(e.target.value)}>
@@ -578,7 +578,7 @@ function SummaryGrid({ summary }: { summary: NonNullable<ParsedStatement["summar
   return (
     <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-5">
       {cells.map(([label, value, strong]) => (
-        <div key={label} className="rounded-lg bg-white/5 p-3">
+        <div key={label} className="rounded-lg bg-ink/5 p-3">
           <div className="truncate text-xs uppercase tracking-wide text-muted">{label}</div>
           <div className={strong ? "text-base font-semibold" : "font-medium"}>{value}</div>
         </div>
@@ -612,7 +612,7 @@ function RowView({
   return (
     <>
       <tr
-        className={`cursor-pointer transition hover:bg-white/5 ${isAdded ? "opacity-60" : ""}`}
+        className={`cursor-pointer transition hover:bg-ink/5 ${isAdded ? "opacity-60" : ""}`}
         onClick={onToggleOpen}
         aria-expanded={open}
       >
@@ -640,7 +640,7 @@ function RowView({
               </span>
             ) : null}
             {row.untraced ? (
-              <span className="pill border-amber-400/40 text-amber-300" title="Cites a reference that is not on record. Can be added now; it is traced once that statement is uploaded.">
+              <span className="pill border-amber-400/40 text-warning" title="Cites a reference that is not on record. Can be added now; it is traced once that statement is uploaded.">
                 untraced
               </span>
             ) : null}
@@ -652,7 +652,7 @@ function RowView({
             {row.parts.length > 1 ? <span className="text-xs text-muted">{row.parts.length} parts</span> : null}
           </div>
         </td>
-        <td className={`whitespace-nowrap text-right font-semibold ${row.credit ? "text-emerald-400" : ""}`}>
+        <td className={`whitespace-nowrap text-right font-semibold ${row.credit ? "text-positive" : ""}`}>
           {row.credit ? "+" : ""}
           {formatINR(row.total)}
         </td>
@@ -661,7 +661,7 @@ function RowView({
         </td>
       </tr>
       {open ? (
-        <tr className="bg-white/[0.03]">
+        <tr className="bg-ink/[0.03]">
           <td colSpan={5} className="!py-3">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -674,7 +674,7 @@ function RowView({
                         <td className="py-0.5 text-right">{formatINR(p.amount)}</td>
                       </tr>
                     ))}
-                    <tr className="border-t border-white/10 font-semibold">
+                    <tr className="border-t border-ink/10 font-semibold">
                       <td className="pt-1 pr-3">Total</td>
                       <td className="pt-1 text-right">{formatINR(row.total)}</td>
                     </tr>
@@ -707,7 +707,7 @@ function RowView({
                   </div>
                 ) : null}
                 {row.untraced ? (
-                  <div className="mt-2 text-xs text-amber-300">
+                  <div className="mt-2 text-xs text-warning">
                     Cites a reference that is not on record. Upload the statement that billed the charge it taxes. You can add this row now: the
                     expense carries a warning until that statement is uploaded, and is then traced to its instalment by the reference and renamed.
                   </div>
