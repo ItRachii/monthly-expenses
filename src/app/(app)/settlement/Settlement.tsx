@@ -86,7 +86,7 @@ export function Settlement({
   // Expense-derived balances and debts for the month, then subtract every
   // recorded payment. The month is only "settled" when nothing remains.
   const nets = computeNets(monthRows, memberKeys);
-  const balances = nets;
+  const balances = nets.map((n) => ({ ...n, displayName: nameOf(n.id) }));
   const expenseTransfers = simplifyDebts(nets);
   const monthPayments: PaymentLike[] = settlements
     .filter((s) => s.month === selectedMonth)
@@ -264,7 +264,7 @@ export function Settlement({
                       {members.map(({ b, status }) => (
                         <li key={b.id} className="space-y-1 px-3 py-2.5">
                           <div className="flex items-center justify-between gap-3">
-                            <PersonAvatar id={b.id} size="md" />
+                            <span className="min-w-0 truncate text-sm font-medium">{b.displayName}</span>
                             {status}
                           </div>
                           <div className="text-xs tabular-nums text-muted">
@@ -292,9 +292,7 @@ export function Settlement({
                         <tbody>
                           {members.map(({ b, status }) => (
                             <tr key={b.id}>
-                              <td>
-                                <PersonAvatar id={b.id} />
-                              </td>
+                              <td>{b.displayName}</td>
                               <td className="whitespace-nowrap text-right tabular-nums">{formatINR(b.paid)}</td>
                               <td className="whitespace-nowrap text-right tabular-nums">{formatINR(b.owes)}</td>
                               <td
@@ -321,12 +319,12 @@ export function Settlement({
                     const owedPair = pairAmount(expenseTransfers, t.from, t.to);
                     const paidPair = round2(owedPair - t.amount);
                     return (
-                      <p key={idx} className="flex flex-wrap items-center gap-x-1.5 text-sm">
-                        <PersonAvatar id={t.from} /> owes <PersonAvatar id={t.to} />
+                      <p key={idx} className="text-sm">
+                        <strong>{nameOf(t.from)}</strong> owes <strong>{nameOf(t.to)}</strong>{" "}
                         <strong>{formatINR(t.amount)}</strong>
                         {paidPair > SETTLE_EPS ? (
                           <span className="text-muted">
-                            ({formatINR(paidPair)} of {formatINR(owedPair)} already paid)
+                            {", "}{formatINR(paidPair)} of {formatINR(owedPair)} already paid
                           </span>
                         ) : null}
                       </p>
