@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <title>Ledger</title>
   <defs><radialGradient id="bg" cx="0.5" cy="0.35" r="0.8"><stop offset="0" stop-color="#26324F"/><stop offset="1" stop-color="#0E1117"/></radialGradient></defs>
-  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <rect width="1024" height="1024"  fill="url(#bg)"/>
   <svg x="-76.79999999999995" y="-76.79999999999995" width="1177.6" height="1177.6" viewBox="0 0 1024 1024">
   
   <!-- Three cards stacked like a wallet on one centre line, each its own card: the mint card,

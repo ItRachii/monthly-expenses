@@ -45,10 +45,12 @@ async function render(page, svg, size, out) {
   if (preview) {
     await render(page, icon(bg, 1.15, true), 512, preview);
   } else {
-    fs.writeFileSync(path.join(dir, "ledger-icon.svg"), icon(bg, 1.15, true));
-    // "any" icons: the mark large, corners rounded like a phone's own.
-    await render(page, icon(bg, 1.15, true), 512, path.join(pub, "icon-512.png"));
-    await render(page, icon(bg, 1.15, true), 192, path.join(pub, "icon-192.png"));
+    // Every icon is a full, opaque square: phones and launchers cut their
+    // own shape (circle, squircle, rounded square). Transparent rounded
+    // corners would show as white edges when Android puts the icon on a tile.
+    fs.writeFileSync(path.join(dir, "ledger-icon.svg"), icon(bg, 1.15, false));
+    await render(page, icon(bg, 1.15, false), 512, path.join(pub, "icon-512.png"));
+    await render(page, icon(bg, 1.15, false), 192, path.join(pub, "icon-192.png"));
     // Apple rounds the corners itself and wants a square.
     await render(page, icon(bg, 1.15, false), 180, path.join(pub, "apple-touch-icon.png"));
     // The mark alone on a transparent background, for anywhere else.
