@@ -8,20 +8,18 @@ import { NAV_ICONS } from "./NavIcons";
 export interface NavItem {
   href: string;
   label: string;
-  /** Fallback when NAV_ICONS has no custom icon for the href. */
-  icon: string;
 }
 
 // Desktop sidebar links. Per-context pages (log/summary/settlement) merged
 // into the home screen + /g/[ctx] tabs, so the nav is just the app shell.
 const MAIN_ITEMS: NavItem[] = [
-  { href: "/", label: "Home", icon: "🏠" },
-  { href: "/notifications", label: "Notifications", icon: "🔔" },
-  { href: "/groups", label: "Groups", icon: "👥" },
+  { href: "/", label: "Home" },
+  { href: "/notifications", label: "Notifications" },
+  { href: "/groups", label: "Groups" },
 ];
 
 // Card statement import. Shown only where the feature flag is on.
-export const STATEMENTS_ITEM: NavItem = { href: "/statements", label: "Statements", icon: "📄" };
+export const STATEMENTS_ITEM: NavItem = { href: "/statements", label: "Statements" };
 
 export function mainItems(statements: boolean): NavItem[] {
   return statements ? [...MAIN_ITEMS, STATEMENTS_ITEM] : MAIN_ITEMS;
@@ -29,7 +27,7 @@ export function mainItems(statements: boolean): NavItem[] {
 
 // "Account" section under the main nav: where the user edits their profile.
 export const ACCOUNT_ITEMS: NavItem[] = [
-  { href: "/profile", label: "Edit Profile", icon: "👤" },
+  { href: "/profile", label: "Edit Profile" },
 ];
 
 export function NavLinks({
@@ -69,10 +67,11 @@ export function NavLinks({
             <span
               aria-hidden
               className={`relative leading-none ${
-                collapsed ? "md:text-4xl" : "text-lg"
+                collapsed ? "md:text-2xl" : "text-lg"
+              } ${active ? "text-primary-light" : ""
               }`}
             >
-              {Icon ? <Icon /> : it.icon}
+              {Icon ? <Icon filled={active} /> : null}
               {showBadge && collapsed ? (
                 <span className="absolute -right-1 -top-1 hidden h-2.5 w-2.5 rounded-full bg-primary md:block" />
               ) : null}

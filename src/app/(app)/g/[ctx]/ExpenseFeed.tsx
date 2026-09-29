@@ -1,6 +1,6 @@
 "use client";
 
-import { PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
+import { ChevronDownIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -175,11 +175,11 @@ export function ExpenseFeed({
               {formatINR(sec.total)}
               <span
                 aria-hidden
-                className={`inline-block transition-transform ${
+                className={`inline-flex transition-transform ${
                   isOpen(sec.key) ? "rotate-180" : ""
                 }`}
               >
-                ▾
+                <ChevronDownIcon className="h-5 w-5" />
               </span>
             </span>
           </button>

@@ -34,8 +34,8 @@ export function MobileBottomNav({ statements = false }: { statements?: boolean }
             {active ? (
               <span className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-primary" />
             ) : null}
-            <span aria-hidden className="text-2xl leading-none">
-              {Icon ? <Icon /> : null}
+            <span aria-hidden className={`text-2xl leading-none ${active ? "text-primary-light" : ""}`}>
+              {Icon ? <Icon filled={active} /> : null}
             </span>
             <span className="leading-none">{it.label}</span>
           </>

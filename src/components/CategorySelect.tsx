@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowLeftIcon } from "@/components/Icons";
 import { findCategory, formatCategory } from "@/lib/constants";
 
 // Sentinel option value that switches the control into "type a new category"
@@ -60,13 +61,13 @@ export function CategorySelect({
         ) : null}
         <button
           type="button"
-          className="text-xs text-muted hover:text-ink"
+          className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink"
           onClick={() => {
             setCreating(false);
             onChange(categories[0] ?? "");
           }}
         >
-          ← Choose an existing category
+          <ArrowLeftIcon className="h-3.5 w-3.5" /> Choose an existing category
         </button>
       </div>
     );
@@ -96,7 +97,7 @@ export function CategorySelect({
           {c === "" ? "(uncategorized)" : c}
         </option>
       ))}
-      <option value={NEW}>➕ Add new category…</option>
+      <option value={NEW}>+ Add new category…</option>
     </select>
   );
 }

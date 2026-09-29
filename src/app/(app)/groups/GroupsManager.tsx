@@ -4,10 +4,9 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createGroupAction } from "@/lib/actions/groups";
-import { NAV_ICONS } from "@/components/NavIcons";
+import { GroupAddIcon } from "@/components/Icons";
 import { ChevronRightIcon, XIcon } from "@/components/Icons";
 
-const GroupsIcon = NAV_ICONS["/groups"];
 
 export interface GroupItem {
   id: string;
@@ -58,12 +57,7 @@ export function GroupsManager({ groups }: { groups: GroupItem[] }) {
         title="Create a group"
         className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 grid h-14 w-14 place-items-center rounded-full border border-white/15 bg-surface shadow-xl transition hover:bg-white/5 active:scale-95 md:bottom-6 md:right-6"
       >
-        <span className="relative text-3xl leading-none">
-          {GroupsIcon ? <GroupsIcon /> : "👥"}
-          <span className="absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-primary text-sm font-bold leading-none text-white ring-2 ring-surface">
-            +
-          </span>
-        </span>
+        <GroupAddIcon className="h-7 w-7 text-primary-light" />
       </button>
 
       {showCreate ? (
