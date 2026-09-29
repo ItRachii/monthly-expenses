@@ -243,6 +243,13 @@
     transform 240ms var(--ease-out),
     opacity 240ms var(--ease-out);
 }
+/* Dropdown menus grow from their trigger's corner, quicker than dialogs. */
+.menu-pop {
+  transform-origin: top left;
+  transition:
+    transform 150ms var(--ease-out),
+    opacity 150ms var(--ease-out);
+}
 @starting-style {
   .sheet-backdrop {
     opacity: 0;
@@ -256,6 +263,10 @@
   }
   .toast-in {
     transform: translateY(8px);
+    opacity: 0;
+  }
+  .menu-pop {
+    transform: scale(0.97);
     opacity: 0;
   }
 }
@@ -276,13 +287,15 @@
 @media (prefers-reduced-motion: reduce) {
   .sheet,
   .modal-pop,
-  .toast-in {
+  .toast-in,
+  .menu-pop {
     transition: opacity 150ms ease-out;
   }
   @starting-style {
     .sheet,
     .modal-pop,
-    .toast-in {
+    .toast-in,
+    .menu-pop {
       transform: none;
       opacity: 0;
     }

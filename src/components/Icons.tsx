@@ -65,3 +65,5 @@ export const SearchIcon = icon("search");
 export const LabelIcon = icon("label");
 export const DownloadIcon = icon("download");
 export const CalendarIcon = icon("calendar_month");
+export const FilterIcon = icon("filter_list");
+export const PeopleIcon = icon("group");

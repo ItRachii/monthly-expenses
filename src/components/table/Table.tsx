@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowDownIcon, ArrowUpIcon, SearchIcon, SortIcon } from "@/components/Icons";
+import { createPortal } from "react-dom";
+import { ArrowDownIcon, ArrowUpIcon, CheckIcon, FilterIcon, SearchIcon, SortIcon } from "@/components/Icons";
 
 // Pieces for the list tables (statement review, expenses): filter tabs come
 // from Tabs.tsx; these add sortable headers, a search box, status pills and
@@ -79,6 +80,163 @@ export function Th({ children, align = "left", className = "" }: { children?: Re
   return (
     <th scope="col" className={`px-3 py-3 font-semibold ${ALIGN[align]} ${className}`}>
       {children}
+    </th>
+  );
+}
+
+export interface FilterOption {
+  value: string;
+  label: string;
+  /** Shown before the label, e.g. a member's photo. */
+  icon?: ReactNode;
+}
+
+/**
+ * Column heading that filters the table by one of its values. The menu is
+ * drawn in a portal at the heading's position, since the table's rounded
+ * frame clips anything that overflows it. `value` null means everyone.
+ */
+export function FilterHeader({
+  label,
+  allLabel,
+  allIcon,
+  options,
+  value,
+  onChange,
+  className = "",
+}: {
+  label: string;
+  allLabel: string;
+  allIcon?: ReactNode;
+  options: FilterOption[];
+  value: string | null;
+  onChange: (v: string | null) => void;
+  className?: string;
+}) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const active = value !== null;
+  const current = options.find((o) => o.value === value);
+
+  function close(refocus: boolean) {
+    setAt(null);
+    if (refocus) button.current?.focus();
+  }
+
+  useEffect(() => {
+    if (!at) return;
+    // Focus the ticked item, so arrows move from where the user is.
+    menu.current?.querySelector<HTMLElement>("[aria-checked=true]")?.focus();
+    const outside = (e: Event) => {
+      const t = e.target as Node;
+      if (!menu.current?.contains(t) && !button.current?.contains(t)) close(false);
+    };
+    const onScroll = (e: Event) => {
+      if (!menu.current?.contains(e.target as Node)) close(false);
+    };
+    const onResize = () => close(false);
+    document.addEventListener("pointerdown", outside);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [at]);
+
+  function onMenuKey(e: React.KeyboardEvent) {
+    const items = [...(menu.current?.querySelectorAll<HTMLElement>("[role=menuitemradio]") ?? [])];
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === "Escape" || e.key === "Tab") {
+      e.preventDefault();
+      close(true);
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = e.key === "ArrowDown" ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+      items[next]?.focus();
+    } else if (e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      items[e.key === "Home" ? 0 : items.length - 1]?.focus();
+    }
+  }
+
+  const pick = (v: string | null) => {
+    onChange(v);
+    close(true);
+  };
+  const item = (v: string | null, text: string, icon?: ReactNode) => {
+    const on = value === v;
+    return (
+      <button
+        key={v ?? ""}
+        type="button"
+        role="menuitemradio"
+        aria-checked={on}
+        onClick={() => pick(v)}
+        className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm outline-none transition-colors hover:bg-ink/[0.06] focus-visible:bg-ink/[0.08] ${
+          on ? "font-semibold text-ink" : "text-ink/85"
+        }`}
+      >
+        {icon ? (
+          <span aria-hidden className="inline-flex shrink-0">
+            {icon}
+          </span>
+        ) : null}
+        <span className="min-w-0 flex-1 truncate">{text}</span>
+        <CheckIcon className={`h-4 w-4 shrink-0 text-primary-light ${on ? "" : "invisible"}`} />
+      </button>
+    );
+  };
+
+  return (
+    <th scope="col" className={`px-3 py-3 text-left font-semibold ${className}`}>
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={at !== null}
+        aria-label={active ? `${label}: ${current?.label ?? ""}. Change filter` : `Filter by ${label.toLowerCase()}`}
+        title={active ? `${label}: ${current?.label ?? ""}` : `Filter by ${label.toLowerCase()}`}
+        onClick={() => {
+          if (at) return close(false);
+          const r = button.current!.getBoundingClientRect();
+          setAt({ x: r.left, y: r.bottom + 4 });
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !at) {
+            e.preventDefault();
+            const r = button.current!.getBoundingClientRect();
+            setAt({ x: r.left, y: r.bottom + 4 });
+          }
+        }}
+        className={`inline-flex items-center gap-1 rounded outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/70 ${
+          active ? "text-ink" : ""
+        }`}
+      >
+        {label}
+        <span className="relative">
+          <FilterIcon className={`h-4 w-4 ${active ? "text-primary-light" : "text-muted"}`} />
+          {active ? <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-primary-light" aria-hidden /> : null}
+        </span>
+      </button>
+      {at
+        ? createPortal(
+            <div
+              ref={menu}
+              role="menu"
+              aria-label={`Filter by ${label.toLowerCase()}`}
+              onKeyDown={onMenuKey}
+              className="menu-pop card fixed z-50 w-56 space-y-0.5 p-1.5 shadow-xl"
+              style={{ left: Math.min(at.x, window.innerWidth - 232), top: at.y }}
+            >
+              {item(null, allLabel, allIcon)}
+              {options.map((o) => item(o.value, o.label, o.icon))}
+            </div>,
+            document.body,
+          )
+        : null}
     </th>
   );
 }
