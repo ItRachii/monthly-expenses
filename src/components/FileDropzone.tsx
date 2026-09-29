@@ -127,7 +127,7 @@ export function FileDropzone({
         ) : (
           <>
             {/* Touch screens tap and cannot drag files in: say so. */}
-            <span className="font-semibold text-primary-light underline-offset-4 group-hover:underline">
+            <span className="font-semibold text-primary-light">
               <span className="[@media(pointer:coarse)]:hidden">Click here</span>
               <span className="hidden [@media(pointer:coarse)]:inline">Tap here</span>
             </span>{" "}
