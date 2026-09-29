@@ -54,7 +54,7 @@ async function render(page, svg, size, out) {
     // The mark alone on a transparent background, for anywhere else.
     await render(page, mark, 1024, path.join(dir, "ledger-mark.png"));
     // Maskable: square, and the mark's rounded corners inside the centre 80% safe circle.
-    await render(page, icon(bg, 1.0, false), 512, path.join(pub, "icon-maskable-512.png"));
+    await render(page, icon(bg, 0.96, false), 512, path.join(pub, "icon-maskable-512.png"));
   }
   await b.close();
 })();

@@ -42,9 +42,9 @@
     </filter>
 
     <!-- Card shapes, each used for its fill, its contact shadow and the glass. -->
-    <rect id="backCard" x="212" y="176" width="600" height="420" rx="132"/>
-    <rect id="midCard" x="212" y="300" width="600" height="470" rx="132"/>
-    <rect id="glassCard" x="212" y="436" width="600" height="400" rx="132"/>
+    <rect id="backCard" x="212" y="176" width="600" height="420" rx="84"/>
+    <rect id="midCard" x="212" y="300" width="600" height="470" rx="84"/>
+    <rect id="glassCard" x="212" y="436" width="600" height="400" rx="84"/>
     <clipPath id="glassClip"><use href="#glassCard"/></clipPath>
 
     <g id="behindGlass">
