@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangleIcon, CalendarIcon, DownloadIcon, FilterIcon, PeopleIcon, PencilIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/Icons";
-import { FilterHeader, RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
+import { AlertTriangleIcon, CalendarIcon, DownloadIcon, PeopleIcon, PencilIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/Icons";
+import { DateRangeHeader, FilterHeader, RowCheckbox, rangeLabel, type DateRange, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
 import { DateBadge } from "@/components/DateBadge";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -52,6 +52,7 @@ const TONE = {
 
 type SortKey = "date" | "item" | "category" | "amount";
 const ALL = "all";
+const categoryOf = (r: ExpenseDTO) => r.category || "Uncategorised";
 
 /** "2026-09" to "Sep 2026". */
 function monthTab(key: string): string {
@@ -112,12 +113,33 @@ export function ExpenseFeed({
 
   const payerLabel = (v: string) => nameMap[v] ?? v;
 
-  // "Paid by" filter, from the table heading (groups only): one member or everyone.
+  // Column filters, from the table headings: one category, one payer
+  // (groups only), a date range. A range replaces the month picker's scope,
+  // and picking a month drops the range, so the two never contradict.
   const [payer, setPayer] = useState<string | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
+  const [range, setRange] = useState<DateRange | null>(null);
   const pickPayer = (v: string | null) => {
     setPayer(v);
     setSelected(new Set());
   };
+  const pickCategory = (v: string | null) => {
+    setCategory(v);
+    setSelected(new Set());
+  };
+  const pickRange = (v: DateRange | null) => {
+    setRange(v);
+    if (v) setMonth(ALL);
+    setSelected(new Set());
+  };
+  const categoryOptions = useMemo(
+    () =>
+      Array.from(new Set(rows.map(categoryOf)))
+        .sort((a, b) => a.localeCompare(b))
+        .map((c) => ({ value: c, label: c })),
+    [rows],
+  );
+  const filterCount = (payer ? 1 : 0) + (category ? 1 : 0) + (range ? 1 : 0);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -126,6 +148,9 @@ export function ExpenseFeed({
         (month === ALL || r.date.startsWith(month)) &&
         (!onlyFlagged || Boolean(r.flag)) &&
         (!payer || r.payer === payer) &&
+        (!category || categoryOf(r) === category) &&
+        (!range?.from || r.date >= range.from) &&
+        (!range?.to || r.date <= range.to) &&
         (!q ||
           r.item.toLowerCase().includes(q) ||
           (r.category || "").toLowerCase().includes(q) ||
@@ -136,7 +161,7 @@ export function ExpenseFeed({
       k === "date" ? r.date : k === "amount" ? r.amount : k === "category" ? r.category || "Uncategorised" : r.item,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, month, onlyFlagged, payer, query, sort, isPersonal, nameMap]);
+  }, [rows, month, onlyFlagged, payer, category, range, query, sort, isPersonal, nameMap]);
   const shownTotal = round2(shown.reduce((s, r) => s + r.amount, 0));
 
   // Selection only covers rows still on show; a deleted or filtered-out row drops out.
@@ -246,19 +271,6 @@ export function ExpenseFeed({
             Flagged {flaggedCount}
           </button>
         ) : null}
-        {payer ? (
-          <button
-            type="button"
-            className="chip-btn border-primary/40 bg-primary/10"
-            onClick={() => pickPayer(null)}
-            aria-label={`Clear filter: paid by ${payerLabel(payer)}`}
-            title={`Paid by ${payerLabel(payer)}`}
-          >
-            <FilterIcon className="h-4 w-4 text-primary-light" />
-            <span className="max-w-[8rem] truncate">{payerLabel(payer)}</span>
-            <XIcon className="h-4 w-4 text-muted" />
-          </button>
-        ) : null}
         {/* Search and the month filter share a row, on phones too. */}
         <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
           <SearchBox value={query} onChange={setQuery} placeholder="Search expenses" className="min-w-0 flex-1 sm:w-64 sm:flex-none" />
@@ -272,6 +284,7 @@ export function ExpenseFeed({
               value={month}
               onChange={(e) => {
                 setMonth(e.target.value);
+                setRange(null);
                 setSelected(new Set());
               }}
             >
@@ -286,9 +299,37 @@ export function ExpenseFeed({
         </div>
       </div>
 
+      {/* Active column filters, each removable on its own. */}
+      {filterCount > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted">Filtered by</span>
+          {range ? <FilterChip label={`Date: ${rangeLabel(range)}`} onClear={() => pickRange(null)} /> : null}
+          {category ? <FilterChip label={`Category: ${category}`} onClear={() => pickCategory(null)} /> : null}
+          {payer ? <FilterChip label={`Paid by: ${payerLabel(payer)}`} onClear={() => pickPayer(null)} /> : null}
+          {filterCount > 1 ? (
+            <button
+              type="button"
+              className="rounded px-1 text-primary-light outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/70"
+              onClick={() => {
+                setPayer(null);
+                setCategory(null);
+                setRange(null);
+                setSelected(new Set());
+              }}
+            >
+              Clear all
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {shown.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted">
-          {query.trim() ? `No expenses match "${query.trim()}".` : payer ? `No expenses paid by ${payerLabel(payer)}${month === ALL ? "" : ` in ${monthTab(month)}`}.` : "No expenses here."}
+          {query.trim()
+            ? `No expenses match "${query.trim()}".`
+            : filterCount > 0
+              ? `No expenses match these filters${month === ALL ? "" : ` in ${monthTab(month)}`}.`
+              : "No expenses here."}
         </p>
       ) : (
         <>
@@ -301,9 +342,17 @@ export function ExpenseFeed({
                 <th scope="col" className="w-12 px-3 py-3">
                   <SelectAllCheckbox selected={picked.length} total={shown.length} onChange={setAllShown} label="Select all expenses shown" />
                 </th>
-                <SortHeader label="Date" sortKey="date" sort={sort} onSort={onSort} className="w-28" />
+                <DateRangeHeader label="Date" value={range} onChange={pickRange} min={minDate} max={maxDate} sort={{ sortKey: "date", sort, onSort }} className="w-28" />
                 <SortHeader label="Item" sortKey="item" sort={sort} onSort={onSort} />
-                <SortHeader label="Category" sortKey="category" sort={sort} onSort={onSort} className="w-32" />
+                <FilterHeader
+                  label="Category"
+                  allLabel="All categories"
+                  options={categoryOptions}
+                  value={category}
+                  onChange={pickCategory}
+                  sort={{ sortKey: "category" as SortKey, sort, onSort }}
+                  className="w-32"
+                />
                 {isPersonal ? null : (
                   <FilterHeader
                     label="Paid by"
@@ -324,7 +373,7 @@ export function ExpenseFeed({
                   />
                 )}
                 {isPersonal ? null : <Th className="w-36">Status</Th>}
-                <SortHeader label="Amount" sortKey="amount" sort={sort} onSort={onSort} align="right" className="w-32" />
+                <SortHeader label="Amount" sortKey="amount" sort={sort} onSort={onSort} align="right" className="w-28" />
                 <Th align="center" className="w-24">
                   Action
                 </Th>
@@ -854,5 +903,22 @@ function ExpenseActions({
         )}
       </div>
     </div>
+  );
+}
+
+/** One active filter above the table; the cross removes just that filter. */
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/40 bg-primary/10 py-0.5 pl-3 pr-1 text-sm">
+      <span className="truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Remove filter ${label}`}
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted outline-none hover:bg-ink/10 hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/70"
+      >
+        <XIcon className="h-3.5 w-3.5" />
+      </button>
+    </span>
   );
 }
