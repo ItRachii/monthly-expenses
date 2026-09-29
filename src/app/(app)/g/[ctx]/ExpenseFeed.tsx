@@ -1,7 +1,6 @@
 "use client";
 
-import { DownloadIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
-import { Tabs } from "@/components/Tabs";
+import { AlertTriangleIcon, CalendarIcon, DownloadIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
 import { RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -50,7 +49,6 @@ const TONE = {
 } as const;
 
 type SortKey = "date" | "item" | "category" | "amount";
-const FLAGGED = "flagged";
 const ALL = "all";
 
 /** "2026-09" to "Sep 2026". */
@@ -96,21 +94,19 @@ export function ExpenseFeed({
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
 
-  // Tabs: the two latest months with expenses, then All, then Flagged.
+  // Month filter, beside the search: every month with expenses, newest
+  // first, or all of them. Flagged is a separate toggle.
   const months = useMemo(
     () => Array.from(new Set(rows.map((r) => r.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a)),
     [rows],
   );
   const flaggedCount = rows.filter((r) => r.flag).length;
-  const tabs = [
-    ...months.slice(0, 2).map((m) => ({ id: m, label: monthTab(m), count: rows.filter((r) => r.date.startsWith(m)).length })),
-    { id: ALL, label: "All", count: rows.length },
-    ...(flaggedCount > 0 ? [{ id: FLAGGED, label: "Flagged", count: flaggedCount }] : []),
-  ];
-  const [tabPick, setTab] = useState<string | null>(null);
+  const [monthPick, setMonth] = useState<string | null>(null);
   // Until one is picked, the latest month; a pick that disappears (its last
   // expense deleted) falls back the same way.
-  const tab = tabPick && tabs.some((t) => t.id === tabPick) ? tabPick : (tabs[0]?.id ?? ALL);
+  const month = monthPick === ALL || (monthPick && months.includes(monthPick)) ? monthPick : (months[0] ?? ALL);
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const onlyFlagged = flaggedOnly && flaggedCount > 0;
 
   const payerLabel = (v: string) => nameMap[v] ?? v;
 
@@ -118,7 +114,8 @@ export function ExpenseFeed({
     const q = query.trim().toLowerCase();
     const inTab = rows.filter(
       (r) =>
-        (tab === ALL || (tab === FLAGGED ? Boolean(r.flag) : r.date.startsWith(tab))) &&
+        (month === ALL || r.date.startsWith(month)) &&
+        (!onlyFlagged || Boolean(r.flag)) &&
         (!q ||
           r.item.toLowerCase().includes(q) ||
           (r.category || "").toLowerCase().includes(q) ||
@@ -129,7 +126,7 @@ export function ExpenseFeed({
       k === "date" ? r.date : k === "amount" ? r.amount : k === "category" ? r.category || "Uncategorised" : r.item,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, tab, query, sort, isPersonal, nameMap]);
+  }, [rows, month, onlyFlagged, query, sort, isPersonal, nameMap]);
   const shownTotal = round2(shown.reduce((s, r) => s + r.amount, 0));
 
   // Selection only covers rows still on show; a deleted or filtered-out row drops out.
@@ -199,18 +196,6 @@ export function ExpenseFeed({
 
   return (
     <div className="space-y-4">
-      <div className="border-b border-ink/10">
-        <Tabs
-          label="Expenses shown"
-          tabs={tabs}
-          value={tab}
-          onChange={(t) => {
-            setTab(t);
-            setSelected(new Set());
-          }}
-        />
-      </div>
-
       {/* Toolbar: count and total (or the selection's), bulk delete, export, search. */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-1 text-sm text-muted" aria-live="polite">
@@ -237,7 +222,45 @@ export function ExpenseFeed({
           <DownloadIcon className="h-4 w-4 text-muted" />
           Export
         </ExportButton>
-        <SearchBox value={query} onChange={setQuery} placeholder="Search expenses" className="w-full sm:ml-auto sm:w-64" />
+        {flaggedCount > 0 ? (
+          <button
+            type="button"
+            aria-pressed={onlyFlagged}
+            className={`chip-btn ${onlyFlagged ? "border-warning/50 bg-warning/10" : ""}`}
+            onClick={() => {
+              setFlaggedOnly((f) => !f);
+              setSelected(new Set());
+            }}
+          >
+            <AlertTriangleIcon className="h-4 w-4 text-warning" />
+            Flagged {flaggedCount}
+          </button>
+        ) : null}
+        {/* Search and the month filter share a row, on phones too. */}
+        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+          <SearchBox value={query} onChange={setQuery} placeholder="Search expenses" className="min-w-0 flex-1 sm:w-64 sm:flex-none" />
+          <label className="relative shrink-0">
+            <span className="sr-only">Month</span>
+            <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 text-muted sm:block" />
+            {/* Month names only: the toolbar already gives the count and total
+                of what is shown, and a narrow menu leaves the search room. */}
+            <select
+              className="select w-auto py-2 pl-3 pr-8 sm:pl-9"
+              value={month}
+              onChange={(e) => {
+                setMonth(e.target.value);
+                setSelected(new Set());
+              }}
+            >
+              {months.map((m) => (
+                <option key={m} value={m}>
+                  {monthTab(m)}
+                </option>
+              ))}
+              <option value={ALL}>All months</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       {shown.length === 0 ? (
