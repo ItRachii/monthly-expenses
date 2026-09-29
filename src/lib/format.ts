@@ -30,3 +30,9 @@ export function formatDate(d: Date | string): string {
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/** "Golu", "Golu and Peehu", "Golu, Peehu and Chintu". */
+export function listNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}

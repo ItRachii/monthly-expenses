@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
 import { enqueueExpense } from "@/lib/offlineQueue";
-import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
+import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR, todayISO } from "@/lib/format";
 import { CategorySelect } from "@/components/CategorySelect";
 import {
@@ -56,7 +56,12 @@ export function AddExpenseForm({
   const [payer, setPayer] = useState(defaultPayer);
   const [split, setSplit] = useState(defaultSplit);
   const [shareInputs, setShareInputs] = useState<ShareInputs>({});
+  const [payerInputs, setPayerInputs] = useState<ShareInputs>({});
   const custom = !isPersonal && split === SPLIT_CUSTOM;
+  // Several payers, each with what they put in; needs two people to pick from.
+  const multi = !isPersonal && payer === PAYER_MULTIPLE;
+  const whoPaidOptions =
+    payerOptions.length > 1 ? [...payerOptions, { value: PAYER_MULTIPLE, label: "Multiple people" }] : payerOptions;
   const [message, setMessage] = useState<
     { ok: boolean; text: string; info?: string } | null
   >(null);
@@ -79,6 +84,13 @@ export function AddExpenseForm({
       return;
     }
 
+    if (multi) {
+      const err = sharesError(payerInputs, payerOptions, amt, "paid");
+      if (err) {
+        setMessage({ ok: false, text: err });
+        return;
+      }
+    }
     if (custom) {
       const err = sharesError(shareInputs, payerOptions, amt);
       if (err) {
@@ -95,6 +107,7 @@ export function AddExpenseForm({
       amount: amt,
       payer,
       split,
+      ...(multi ? { payers: sharesFromInputs(payerInputs, payerOptions) } : {}),
       ...(custom ? { shares: sharesFromInputs(shareInputs, payerOptions) } : {}),
     };
 
@@ -114,6 +127,7 @@ export function AddExpenseForm({
         setItem("");
         setAmount("");
         setShareInputs({});
+        setPayerInputs({});
       } else {
         setMessage({
           ok: false,
@@ -158,6 +172,7 @@ export function AddExpenseForm({
         setItem("");
         setAmount("");
         setShareInputs({});
+        setPayerInputs({});
       } else {
         setMessage({ ok: false, text: res.error ?? "Something went wrong." });
       }
@@ -246,7 +261,7 @@ export function AddExpenseForm({
                 value={payer}
                 onChange={(e) => setPayer(e.target.value)}
               >
-                {payerOptions.map((o) => (
+                {whoPaidOptions.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
@@ -268,6 +283,21 @@ export function AddExpenseForm({
               </select>
             </div>
           </div>
+          {multi ? (
+            <div className="sm:col-span-2">
+              <label className="label">How much did each person pay?</label>
+              <SplitShares
+                idPrefix="paid"
+                members={payerOptions}
+                amount={parseFloat(amount)}
+                values={payerInputs}
+                onChange={(v) => {
+                  setPayerInputs(v);
+                  setMessage(null);
+                }}
+              />
+            </div>
+          ) : null}
           {custom ? (
             <div className="sm:col-span-2">
               <label className="label">How much does each person owe?</label>

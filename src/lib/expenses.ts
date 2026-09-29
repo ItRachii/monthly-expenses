@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { formatDate, formatINR } from "./format";
-import { SPLIT_CUSTOM, SPLIT_EQUAL, canonicalCategory, mergeCategories } from "./constants";
+import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL, canonicalCategory, mergeCategories } from "./constants";
 import { parseShares, type Shares } from "./settlementMath";
 import type { Context } from "./context";
 import { pendingFlagsFor } from "./loans";
@@ -16,6 +16,8 @@ export interface ExpenseDTO {
   split: string;
   /** Per-participant amounts when split = SPLIT_CUSTOM, else null. */
   shares: Shares | null;
+  /** What each person put in when payer = PAYER_MULTIPLE, else null. */
+  payers: Shares | null;
   // Receipt-scan metadata (null for manually added expenses).
   receiptId: string | null;
   receiptMerchant: string | null;
@@ -76,6 +78,7 @@ export async function getExpenses(
     payer: r.payer,
     split: r.split,
     shares: r.split === SPLIT_CUSTOM ? parseShares(r.shares) : null,
+    payers: r.payer === PAYER_MULTIPLE ? parseShares(r.payers) : null,
     receiptId: r.receiptId,
     receiptMerchant: r.receipt?.merchant ?? null,
     gstRate: r.gstRate,
@@ -92,6 +95,7 @@ export async function createExpense(data: {
   payer: string;
   split: string;
   shares: Shares | null;
+  payers?: Shares | null;
   ownerEmail: string | null;
   groupId: string | null;
 }): Promise<{ id: number }> {
@@ -105,6 +109,7 @@ export async function createExpense(data: {
       payer: data.payer,
       split: data.split,
       shares: data.shares ?? Prisma.DbNull,
+      payers: data.payers ?? Prisma.DbNull,
       ownerEmail: data.ownerEmail,
       groupId: data.groupId,
     },
@@ -121,6 +126,7 @@ export async function updateExpense(
     payer: string;
     split: string;
     shares: Shares | null;
+    payers: Shares | null;
   },
 ) {
   await prisma.expense.update({
@@ -133,6 +139,7 @@ export async function updateExpense(
       payer: data.payer,
       split: data.split,
       shares: data.shares ?? Prisma.DbNull,
+      payers: data.payers ?? Prisma.DbNull,
     },
   });
 }
@@ -162,6 +169,7 @@ type ExpenseRowJson = {
   payer: string;
   split: string;
   shares?: unknown;
+  payers?: unknown;
   owner_email: string | null;
   group_id: string | null;
 };
@@ -192,7 +200,7 @@ function changeSummary(
   newRow: ExpenseRowJson | null,
   nameMap: Record<string, string>,
 ): { item: string; summary: string } {
-  const nm = (v: string) => nameMap[v] ?? v;
+  const nm = (v: string) => (v === PAYER_MULTIPLE ? "several people" : nameMap[v] ?? v);
   const splitLabel = (v: string) =>
     v === SPLIT_EQUAL ? "Equal Split" : v === SPLIT_CUSTOM ? "Unequal split" : nm(v);
 
@@ -220,6 +228,11 @@ function changeSummary(
       parts.push(`date ${oldRow.date} → ${newRow.date}`);
     if (oldRow.payer !== newRow.payer)
       parts.push(`payer ${nm(oldRow.payer)} → ${nm(newRow.payer)}`);
+    else if (
+      newRow.payer === PAYER_MULTIPLE &&
+      JSON.stringify(oldRow.payers ?? null) !== JSON.stringify(newRow.payers ?? null)
+    )
+      parts.push("who paid what changed");
     if (oldRow.split !== newRow.split)
       parts.push(`split ${splitLabel(oldRow.split)} → ${splitLabel(newRow.split)}`);
     else if (

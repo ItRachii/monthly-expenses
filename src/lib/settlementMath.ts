@@ -3,7 +3,7 @@
 // code, so "how much is still owed?" can never disagree between them. Must
 // stay free of server-only and client-only imports.
 
-import { SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
+import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
 
 /** Participant id -> rupees, for rows with split = SPLIT_CUSTOM. */
 export type Shares = Record<string, number>;
@@ -14,6 +14,8 @@ export interface ExpenseLike {
   amount: number;
   /** Only read when split = SPLIT_CUSTOM. */
   shares?: Shares | null;
+  /** Only read when payer = PAYER_MULTIPLE. */
+  payers?: Shares | null;
 }
 
 export interface PaymentLike {
@@ -63,12 +65,25 @@ export function shareFor(r: ExpenseLike, id: string, memberCount: number): numbe
   return r.split === id ? r.amount : 0;
 }
 
+/** What one participant put in for one expense row. */
+export function paidFor(r: ExpenseLike, id: string): number {
+  if (r.payer === PAYER_MULTIPLE) return r.payers?.[id] ?? 0;
+  return r.payer === id ? r.amount : 0;
+}
+
+/** Who paid for one row, largest amount first; or the single payer. */
+export function payersOf(r: ExpenseLike): string[] {
+  if (r.payer !== PAYER_MULTIPLE) return [r.payer];
+  return Object.entries(r.payers ?? {})
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => id);
+}
+
 /** Per-member expense balance (paid vs owed) for one month's rows. */
 export function computeNets(rows: ExpenseLike[], memberIds: string[]): NetBalance[] {
   return memberIds.map((id) => {
-    const paid = rows
-      .filter((r) => r.payer === id)
-      .reduce((s, r) => s + r.amount, 0);
+    const paid = rows.reduce((s, r) => s + paidFor(r, id), 0);
     const owes = rows.reduce((s, r) => s + shareFor(r, id, memberIds.length), 0);
     return { id, paid: round2(paid), owes: round2(owes), net: round2(paid - owes) };
   });

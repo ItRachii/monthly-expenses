@@ -30,12 +30,17 @@ function assigned(values: ShareInputs, members: Opt[]): number {
   return round2(Object.values(sharesFromInputs(values, members)).reduce((s, n) => s + n, 0));
 }
 
-/** Why the shares can't be saved yet, or null when they add up. */
-export function sharesError(values: ShareInputs, members: Opt[], amount: number): string | null {
+/** Why the amounts can't be saved yet, or null when they add up. */
+export function sharesError(
+  values: ShareInputs,
+  members: Opt[],
+  amount: number,
+  what: "owes" | "paid" = "owes",
+): string | null {
   const total = assigned(values, members);
-  if (total <= 0) return "Enter how much each person owes.";
+  if (total <= 0) return `Enter how much each person ${what}.`;
   if (Math.abs(total - round2(amount)) > SETTLE_EPS)
-    return `Shares add up to ${formatINR(total)} but the expense is ${formatINR(amount)}.`;
+    return `${what === "paid" ? "Payments" : "Shares"} add up to ${formatINR(total)} but the expense is ${formatINR(amount)}.`;
   return null;
 }
 
@@ -49,12 +54,15 @@ export function SplitShares({
   amount,
   values,
   onChange,
+  idPrefix = "share",
 }: {
   members: Opt[];
   /** The expense total; NaN while the amount field is empty or invalid. */
   amount: number;
   values: ShareInputs;
   onChange: (next: ShareInputs) => void;
+  /** Input id prefix, so two editors on one form never share ids. */
+  idPrefix?: string;
 }) {
   const total = assigned(values, members);
   const valid = Number.isFinite(amount) && amount > 0;
@@ -76,11 +84,11 @@ export function SplitShares({
     <div className="space-y-2 rounded-lg border border-ink/10 p-3">
       {members.map((m) => (
         <div key={m.value} className="flex items-center gap-3">
-          <label htmlFor={`share-${m.value}`} className="min-w-0 flex-1 truncate text-sm">
+          <label htmlFor={`${idPrefix}-${m.value}`} className="min-w-0 flex-1 truncate text-sm">
             {m.label}
           </label>
           <input
-            id={`share-${m.value}`}
+            id={`${idPrefix}-${m.value}`}
             type="text"
             inputMode="decimal"
             className="input w-28 text-right"

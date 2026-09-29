@@ -5,8 +5,9 @@ import { PendingFlag } from "@/components/PendingFlag";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
-import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
-import { formatINR } from "@/lib/format";
+import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
+import { formatINR, listNames } from "@/lib/format";
+import { payersOf } from "@/lib/settlementMath";
 import { deleteExpenseAction, updateExpenseAction } from "@/lib/actions/expenses";
 import { Metric } from "@/components/Metric";
 import { CategorySelect } from "@/components/CategorySelect";
@@ -60,13 +61,13 @@ export function ExpenseLog({
         (r) =>
           (month === "All" || r.date.slice(0, 7) === month) &&
           (category === "All" || r.category === category) &&
-          (payer === "All" || r.payer === payer) &&
+          (payer === "All" || payersOf(r).includes(payer)) &&
           (split === "All" || r.split === split),
       ),
     [rows, month, category, payer, split],
   );
 
-  const payerLabel = (v: string) => nameMap[v] ?? v;
+  const payerLabel = (r: ExpenseDTO) => listNames(payersOf(r).map((k) => nameMap[k] ?? k));
   const splitLabel = (v: string) =>
     v === SPLIT_EQUAL ? "Equal Split" : v === SPLIT_CUSTOM ? "Unequal split" : nameMap[v] ?? v;
 
@@ -80,7 +81,7 @@ export function ExpenseLog({
         r.category,
         r.item,
         r.amount.toFixed(2),
-        payerLabel(r.payer),
+        payerLabel(r),
         splitLabel(r.split),
       ];
       return base.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
@@ -197,7 +198,7 @@ export function ExpenseLog({
                   {r.flag ? <PendingFlag reason={r.flag} /> : null}
                 </td>
                 <td className="text-right">{r.amount.toFixed(2)}</td>
-                <td>{payerLabel(r.payer)}</td>
+                <td>{payerLabel(r)}</td>
                 <td>{splitLabel(r.split)}</td>
                 <td className="text-right">
                   <div className="flex items-center justify-end gap-1">
@@ -280,7 +281,9 @@ export function EditExpenseModal({
   const [payer, setPayer] = useState(expense.payer);
   const [split, setSplit] = useState(expense.split);
   const [shareInputs, setShareInputs] = useState<ShareInputs>(() => sharesToInputs(expense.shares));
+  const [payerInputs, setPayerInputs] = useState<ShareInputs>(() => sharesToInputs(expense.payers));
   const custom = !isPersonal && split === SPLIT_CUSTOM;
+  const multi = !isPersonal && payer === PAYER_MULTIPLE;
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -288,13 +291,13 @@ export function EditExpenseModal({
   // Surface that original value as an option so the row displays honestly and
   // round-trips unchanged when the user only edits other fields. (CategorySelect
   // handles the same concern for out-of-list categories.)
-  const effPayerOptions = useMemo(
-    () =>
-      payerOptions.some((o) => o.value === expense.payer)
-        ? payerOptions
-        : [{ value: expense.payer, label: nameMap[expense.payer] ?? expense.payer }, ...payerOptions],
-    [payerOptions, expense.payer, nameMap],
-  );
+  const effPayerOptions = useMemo(() => {
+    const opts =
+      payerOptions.length > 1 ? [...payerOptions, { value: PAYER_MULTIPLE, label: "Multiple people" }] : payerOptions;
+    return opts.some((o) => o.value === expense.payer)
+      ? opts
+      : [{ value: expense.payer, label: nameMap[expense.payer] ?? expense.payer }, ...opts];
+  }, [payerOptions, expense.payer, nameMap]);
   const effSplitOptions = useMemo(
     () =>
       expense.split === SPLIT_EQUAL || splitOptions.some((o) => o.value === expense.split)
@@ -315,6 +318,13 @@ export function EditExpenseModal({
       setError("Amount must be greater than zero.");
       return;
     }
+    if (multi) {
+      const err = sharesError(payerInputs, payerOptions, amt, "paid");
+      if (err) {
+        setError(err);
+        return;
+      }
+    }
     if (custom) {
       const err = sharesError(shareInputs, payerOptions, amt);
       if (err) {
@@ -330,6 +340,7 @@ export function EditExpenseModal({
         amount: amt,
         payer,
         split,
+        ...(multi ? { payers: sharesFromInputs(payerInputs, payerOptions) } : {}),
         ...(custom ? { shares: sharesFromInputs(shareInputs, payerOptions) } : {}),
       });
       if (res.ok) {
@@ -409,6 +420,21 @@ export function EditExpenseModal({
                 ))}
               </select>
             </div>
+            {multi ? (
+              <div>
+                <label className="label">How much did each person pay?</label>
+                <SplitShares
+                  idPrefix="paid"
+                  members={payerOptions}
+                  amount={parseFloat(amount)}
+                  values={payerInputs}
+                  onChange={(v) => {
+                    setPayerInputs(v);
+                    setError(null);
+                  }}
+                />
+              </div>
+            ) : null}
             <div>
               <label className="label">Split</label>
               <select

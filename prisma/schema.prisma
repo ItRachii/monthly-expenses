@@ -40,6 +40,10 @@ model Expense {
   // amount as { userId: rupees }. Null for every other split.
   shares Json?
 
+  // Several payers: when payer = "multiple", what each person put in as
+  // { userId: rupees }, adding up to the amount. Null for a single payer.
+  payers Json?
+
   // GST charges imported before the instalment they tax was on record.
   gstPending GstPending[]
 

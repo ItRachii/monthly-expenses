@@ -22,7 +22,7 @@ import { createHmac } from "crypto";
 import type { MemberDTO } from "./groups";
 import type { ExpenseDTO } from "./expenses";
 import type { SettlementDTO } from "./settlements";
-import { SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
+import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
 import { labelForUnknown, looksLikeEmail } from "./pii";
 
 // AUTH_SECRET is always set in any environment where auth works. The dev
@@ -117,7 +117,10 @@ export function emailForKey(
 export function maskExpenses(rows: ExpenseDTO[], wire: Wire): ExpenseDTO[] {
   return rows.map((r) => ({
     ...r,
-    payer: wire.toKey(r.payer),
+    payer: r.payer === PAYER_MULTIPLE ? r.payer : wire.toKey(r.payer),
+    payers: r.payers
+      ? Object.fromEntries(Object.entries(r.payers).map(([id, n]) => [wire.toKey(id), n]))
+      : null,
     split: r.split === SPLIT_EQUAL || r.split === SPLIT_CUSTOM ? r.split : wire.toKey(r.split),
     shares: r.shares
       ? Object.fromEntries(Object.entries(r.shares).map(([id, n]) => [wire.toKey(id), n]))
