@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useRef, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -508,6 +508,53 @@ function textWidth(text: string): number {
   return measureCtx.measureText(text).width;
 }
 
+// Ring layout, shared by the Pie and the callout layer drawn over it.
+const DONUT_START = 90; // 12 o'clock
+const DONUT_END = -270; // clockwise, once round
+const DONUT_PAD = 2;
+const DONUT_MIN_ANGLE = 8;
+
+/**
+ * Each slice's middle angle, worked out the way Recharts lays the ring out
+ * (recharts/lib/polar/Pie.js, computePieSectors): padding between slices,
+ * and the minimum angle only when some slice would otherwise fall below it.
+ * The callout layer needs these because Recharts' own labels are not
+ * redrawn when the hovered slice changes while its animation is on.
+ */
+function sliceMidAngles(values: number[]): number[] {
+  const delta = DONUT_END - DONUT_START;
+  const abs = Math.abs(delta);
+  const sign = Math.sign(delta);
+  const pad = values.length <= 1 ? 0 : DONUT_PAD;
+  const nonZero = values.filter((v) => v !== 0).length;
+  const sum = values.reduce((a, v) => a + v, 0);
+  if (sum <= 0) return values.map(() => DONUT_START);
+  const minAngle = values.length > 1 ? DONUT_MIN_ANGLE : 0;
+  const needsMin = minAngle > 0 && values.some((v) => v !== 0 && (v / sum) * abs < minAngle);
+  const min = needsMin ? minAngle : 0;
+  const real = abs - nonZero * min - (abs >= 360 ? nonZero : nonZero - 1) * pad;
+  let end = DONUT_START;
+  return values.map((v, i) => {
+    const start = i ? end + sign * pad * (v !== 0 ? 1 : 0) : DONUT_START;
+    end = start + sign * ((v !== 0 ? min : 0) + (v / sum) * real);
+    return (start + end) / 2;
+  });
+}
+
+/** The element's size, kept current as it resizes. */
+function useSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, size] as const;
+}
+
 interface CalloutProps {
   cx: number;
   cy: number;
@@ -519,7 +566,8 @@ interface CalloutProps {
 
 /**
  * Value callout for one slice, drawn outside the ring: a leader line from the
- * slice's middle, then the exact amount (ink) over its share (muted).
+ * slice's middle, then the category and its share (muted) over the exact
+ * amount (ink). The only place a slice's figures show: the donut has no list.
  * Rendered only for the slice being hovered or selected. It sits beside the
  * ring when the text fits in the chart box; otherwise (narrow phones, slices
  * near 3 or 9 o'clock) the leader bends up or down to the nearest empty corner
@@ -536,11 +584,14 @@ function DonutCallout({
   shown,
   colour,
   percent,
-}: CalloutProps & { shown: number | null; colour: string; percent: number }) {
+  name,
+}: CalloutProps & { shown: number | null; colour: string; percent: number; name: string }) {
   if (index !== shown) return <g />;
   const amount = exactINR(value);
-  const share = `${percent.toFixed(percent < 10 ? 1 : 0)}%`;
-  const width = Math.max(textWidth(amount), textWidth(share));
+  const share = `${name} · ${percent.toFixed(percent < 10 ? 1 : 0)}%`;
+  // The share line is 11px; measured at the 13px bold font it runs a little
+  // wide, which only errs towards the roomier corner placement.
+  const width = Math.max(textWidth(amount), textWidth(share) * 0.85);
   const boxW = cx * 2;
   const cos = Math.cos(-midAngle * RAD);
   const sin = Math.sin(-midAngle * RAD);
@@ -559,11 +610,11 @@ function DonutCallout({
       <g pointerEvents="none">
         <path d={`M${sx},${sy}L${mx},${my}L${ex},${my}`} stroke={colour} strokeWidth={1.5} fill="none" />
         <circle cx={ex} cy={my} r={2.5} fill={colour} />
-        <text x={tx} y={my} dy={-2} textAnchor={anchor} fill={INK} fontSize={13} fontWeight={600}>
-          {amount}
-        </text>
-        <text x={tx} y={my} dy={13} textAnchor={anchor} fill={MUTED} fontSize={11}>
+        <text x={tx} y={my} dy={-4} textAnchor={anchor} fill={MUTED} fontSize={11}>
           {share}
+        </text>
+        <text x={tx} y={my} dy={12} textAnchor={anchor} fill={INK} fontSize={13} fontWeight={600}>
+          {amount}
         </text>
       </g>
     );
@@ -582,11 +633,11 @@ function DonutCallout({
     <g pointerEvents="none">
       <path d={`M${sx},${sy}L${kx},${ky}L${kx},${dotY}`} stroke={colour} strokeWidth={1.5} fill="none" />
       <circle cx={kx} cy={dotY} r={2.5} fill={colour} />
-      <text x={edgeX} y={dotY} dy={up ? -22 : 20} textAnchor={anchor} fill={INK} fontSize={13} fontWeight={600}>
-        {amount}
-      </text>
-      <text x={edgeX} y={dotY} dy={up ? -8 : 34} textAnchor={anchor} fill={MUTED} fontSize={11}>
+      <text x={edgeX} y={dotY} dy={up ? -24 : 18} textAnchor={anchor} fill={MUTED} fontSize={11}>
         {share}
+      </text>
+      <text x={edgeX} y={dotY} dy={up ? -8 : 34} textAnchor={anchor} fill={INK} fontSize={13} fontWeight={600}>
+        {amount}
       </text>
     </g>
   );
@@ -625,14 +676,18 @@ export function CategoryDonut({
   const dimmed = (i: number) =>
     hover !== null ? hover !== i : Boolean(selected) && data[i]?.category !== selected;
   const reduced = useReducedMotion();
+  const midAngles = useMemo(() => sliceMidAngles(data.map((d) => d.amount)), [data]);
+  const [boxRef, box] = useSize<HTMLDivElement>();
 
   return (
     <ChartCard title="Where it went">
-      <div className="flex flex-col items-center gap-4 sm:flex-row lg:flex-col 2xl:flex-row">
-        {/* The ring is drawn smaller than the box so the hover callout has
-            room outside it instead of covering the centre. */}
+      <div>
+        {/* No list beside the ring: a slice's figures show only in its
+            callout, outside the ring, clear of the total in the hole. The
+            box spans the card so the callout usually fits beside the ring. */}
         <div
-          className="relative h-72 w-full max-w-[26rem] shrink-0"
+          ref={boxRef}
+          className="relative h-72 w-full"
           // A click anywhere in the chart that is not on a slice (the hole,
           // the space around the ring) removes the filter.
           onClick={(e) => {
@@ -647,25 +702,20 @@ export function CategoryDonut({
                 nameKey="category"
                 innerRadius={DONUT_INNER}
                 outerRadius={DONUT_OUTER}
-                paddingAngle={data.length > 1 ? 2 : 0}
+                paddingAngle={data.length > 1 ? DONUT_PAD : 0}
+                // A sliver (a 0% "Other") still gets an arc wide enough to
+                // hover or tap; its callout gives the true share.
+                minAngle={data.length > 1 ? DONUT_MIN_ANGLE : 0}
                 cornerRadius={6}
                 stroke="none"
                 // Clockwise from 12 o'clock, the ring sweeps round and fills
                 // each category in turn while the total counts up.
-                startAngle={90}
-                endAngle={-270}
+                startAngle={DONUT_START}
+                endAngle={DONUT_END}
                 isAnimationActive={!reduced}
                 animationDuration={DRAW_MS}
                 animationEasing={STRONG_EASE_IN_OUT as "ease-in-out"}
                 labelLine={false}
-                label={(props: unknown) => (
-                  <DonutCallout
-                    {...(props as CalloutProps)}
-                    shown={shown}
-                    colour={palette.colourOf(data[(props as CalloutProps).index]?.category ?? OTHER)}
-                    percent={pct(data[(props as CalloutProps).index]?.amount ?? 0)}
-                  />
-                )}
                 onMouseEnter={(_, i) => setHover(i)}
                 onMouseLeave={() => setHover(null)}
                 onClick={(_, i) => data[i] && onSelect(data[i].category)}
@@ -681,43 +731,58 @@ export function CategoryDonut({
               </Pie>
             </PieChart>
           </ResponsiveContainer>
+          {/* The callout for the hovered or selected slice, drawn over the
+              chart outside the ring. */}
+          {shown !== null && data[shown] && box.w > 0 ? (
+            <svg className="pointer-events-none absolute inset-0" width={box.w} height={box.h} aria-hidden>
+              <DonutCallout
+                cx={box.w / 2}
+                cy={box.h / 2}
+                midAngle={midAngles[shown]}
+                outerRadius={DONUT_OUTER}
+                index={shown}
+                value={data[shown].amount}
+                shown={shown}
+                colour={palette.colourOf(data[shown].category)}
+                percent={pct(data[shown].amount)}
+                name={data[shown].category}
+              />
+            </svg>
+          ) : null}
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-xs text-muted">Total</span>
             <CountUpINR value={total} className="text-[15px] font-semibold tabular-nums" />
           </div>
         </div>
 
-        <ul className="w-full min-w-0 space-y-0.5">
-          {data.map((d, i) => {
-            const on = selected === d.category;
-            return (
-              <li key={d.category}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(d.category)}
-                  onMouseEnter={() => setHover(i)}
-                  onMouseLeave={() => setHover(null)}
-                  onFocus={() => setHover(i)}
-                  onBlur={() => setHover(null)}
-                  aria-pressed={on}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition hover:bg-white/5 ${
-                    dimmed(i) ? "opacity-50" : ""
-                  } ${on || hover === i ? "bg-white/5" : ""}`}
-                >
-                  <Swatch colour={palette.colourOf(d.category)} />
-                  <span className="min-w-0 flex-1 truncate">{d.category}</span>
-                  <span className="tabular-nums text-muted">{pct(d.amount).toFixed(0)}%</span>
-                  <span className="w-28 shrink-0 text-right font-semibold tabular-nums">{exactINR(d.amount)}</span>
-                </button>
-              </li>
-            );
-          })}
+        {/* Not shown, but still there for keyboards and screen readers: one
+            button per slice. Tabbing onto one opens its callout on the ring,
+            Enter filters, and a screen reader reads the figures. */}
+        <ul className="sr-only" aria-label="Categories">
+          {data.map((d, i) => (
+            <li key={d.category}>
+              <button
+                type="button"
+                onClick={() => onSelect(d.category)}
+                onFocus={() => setHover(i)}
+                onBlur={() => setHover(null)}
+                aria-pressed={selected === d.category}
+              >
+                {d.category}, {pct(d.amount).toFixed(0)}%, {exactINR(d.amount)}
+              </button>
+            </li>
+          ))}
         </ul>
       </div>
       <p className="text-xs text-muted">
-        {selected
-          ? "Tap the empty part of the chart, or the same slice again, to remove the filter."
-          : "Tap a slice or a row to filter the expense detail."}
+        {selected ? (
+          "Tap the empty part of the chart, or the same slice again, to remove the filter."
+        ) : (
+          <>
+            <span className="[@media(pointer:coarse)]:hidden">Hover a slice to see what it cost; click it to filter the expense detail.</span>
+            <span className="hidden [@media(pointer:coarse)]:inline">Tap a slice to see what it cost and filter the expense detail.</span>
+          </>
+        )}
       </p>
     </ChartCard>
   );
