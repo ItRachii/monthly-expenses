@@ -4,9 +4,24 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { updateName } from "@/lib/users";
 import { getIncomeHistory, setMonthlyIncome } from "@/lib/income";
-import { incomeForMonth } from "@/lib/incomeMath";
+import { incomeForMonth, type IncomeEntry } from "@/lib/incomeMath";
 import { monthKey } from "@/lib/format";
 import { cleanText, isValidMonth, parseMoney } from "@/lib/validate";
+
+/**
+ * The signed-in user's monthly income and its changes, for the eye button
+ * on the profile page. The page itself never carries the amounts, so they
+ * are not in its HTML until the user asks to see them.
+ */
+export async function revealIncomeAction(): Promise<
+  { ok: true; income: number | null; history: IncomeEntry[] } | { ok: false; error: string }
+> {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) return { ok: false, error: "Not signed in." };
+  const history = await getIncomeHistory(email);
+  return { ok: true, income: incomeForMonth(history, monthKey(new Date())), history };
+}
 
 export async function saveProfileAction(
   firstName: string,
@@ -23,15 +38,14 @@ export async function saveProfileAction(
   if (!first) return { ok: false, error: "Please enter a first name." };
 
   // Income may stay blank while it has never been set (the popup is
-  // skippable); once set it can be changed but not cleared.
+  // skippable). Once set it is masked on the page, so a blank field means
+  // "keep it as it is"; it can be changed but never cleared.
   const current = monthKey(new Date());
   const history = await getIncomeHistory(email);
   const incomeText = typeof monthlyIncome === "string" ? monthlyIncome.trim() : "";
   const income = incomeText ? parseMoney(incomeText) : null;
   if (incomeText && income === null)
     return { ok: false, error: "Monthly income must be an amount like 50000 or 50000.50." };
-  if (!incomeText && history.length > 0)
-    return { ok: false, error: "Please enter your monthly income." };
   const changed = income !== null && income !== incomeForMonth(history, current);
   let from = current;
   if (changed && history.length > 0 && incomeFrom) {

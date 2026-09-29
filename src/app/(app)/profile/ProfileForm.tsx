@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveProfileAction } from "@/lib/actions/profile";
+import { revealIncomeAction, saveProfileAction } from "@/lib/actions/profile";
 import { UserAvatar } from "@/components/UserAvatar";
-import { PencilIcon } from "@/components/Icons";
+import { EyeIcon, EyeOffIcon, PencilIcon } from "@/components/Icons";
 import { formatINR } from "@/lib/format";
 import { incomeMonthOptions, type IncomeEntry } from "@/lib/incomeMath";
 import { MonthSelect, monthLabel } from "@/components/MonthSelect";
@@ -14,42 +14,58 @@ export function ProfileForm({
   email,
   firstName,
   lastName,
-  monthlyIncome,
-  incomeHistory,
+  hasIncome,
   currentMonth,
   image,
 }: {
   email: string;
   firstName: string;
   lastName: string | null;
-  /** This month's fixed income; null until the user sets it. */
-  monthlyIncome: number | null;
-  /** Income changes, oldest first. */
-  incomeHistory: IncomeEntry[];
+  /** Whether a monthly income is set. The amount itself is fetched only when revealed. */
+  hasIncome: boolean;
   currentMonth: string;
   image: string | null;
 }) {
-  const incomeText = monthlyIncome === null ? "" : String(monthlyIncome);
   const [editing, setEditing] = useState(false);
   const [first, setFirst] = useState(firstName);
   const [last, setLast] = useState(lastName ?? "");
-  const [income, setIncome] = useState(incomeText);
+  const [income, setIncome] = useState("");
   const [incomeFrom, setIncomeFrom] = useState(currentMonth);
-  // A change to an existing income asks which month it applies from.
+  // The income is masked until the eye button fetches it; it is masked again
+  // after a save and on every visit.
+  const [revealed, setRevealed] = useState<{ income: number | null; history: IncomeEntry[] } | null>(null);
+  const [revealing, startReveal] = useTransition();
+  // Covers the moment between saving a first income and the refreshed prop.
+  const [savedIncome, setSavedIncome] = useState(false);
+  const incomeSet = hasIncome || savedIncome;
+  // A change to an existing income asks which month it applies from. While
+  // masked, any amount typed counts as a change.
   const incomeChanged =
-    monthlyIncome !== null && income.trim() !== "" && Number(income) !== monthlyIncome;
+    incomeSet && income.trim() !== "" && (revealed?.income == null || Number(income) !== revealed.income);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
-  // The just-saved value covers the moment before the refreshed prop lands.
-  const shownIncome = monthlyIncome ?? (income.trim() ? Number(income) : null);
   const displayName = [firstName, lastName ?? ""].map((s) => s.trim()).filter(Boolean).join(" ");
+  const revealedText = revealed?.income != null ? String(revealed.income) : "";
+
+  function toggleIncome() {
+    if (revealed) {
+      setRevealed(null);
+      return;
+    }
+    startReveal(async () => {
+      const res = await revealIncomeAction();
+      if (res.ok) setRevealed({ income: res.income, history: res.history });
+      else setMessage({ ok: false, text: res.error });
+    });
+  }
 
   function startEdit() {
     setFirst(firstName);
     setLast(lastName ?? "");
-    setIncome(incomeText);
+    // Prefilled only if the user chose to see it; otherwise blank keeps it.
+    setIncome(revealedText);
     setIncomeFrom(currentMonth);
     setMessage(null);
     setEditing(true);
@@ -59,7 +75,7 @@ export function ProfileForm({
     setEditing(false);
     setFirst(firstName);
     setLast(lastName ?? "");
-    setIncome(incomeText);
+    setIncome(revealedText);
   }
 
   function save(e: React.FormEvent) {
@@ -69,6 +85,9 @@ export function ProfileForm({
       if (res.ok) {
         setMessage({ ok: true, text: res.message ?? "Saved." });
         setEditing(false);
+        if (income.trim()) setSavedIncome(true);
+        setIncome("");
+        setRevealed(null);
         router.refresh();
       } else {
         setMessage({ ok: false, text: res.error ?? "Something went wrong." });
@@ -97,7 +116,7 @@ export function ProfileForm({
 
         {message ? (
           <div className={message.ok ? "alert-success" : "alert-error"}>{message.text}</div>
-        ) : monthlyIncome === null ? (
+        ) : !incomeSet ? (
           <div className="alert-info">
             Add your monthly income to see what you save each month on your Personal page.
           </div>
@@ -141,8 +160,9 @@ export function ProfileForm({
                   onChange={(e) => {
                     if (isMoneyInput(e.target.value)) setIncome(e.target.value);
                   }}
-                  placeholder="e.g. 50000"
-                  required={monthlyIncome !== null}
+                  placeholder={incomeSet ? "Hidden. Leave blank to keep it" : "e.g. 50000"}
+                  aria-label="Monthly income"
+                  autoComplete="off"
                 />
                 {incomeChanged ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-normal">
@@ -159,18 +179,37 @@ export function ProfileForm({
                   and replaces any later changes; earlier months keep their amount.
                 </p>
               </>
-            ) : shownIncome !== null ? (
+            ) : incomeSet ? (
               <>
-                {formatINR(shownIncome)}
-                {incomeHistory.length > 1 ? (
+                <div className="flex items-center gap-2">
+                  {revealed ? (
+                    <span>{revealed.income !== null ? formatINR(revealed.income) : "Not set"}</span>
+                  ) : (
+                    <span className="tracking-[0.2em] text-muted" aria-label="Hidden">
+                      ₹ ••••••
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-btn h-8 w-8 shrink-0"
+                    onClick={toggleIncome}
+                    disabled={revealing}
+                    aria-pressed={revealed !== null}
+                    aria-label={revealed ? "Hide monthly income" : "Show monthly income"}
+                    title={revealed ? "Hide" : "Show"}
+                  >
+                    {revealed ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                  </button>
+                </div>
+                {revealed && revealed.history.length > 1 ? (
                   <ul className="mt-1 space-y-0.5 text-xs font-normal text-muted">
                     {/* The oldest amount also covers every month before it. */}
-                    {incomeHistory
+                    {revealed.history
                       .map((h, i) => (
                         <li key={h.month}>
                           {formatINR(h.amount)}{" "}
                           {i === 0
-                            ? `before ${monthLabel(incomeHistory[1].month)}`
+                            ? `before ${monthLabel(revealed.history[1].month)}`
                             : `from ${monthLabel(h.month)}`}
                         </li>
                       ))
