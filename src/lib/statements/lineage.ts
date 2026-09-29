@@ -89,14 +89,23 @@ async function hmac(salt: string, message: string): Promise<string> {
   return base64url(new Uint8Array(sig)).slice(0, 32);
 }
 
+/**
+ * Leading zeros carry no meaning and differ by format: the PDF prints a loan
+ * as "00000266258470", the spreadsheet as "0 0000266258470", and its loan
+ * summary as the number 266258470. All three must key the same way.
+ */
+export function canonicalDigits(digits: string): string {
+  return digits.replace(/^0+(?=\d)/, "");
+}
+
 /** Stable key for a loan number under this user's salt. */
 export async function loanKeyFor(salt: string, digits: string): Promise<string> {
-  return "l_" + (await hmac(salt, `loan-v1\n${digits}`));
+  return "l_" + (await hmac(salt, `loan-v1\n${canonicalDigits(digits)}`));
 }
 
 /** Stable key for a transaction reference under this user's salt. */
 export async function refKeyFor(salt: string, digits: string): Promise<string> {
-  return "r_" + (await hmac(salt, `ref-v1\n${digits}`));
+  return "r_" + (await hmac(salt, `ref-v1\n${canonicalDigits(digits)}`));
 }
 
 /** Sets every loan key and reference key, then forgets the digits. */

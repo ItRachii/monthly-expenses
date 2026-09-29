@@ -102,6 +102,24 @@ export interface CardIdentity {
   product: string | null;
 }
 
+/**
+ * A loan as the statement's own loan summary prints it. Only the last four
+ * digits of the loan number are kept. Shown on the review screen; not stored.
+ */
+export interface StatementLoan {
+  /** "Smart EMI", "Loan on Card", … */
+  type: string | null;
+  last4: string | null;
+  /** YYYY-MM-DD */
+  bookedOn: string | null;
+  amount: number | null;
+  tenureMonths: number | null;
+  ratePct: number | null;
+  principalOutstanding: number | null;
+  interestPayable: number | null;
+  remainingMonths: number | null;
+}
+
 export interface ParsedStatement {
   bank: Bank;
   summary: StatementSummary | null;
@@ -125,4 +143,8 @@ export interface ParsedStatement {
    */
   redactedLines: string[];
   warnings: string[];
+  /** Loans from the statement's loan summary, when it prints one. */
+  loans: StatementLoan[];
+  /** GST the statement's GST summary says was billed, when it prints one. */
+  gstBilled: number | null;
 }

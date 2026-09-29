@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PdfPasswordError, readPdfPages } from "@/lib/statements/pdf";
 import { parseStatement } from "@/lib/statements/parse";
+import { parseCsv, parseSheet } from "@/lib/statements/sheet";
+import { readXlsx } from "@/lib/statements/xlsx";
 import type { ParsedStatement, RowKind, StatementRow } from "@/lib/statements/types";
 import { importStatementAction } from "@/lib/actions/statements";
 import { saveStatementSummaryAction } from "@/lib/actions/cards";
@@ -39,6 +41,15 @@ function monthLabel(period: string | null): string {
   if (!period) return "";
   const [y, m] = period.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+/** How to read a file: by extension first, then by type. */
+function fileKind(f: File): "pdf" | "xlsx" | "csv" | "xls" {
+  const name = f.name.toLowerCase();
+  if (name.endsWith(".xlsx") || f.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return "xlsx";
+  if (name.endsWith(".csv") || f.type === "text/csv") return "csv";
+  if (name.endsWith(".xls") || f.type === "application/vnd.ms-excel") return "xls";
+  return "pdf";
 }
 
 function dayLabel(iso: string): string {
@@ -95,8 +106,15 @@ export function StatementImport({
     setError(null);
     setPhase("reading");
     try {
-      const pages = await readPdfPages(f, pw || undefined);
-      const p = parseStatement(pages, { filename: f.name });
+      // Every format is read on this device; nothing is uploaded.
+      const kind = fileKind(f);
+      if (kind === "xls") throw new Error("Old .xls files are not supported. Open the file and save it as .xlsx or CSV.");
+      const p =
+        kind === "xlsx"
+          ? parseSheet(await readXlsx(await f.arrayBuffer()), { filename: f.name })
+          : kind === "csv"
+            ? parseSheet([parseCsv(await f.text())], { filename: f.name })
+            : parseStatement(await readPdfPages(f, pw || undefined), { filename: f.name });
       // Loan numbers and references become keyed hashes here; the digits
       // are forgotten before anything is shown or sent.
       await applyKeys(p, loanSalt);
@@ -120,7 +138,7 @@ export function StatementImport({
         setWrongPassword(e.wrong);
         return;
       }
-      setError(e instanceof Error ? e.message : "Could not read this PDF.");
+      setError(e instanceof Error ? e.message : "Could not read this file.");
     }
   }
 
@@ -266,7 +284,7 @@ export function StatementImport({
             <div className="space-y-1">
               <h2 className="section-title">Import a credit card statement</h2>
               <p className="text-sm text-muted">
-                HDFC Bank and ICICI Bank PDF statements. The file is read on this device: it is never
+                HDFC Bank and ICICI Bank statements as PDF, Excel (.xlsx) or CSV. The file is read on this device: it is never
                 uploaded. Your name, address, card number, phone and email are dropped before anything
                 is read, and only the rows you choose to add are saved.
               </p>
@@ -274,10 +292,10 @@ export function StatementImport({
           </div>
 
           <label className="block">
-            <span className="label">Statement PDF</span>
+            <span className="label">Statement file</span>
             <input
               type="file"
-              accept="application/pdf,.pdf"
+              accept="application/pdf,.pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.csv,text/csv"
               className="input"
               disabled={phase === "reading"}
               onChange={(e) => pick(e.target.files?.[0] ?? null)}
@@ -420,6 +438,29 @@ export function StatementImport({
                 </div>
               ) : null}
             </div>
+
+            {tab === "emi" && parsed.loans.length > 0 ? (
+              <div className="rounded-lg border border-white/10 p-3 text-sm" data-loans>
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Loans on this card, as the statement lists them</div>
+                <ul className="space-y-1">
+                  {parsed.loans.map((l, i) => (
+                    <li key={i}>
+                      <span className="font-medium">
+                        {l.type ?? "Loan"} …{l.last4 ?? "?"}
+                      </span>
+                      {l.amount !== null ? <>: {formatINR(l.amount)}</> : null}
+                      {l.bookedOn ? <> booked {l.bookedOn}</> : null}
+                      {l.tenureMonths !== null ? <> for {l.tenureMonths} months</> : null}
+                      {l.ratePct !== null ? <> at {l.ratePct}%</> : null}.
+                      {l.remainingMonths !== null ? <> {l.remainingMonths} months left</> : null}
+                      {l.principalOutstanding !== null ? <>, {formatINR(l.principalOutstanding)} principal</> : null}
+                      {l.interestPayable !== null ? <> and {formatINR(l.interestPayable)} interest outstanding</> : null}.
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-xs text-muted">Shown for reference. Only the instalments you add are saved.</p>
+              </div>
+            ) : null}
 
             {tabRows.length === 0 ? (
               <p className="text-sm text-muted">No {TABS.find((t) => t.id === tab)?.label.toLowerCase()} rows in this statement.</p>

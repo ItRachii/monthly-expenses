@@ -11,11 +11,11 @@
 // can run in the browser and in a Node test.
 
 import { categorize } from "@/lib/receipt/categorize";
-import { cleanDescription, isDateLed, isHeading, keepLine, makeRefTagger, redactLine } from "./redact";
+import { cleanDescription, isDateLed, isHeading, keepLine, makeRefTagger, redactLine, type RefTagging } from "./redact";
 import { readDate } from "./dates";
 import { cardIdentity, parseSummary } from "./summary";
 import type { PageText } from "./lines";
-import type { Bank, ForeignInfo, ParsedStatement, RowKind, RowPart, StatementRow } from "./types";
+import type { Bank, CardIdentity, ForeignInfo, ParsedStatement, RowKind, RowPart, StatementLoan, StatementRow, StatementSummary } from "./types";
 
 const CURRENCIES = new Set([
   "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD", "JPY", "CHF", "THB", "MYR",
@@ -50,7 +50,7 @@ function readAmount(tok: string): { amount: number; credit: boolean } | null {
   return { amount, credit };
 }
 
-function readForeign(tokens: string[]): { currency: string; amount: number; used: number } | null {
+export function readForeign(tokens: string[]): { currency: string; amount: number; used: number } | null {
   const n = tokens.length;
   const a = tokens[n - 2];
   const b = tokens[n - 1];
@@ -71,7 +71,7 @@ function readForeign(tokens: string[]): { currency: string; amount: number; used
   return null;
 }
 
-interface Line {
+export interface Line {
   page: number;
   index: number;
   date: string;
@@ -85,7 +85,20 @@ interface Line {
   text: string;
 }
 
-type Section = "unknown" | "domestic" | "international" | "emi";
+export type Section = "unknown" | "domestic" | "international" | "emi";
+
+/**
+ * HDFC tags purchases that could be converted with an "EMI" badge. That is
+ * an offer, not an EMI: drop it unless the line really is an instalment.
+ */
+export function dropEmiBadge(words: string[]): void {
+  if (words.length > 1 && /^emi$/i.test(words[0]) && !/^(?:prin|int|instal|amt|amount|i?gst|conv|proc|fee)/i.test(words[1])) words.shift();
+}
+
+/** The per-parse token of the "(Ref# …)" reference in a redacted description. */
+export function citedRef(description: string): string | null {
+  return description.match(/\(\s*ref\s*#?\s*[A-Z]{0,3}\s*\[ref:([0-9a-f]{4})\]\s*\)/i)?.[1] ?? null;
+}
 
 /** One transaction line, or null when the line is not one. */
 export function parseLine(text: string): Omit<Line, "page" | "index" | "section" | "text"> | null {
@@ -137,15 +150,11 @@ export function parseLine(text: string): Omit<Line, "page" | "index" | "section"
   if (rest.length >= 2 && /^-?\d{1,6}$/.test(rest[rest.length - 1])) rest.pop();
   // A leading reference is a serial number column (already redacted).
   while (rest.length > 1 && /^(\[ref(?::[0-9a-f]{4})?\]|\d{6,})$/.test(rest[0])) rest.shift();
-  // HDFC tags purchases that could be converted with an "EMI" badge. That is
-  // an offer, not an EMI: drop it unless the line really is an instalment.
-  if (rest.length > 1 && /^emi$/i.test(rest[0]) && !/^(?:prin|int|instal|amt|amount|i?gst|conv|proc|fee)/i.test(rest[1])) {
-    rest.shift();
-  }
+  dropEmiBadge(rest);
 
   const description = rest.join(" ").replace(/^[-:|]+\s*/, "");
   if (!description) return null;
-  const ref = description.match(/\(\s*ref\s*#?\s*[A-Z]{0,3}\s*\[ref:([0-9a-f]{4})\]\s*\)/i)?.[1] ?? null;
+  const ref = citedRef(description);
   return {
     date: d.date,
     description,
@@ -156,7 +165,7 @@ export function parseLine(text: string): Omit<Line, "page" | "index" | "section"
   };
 }
 
-function sectionOf(line: string): Section | null {
+export function sectionOf(line: string): Section | null {
   if (!isHeading(line) || isDateLed(line)) return null;
   if (/\b(international|overseas)\b/i.test(line)) return "international";
   if (/\bdomestic\b/i.test(line)) return "domestic";
@@ -177,7 +186,7 @@ export function detectBank(lines: string[]): Bank {
 }
 
 const GST_RE = /\b(?:i|c|s|ut)?gst\b/i;
-const MARKUP_RE = /mark[ -]?up|forex|\bfx\b|cross[ -]?currency|currency conv|\bdcc\b|intl\.? ?(?:txn|transaction)? ?fee|international (?:txn|transaction) fee/i;
+const MARKUP_RE = /mark[ -]?u ?p\b|forex|\bfx\b|\bfcy\b|cross[ -]?currency|currency conv|\bdcc\b|intl\.? ?(?:txn|transaction)? ?fee|international (?:txn|transaction) fee/i;
 const FEE_RE = /\bfees?\b|\bcharges?\b|surcharge|late payment|over ?limit|finance charge|interest charge|annual membership|joining/i;
 const EMI_RE = /\bemi\b|instal?lment/i;
 // "EMI PRINCIPAL AMT", "OFFUS EMI,PRIN NB:02", "EMI INTEREST", "EMI,INT NBR:02"
@@ -290,7 +299,6 @@ export function parseStatement(input: (string[] | PageText)[], opts: { filename?
   const redactedLines: string[] = [];
   const lines: Line[] = [];
   const unparsed: { page: number; text: string }[] = [];
-  const warnings: string[] = [];
   const headings: string[] = [];
   let section: Section = "unknown";
   let index = 0;
@@ -323,6 +331,31 @@ export function parseStatement(input: (string[] | PageText)[], opts: { filename?
   });
 
   const bank = detectBank(pages.flat());
+  const { rows, tokenDigits } = buildRows(lines, tagger);
+  const allRedacted = pages.flat().map((l) => redactLine(l));
+  const { summary, notes } = parseSummary(allRedacted, rowPages);
+  return assembleStatement({
+    bank,
+    rows,
+    tokenDigits,
+    summary,
+    summaryNotes: notes,
+    statementDateFallback: statementDateOf(allRedacted),
+    identity: cardIdentity(pages.flat(), opts.filename),
+    unparsed,
+    redactedLines,
+    sectioned: headings.length > 0,
+    loans: [],
+    gstBilled: null,
+  });
+}
+
+/**
+ * Rows from transaction lines, with GST, forex markup and EMI parts folded
+ * into what they belong to. Shared by PDF text and spreadsheets, so both
+ * follow exactly the same rules.
+ */
+export function buildRows(lines: Line[], tagger: RefTagging): { rows: StatementRow[]; tokenDigits: Record<string, string> } {
   const rows: StatementRow[] = [];
   let emiRow: StatementRow | null = null;
   let emiStemKey = "";
@@ -470,23 +503,56 @@ export function parseStatement(input: (string[] | PageText)[], opts: { filename?
     }
   }
 
-  const allRedacted = pages.flat().map((l) => redactLine(l));
-  const { summary, notes } = parseSummary(allRedacted, rowPages);
-  const statementDate = summary?.statementDate ?? statementDateOf(allRedacted);
+  return { rows, tokenDigits };
+}
+
+export interface AssembleInput {
+  bank: Bank;
+  rows: StatementRow[];
+  tokenDigits: Record<string, string>;
+  summary: StatementSummary | null;
+  summaryNotes: string[];
+  statementDateFallback: string | null;
+  identity: { last4: string; product: string | null; source: "text" | "filename" } | null;
+  unparsed: { page: number; text: string }[];
+  redactedLines: string[];
+  /** Whether rows were told apart by section headings or a type column. */
+  sectioned: boolean;
+  loans: StatementLoan[];
+  /** GST the statement's own GST summary says was billed, when it has one. */
+  gstBilled: number | null;
+}
+
+/** Period, card, notes and warnings: the last step for every source. */
+export function assembleStatement(a: AssembleInput): ParsedStatement {
+  const { bank, rows, tokenDigits, summary, unparsed, redactedLines, loans, gstBilled } = a;
+  const warnings: string[] = [];
+  const statementDate = summary?.statementDate ?? a.statementDateFallback;
   if (summary && !summary.statementDate) summary.statementDate = statementDate;
   const period = statementDate?.slice(0, 7) ?? commonMonth(rows);
-  const identity = cardIdentity(pages.flat(), opts.filename);
-  const card = identity ? { last4: identity.last4, product: identity.product } : null;
-  if (notes.length > 0) redactedLines.push("## summary", ...notes);
+  const identity = a.identity;
+  const card: CardIdentity | null = identity ? { last4: identity.last4, product: identity.product } : null;
+  if (a.summaryNotes.length > 0) redactedLines.push("## summary", ...a.summaryNotes);
+  for (const l of loans) {
+    redactedLines.push(
+      `## loan …${l.last4 ?? "?"}: ${l.type ?? "loan"}, booked ${l.bookedOn ?? "?"}, amount ${l.amount ?? "?"}, tenure ${l.tenureMonths ?? "?"}, rate ${l.ratePct ?? "?"}%, principal left ${l.principalOutstanding ?? "?"}, interest left ${l.interestPayable ?? "?"}, months left ${l.remainingMonths ?? "?"}`,
+    );
+  }
+  if (gstBilled !== null) {
+    const read = round2(rows.flatMap((r) => r.parts).filter((x) => x.kind === "gst").reduce((sum, x) => sum + x.amount, 0));
+    redactedLines.push(`## gst: statement says ${gstBilled.toFixed(2)}, lines read add up to ${read.toFixed(2)}`);
+    if (Math.abs(read - gstBilled) > 0.01)
+      warnings.push(`The statement's GST summary says ₹${gstBilled.toFixed(2)} of GST was billed, but the GST lines read add up to ₹${read.toFixed(2)}. A line may have been missed.`);
+  }
   redactedLines.push(`## card: ${identity ? `last4 from ${identity.source}${identity.product ? `, ${identity.product}` : ""}` : "not found"}`);
   if (!summary) warnings.push("No summary figures (dues, limits, due date) were found, so nothing can be saved for the card.");
   if (!card) warnings.push("No card number found, so the summary cannot be filed under a card.");
   if (rows.length === 0) warnings.push("No transactions were found. The statement may be a scanned image or an unsupported layout.");
   if (unparsed.length > 0) warnings.push(`${unparsed.length} line(s) looked like transactions but could not be read.`);
   if (bank === "unknown") warnings.push("Could not tell whether this is an HDFC or ICICI statement; parsed with the generic rules.");
-  if (headings.length === 0 && rows.length > 0) warnings.push("No section headings found; domestic and international were told apart by currency only.");
+  if (!a.sectioned && rows.length > 0) warnings.push("No section headings found; domestic and international were told apart by currency only.");
 
-  return { bank, summary, card, statementDate, period, rows, unparsed, tokenDigits, redactedLines, warnings };
+  return { bank, summary, card, statementDate, period, rows, unparsed, tokenDigits, redactedLines, warnings, loans, gstBilled };
 }
 
 /** The international purchase a markup line belongs to. */

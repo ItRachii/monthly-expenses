@@ -18,11 +18,12 @@ interface Label {
 }
 
 const LABELS: Label[] = [
-  { key: "availableCredit", kind: "amount", re: /available credit(?: limit)?/gi },
+  // "Available Limit" in HDFC's spreadsheet export; never "available cash limit".
+  { key: "availableCredit", kind: "amount", re: /available credit(?: limit)?|available limit/gi },
   { key: "availableCash", kind: "amount", re: /available cash(?: limit)?/gi },
   { key: "creditLimit", kind: "amount", re: /(?:total )?credit limit/gi },
   // "PREVIOUS STATEMENT" alone: the label wraps onto two rows in a narrow column.
-  { key: "previousDues", kind: "amount", re: /previous (?:statement )?(?:dues?|balance)|previous statement(?! date)|opening balance/gi },
+  { key: "previousDues", kind: "amount", re: /previous (?:statement )?(?:dues?|balance)|previous statement(?! date)|opening bal(?:ance)?\b\.?/gi },
   { key: "paymentsCredits", kind: "amount", re: /payments?\s*\/\s*credits?|payments? received|credits? received|payments?\s*&\s*credits?/gi },
   { key: "purchases", kind: "amount", re: /purchases?\s*\/\s*(?:debits?|charges?)|purchases?\s*(?:&|and) other debits|new purchases|other debits|purchases? \(current/gi },
   { key: "financeCharges", kind: "amount", re: /finance charges?|interest charged/gi },
@@ -37,14 +38,14 @@ const AMOUNT = /^(?:₹|rs\.?|inr|c)?\(?(\d{1,3}(?:,\d{2,3})+|\d+)(?:\.(\d{1,2})
 const CURRENCY = /^(?:₹|rs\.?|inr|c)$/i;
 const OPERATOR = /^[+\-−=|:l]{1,2}$/;
 
-function amountOf(tok: string): number | null {
+export function amountOf(tok: string): number | null {
   const m = tok.match(AMOUNT);
   if (!m) return null;
   const n = parseFloat(`${m[1].replace(/,/g, "")}.${m[2] ?? "00"}`);
   return Number.isFinite(n) ? n : null;
 }
 
-interface Found {
+export interface Found {
   key: keyof StatementSummary;
   kind: "amount" | "date";
   at: number;
@@ -52,7 +53,7 @@ interface Found {
 }
 
 /** Labels in a line, left to right. "credit limit" inside "available credit limit" is not counted twice. */
-function labelsIn(line: string): Found[] {
+export function labelsIn(line: string): Found[] {
   const found: Found[] = [];
   for (const l of LABELS) {
     l.re.lastIndex = 0;
@@ -275,6 +276,8 @@ export function cardIdentity(rawLines: string[], filename?: string): { last4: st
     /\b\d{4}[ -]?(?:[Xx*]{4}[ -]?){2}(\d{4})\b/,
     /\b(?:[Xx*]{4}[ -]?){1,3}(\d{4})\b/,
     /\b\d{4}[Xx*]{8}(\d{4})\b/,
+    // BIN of six digits, six masked: "552233XXXXXX7043".
+    /\b\d{6}[Xx*]{6}(\d{4})\b/,
     /(?:ending|ends)\s+(?:with|in)?\s*:?\s*(\d{4})\b/i,
     /card\s*(?:no|number|#)\.?\s*:?\s*[\dXx*][\dXx* -]{6,18}?(\d{4})\b/i,
   ];

@@ -54,6 +54,13 @@ Date        SerNo.       Transaction Details            Reward Points  Intl.# am
 | `CR` suffix | credit |
 | No `(Ref# …)` references | GST joins by adjacency and amount; cross-statement lineage falls back to date and 18% of interest, refused when ambiguous |
 
+## Spreadsheet and CSV
+
+No ICICI export has been seen. The spreadsheet reader maps columns by
+header name (`Transaction Date`, `Details`, `Amount (INR)`, `Debit`,
+`Credit`, `Dr/Cr`, `Reference Number`, …), so a plain ICICI CSV is likely
+to read, but it is untested. The reference column is never read.
+
 ## Edge cases expected but unverified
 
 - A serial number of 8 or more digits directly after the year (`2026

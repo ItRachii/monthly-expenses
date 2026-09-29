@@ -3,7 +3,7 @@
 // pipeline. Needs Playwright on the path:
 //   node tests/statements/make-fixtures.cjs
 // Then lock a copy with pypdf (python3 -m pip install pypdf):
-//   python3 -c "from pypdf import PdfReader, PdfWriter; r=PdfReader('tests/statements/fixtures/hdfc.pdf'); w=PdfWriter(); [w.add_page(p) for p in r.pages]; w.encrypt(user_password='RACH0705', owner_password='owner', algorithm='RC4-128'); w.write(open('tests/statements/fixtures/hdfc-locked.pdf','wb'))"
+//   python3 -c "from pypdf import PdfReader, PdfWriter; r=PdfReader('tests/statements/fixtures/hdfc.pdf'); w=PdfWriter(); [w.add_page(p) for p in r.pages]; w.encrypt(user_password='TEST0101', owner_password='owner', algorithm='RC4-128'); w.write(open('tests/statements/fixtures/hdfc-locked.pdf','wb'))"
 const { chromium } = require("playwright");
 const fs = require("fs");
 const out = process.argv[2] || __dirname + "/fixtures";
@@ -141,7 +141,7 @@ function hdfc2026(month, rows, box) {
 </div>
 <h2>Domestic Transactions</h2>
 <table><tr><th>DATE &amp; TIME</th><th>TRANSACTION DESCRIPTION</th><th class="r">AMOUNT</th><th>PI</th></tr>
-<tr><td></td><td>RACHIT AWASTHI [CKYC ID : 20096929017763 ]</td><td></td><td></td></tr>
+<tr><td></td><td>RACHIT AWASTHI [CKYC ID : 30017735524418 ]</td><td></td><td></td></tr>
 ${rows.map(tr).join("\n")}
 </table>
 <p class="small">*Transaction time captured in IST Zone.</p>
@@ -151,24 +151,24 @@ ${rows.map(tr).join("\n")}
 const aug2026 = hdfc2026(
   { statementDate: "24/08/2026" },
   [
-    ["11/08/2026| 00:00", false, "OFFUS EMI,PROCNG FEE,00000000001441 (Ref# 09999999980811000848011)", "₹ 299.00"],
-    ["11/08/2026| 00:00", false, "IGST-VPS2722433500047-RATE 18.0 -23 (Ref# 09999999980811000848011)", "₹ 53.82"],
+    ["11/08/2026| 00:00", false, "OFFUS EMI,PROCNG FEE,00000000003662 (Ref# 05555555520811777191700)", "₹ 299.00"],
+    ["11/08/2026| 00:00", false, "IGST-VPS5810321388904-RATE 18.0 -23 (Ref# 05555555520811777191700)", "₹ 53.82"],
     ["14/08/2026| 01:00", true, "INDIGO AIRLINEGURGAON", "₹ 5,859.00", "●"],
     ["15/08/2026| 01:12", true, "INDIGO AIRLINEGURGAON", "₹ 6,133.00", "●"],
-    ["22/08/2026| 00:00", false, "OFFUS EMI,PRIN NB:01,00000144148470 (Ref# 09999999980822004044671)", "₹ 982.00"],
-    ["22/08/2026| 00:00", false, "OFFUS EMI,INT NBR:01,00000144148470 (Ref# 09999999980822004044689)", "₹ 193.00"],
+    ["22/08/2026| 00:00", false, "OFFUS EMI,PRIN NB:01,00000266258470 (Ref# 05555555520822779799580)", "₹ 982.00"],
+    ["22/08/2026| 00:00", false, "OFFUS EMI,INT NBR:01,00000266258470 (Ref# 05555555520822779799514)", "₹ 193.00"],
   ],
   { prev: "12,400.00", paid: "12,400.00", purchases: "13,519.82", due: "13,520.00", avail: "2,52,681", min: "1,229.00", dueDate: "12 Sep, 2026" },
 );
 const sep2026 = hdfc2026(
   { statementDate: "24/09/2026" },
   [
-    ["22/08/2026| 00:00", false, "IGST-VPS2723574016786-RATE 18.0 -23 (Ref# 09999999980822004044689)", "₹ 34.74"],
+    ["22/08/2026| 00:00", false, "IGST-VPS5811462039786-RATE 18.0 -23 (Ref# 05555555520822779799514)", "₹ 34.74"],
     ["02/09/2026| 01:25", false, "NETFLIXMUMBAI", "₹ 199.00", "●"],
-    ["04/09/2026| 08:32", false, "CREDIT CARD PAYMENTNet Banking (Ref# 00000000000904016163381)", "+ ₹ 13,520.00"],
+    ["04/09/2026| 08:32", false, "CREDIT CARD PAYMENTNet Banking (Ref# 00000000000904027274492)", "+ ₹ 13,520.00"],
     ["13/09/2026| 08:05", true, "RAZ*IRCTChttps://www.", "₹ 14,074.55", "●"],
-    ["22/09/2026| 00:00", false, "OFFUS EMI,PRIN NB:02,00000144148470 (Ref# 09999999980922004049488)", "₹ 996.00"],
-    ["22/09/2026| 00:00", false, "OFFUS EMI,INT NBR:02,00000144148470 (Ref# 09999999980922004049496)", "₹ 167.00"],
+    ["22/09/2026| 00:00", false, "OFFUS EMI,PRIN NB:02,00000266258470 (Ref# 05555555520922779794911)", "₹ 996.00"],
+    ["22/09/2026| 00:00", false, "OFFUS EMI,INT NBR:02,00000266258470 (Ref# 05555555520922779794945)", "₹ 167.00"],
   ],
   { prev: "13,520.00", paid: "13,520.00", purchases: "15,471.29", due: "15,471.00", avail: "2,38,992", min: "1,406.00", dueDate: "12 Oct, 2026" },
 );
