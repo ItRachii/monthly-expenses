@@ -92,48 +92,55 @@ export interface FilterOption {
 }
 
 /**
- * Column heading that filters the table by one of its values. The menu is
- * drawn in a portal at the heading's position, since the table's rounded
- * frame clips anything that overflows it. `value` null means everyone.
+ * A heading's filter trigger and its popover. The popover is drawn in a
+ * portal at the trigger's position, since the table's rounded frame clips
+ * anything that overflows it. Escape, an outside press, scrolling the page
+ * or resizing closes it; closing from the keyboard returns focus.
  */
-export function FilterHeader({
+function FilterPopover({
+  name,
+  active,
+  activeText,
   label,
-  allLabel,
-  allIcon,
-  options,
-  value,
-  onChange,
-  className = "",
+  role,
+  width = 224,
+  children,
 }: {
-  label: string;
-  allLabel: string;
-  allIcon?: ReactNode;
-  options: FilterOption[];
-  value: string | null;
-  onChange: (v: string | null) => void;
-  className?: string;
+  /** What is filtered, e.g. "paid by". */
+  name: string;
+  active: boolean;
+  /** The current filter, for the trigger's label and title. */
+  activeText: string;
+  /** Text beside the icon; icon only when omitted. */
+  label?: string;
+  role: "menu" | "dialog";
+  width?: number;
+  children: (close: (refocus: boolean) => void) => ReactNode;
 }) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  const active = value !== null;
-  const current = options.find((o) => o.value === value);
+  const pop = useRef<HTMLDivElement>(null);
 
   function close(refocus: boolean) {
     setAt(null);
     if (refocus) button.current?.focus();
   }
+  function open() {
+    const r = button.current!.getBoundingClientRect();
+    setAt({ x: Math.min(r.left, window.innerWidth - width - 8), y: r.bottom + 4 });
+  }
 
   useEffect(() => {
     if (!at) return;
-    // Focus the ticked item, so arrows move from where the user is.
-    menu.current?.querySelector<HTMLElement>("[aria-checked=true]")?.focus();
+    // Start on the ticked item (menus) or the first field (dialogs).
+    const first = pop.current?.querySelector<HTMLElement>("[aria-checked=true]") ?? pop.current?.querySelector<HTMLElement>("input,button");
+    first?.focus();
     const outside = (e: Event) => {
       const t = e.target as Node;
-      if (!menu.current?.contains(t) && !button.current?.contains(t)) close(false);
+      if (!pop.current?.contains(t) && !button.current?.contains(t)) close(false);
     };
     const onScroll = (e: Event) => {
-      if (!menu.current?.contains(e.target as Node)) close(false);
+      if (!pop.current?.contains(e.target as Node)) close(false);
     };
     const onResize = () => close(false);
     document.addEventListener("pointerdown", outside);
@@ -144,12 +151,19 @@ export function FilterHeader({
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [at]);
 
-  function onMenuKey(e: React.KeyboardEvent) {
-    const items = [...(menu.current?.querySelectorAll<HTMLElement>("[role=menuitemradio]") ?? [])];
+  function onKey(e: React.KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close(true);
+      return;
+    }
+    if (role !== "menu") return;
+    const items = [...(pop.current?.querySelectorAll<HTMLElement>("[role=menuitemradio]") ?? [])];
     const i = items.indexOf(document.activeElement as HTMLElement);
-    if (e.key === "Escape" || e.key === "Tab") {
+    if (e.key === "Tab") {
       e.preventDefault();
       close(true);
     } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -162,11 +176,100 @@ export function FilterHeader({
     }
   }
 
-  const pick = (v: string | null) => {
-    onChange(v);
-    close(true);
-  };
-  const item = (v: string | null, text: string, icon?: ReactNode) => {
+  const title = active ? `${name[0].toUpperCase()}${name.slice(1)}: ${activeText}` : `Filter by ${name}`;
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup={role}
+        aria-expanded={at !== null}
+        aria-label={active ? `${title}. Change filter` : title}
+        title={title}
+        onClick={() => (at ? close(false) : open())}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !at) {
+            e.preventDefault();
+            open();
+          }
+        }}
+        className={`inline-flex items-center gap-1 rounded outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/70 ${
+          active ? "text-ink" : ""
+        } ${label ? "" : "p-0.5"}`}
+      >
+        {label}
+        <span className="relative">
+          <FilterIcon className={`h-4 w-4 ${active ? "text-primary-light" : "text-muted"}`} />
+          {active ? <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-primary-light" aria-hidden /> : null}
+        </span>
+      </button>
+      {at
+        ? createPortal(
+            <div
+              ref={pop}
+              role={role}
+              aria-label={`Filter by ${name}`}
+              onKeyDown={onKey}
+              className="menu-pop card fixed z-50 p-1.5 font-normal shadow-xl"
+              style={{ left: at.x, top: at.y, width }}
+            >
+              {children(close)}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+/** The label half of a heading that both sorts and filters. */
+function SortButton<K extends string>({ label, sortKey, sort, onSort }: { label: string; sortKey: K; sort: SortState<K>; onSort: (key: K) => void }) {
+  const active = sort.key === sortKey;
+  const Icon = !active ? SortIcon : sort.dir === "asc" ? ArrowUpIcon : ArrowDownIcon;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 rounded outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/70 ${active ? "text-ink" : ""}`}
+    >
+      {label}
+      <Icon className={`h-4 w-4 ${active ? "text-primary-light" : "text-muted"}`} />
+    </button>
+  );
+}
+
+interface Sortable<K extends string> {
+  sortKey: K;
+  sort: SortState<K>;
+  onSort: (key: K) => void;
+}
+
+/**
+ * Column heading that filters the table by one of its values. With `sort`,
+ * the label sorts and the funnel beside it filters; without, the whole
+ * heading opens the filter. `value` null means everything.
+ */
+export function FilterHeader<K extends string = string>({
+  label,
+  allLabel,
+  allIcon,
+  options,
+  value,
+  onChange,
+  sort,
+  className = "",
+}: {
+  label: string;
+  allLabel: string;
+  allIcon?: ReactNode;
+  options: FilterOption[];
+  value: string | null;
+  onChange: (v: string | null) => void;
+  sort?: Sortable<K>;
+  className?: string;
+}) {
+  const current = options.find((o) => o.value === value);
+  const item = (close: (refocus: boolean) => void, v: string | null, text: string, icon?: ReactNode) => {
     const on = value === v;
     return (
       <button
@@ -174,7 +277,10 @@ export function FilterHeader({
         type="button"
         role="menuitemradio"
         aria-checked={on}
-        onClick={() => pick(v)}
+        onClick={() => {
+          onChange(v);
+          close(true);
+        }}
         className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm outline-none transition-colors hover:bg-ink/[0.06] focus-visible:bg-ink/[0.08] ${
           on ? "font-semibold text-ink" : "text-ink/85"
         }`}
@@ -189,54 +295,118 @@ export function FilterHeader({
       </button>
     );
   };
-
+  const active = sort?.sort.key === sort?.sortKey;
   return (
-    <th scope="col" className={`px-3 py-3 text-left font-semibold ${className}`}>
-      <button
-        ref={button}
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={at !== null}
-        aria-label={active ? `${label}: ${current?.label ?? ""}. Change filter` : `Filter by ${label.toLowerCase()}`}
-        title={active ? `${label}: ${current?.label ?? ""}` : `Filter by ${label.toLowerCase()}`}
-        onClick={() => {
-          if (at) return close(false);
-          const r = button.current!.getBoundingClientRect();
-          setAt({ x: r.left, y: r.bottom + 4 });
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown" && !at) {
-            e.preventDefault();
-            const r = button.current!.getBoundingClientRect();
-            setAt({ x: r.left, y: r.bottom + 4 });
-          }
-        }}
-        className={`inline-flex items-center gap-1 rounded outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/70 ${
-          active ? "text-ink" : ""
-        }`}
-      >
-        {label}
-        <span className="relative">
-          <FilterIcon className={`h-4 w-4 ${active ? "text-primary-light" : "text-muted"}`} />
-          {active ? <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-primary-light" aria-hidden /> : null}
-        </span>
-      </button>
-      {at
-        ? createPortal(
-            <div
-              ref={menu}
-              role="menu"
-              aria-label={`Filter by ${label.toLowerCase()}`}
-              onKeyDown={onMenuKey}
-              className="menu-pop card fixed z-50 w-56 space-y-0.5 p-1.5 shadow-xl"
-              style={{ left: Math.min(at.x, window.innerWidth - 232), top: at.y }}
-            >
-              {item(null, allLabel, allIcon)}
-              {options.map((o) => item(o.value, o.label, o.icon))}
-            </div>,
-            document.body,
-          )
-        : null}
+    <th
+      scope="col"
+      aria-sort={sort ? (active ? (sort.sort.dir === "asc" ? "ascending" : "descending") : "none") : undefined}
+      className={`px-3 py-3 text-left font-semibold ${className}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {sort ? <SortButton label={label} {...sort} /> : null}
+        <FilterPopover name={label.toLowerCase()} label={sort ? undefined : label} active={value !== null} activeText={current?.label ?? ""} role="menu">
+          {(close) => (
+            <div className="max-h-72 space-y-0.5 overflow-y-auto">
+              {item(close, null, allLabel, allIcon)}
+              {options.map((o) => item(close, o.value, o.label, o.icon))}
+            </div>
+          )}
+        </FilterPopover>
+      </span>
+    </th>
+  );
+}
+
+export interface DateRange {
+  /** YYYY-MM-DD, inclusive; empty for open-ended. */
+  from: string;
+  to: string;
+}
+
+/** "12 Sep – 18 Sep", "From 12 Sep", "Until 18 Sep". */
+export function rangeLabel(r: DateRange): string {
+  const short = (iso: string) => tableDate(iso).split(" ").slice(0, 2).join(" ");
+  if (r.from && r.to) return r.from === r.to ? short(r.from) : `${short(r.from)} – ${short(r.to)}`;
+  return r.from ? `From ${short(r.from)}` : `Until ${short(r.to)}`;
+}
+
+function isoDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Date heading: the label sorts, the funnel opens a from/to range with quick picks. */
+export function DateRangeHeader<K extends string>({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  sort,
+  className = "",
+}: {
+  label: string;
+  value: DateRange | null;
+  onChange: (v: DateRange | null) => void;
+  /** Earliest and latest dates with data, to bound the pickers. */
+  min: string;
+  max: string;
+  sort: Sortable<K>;
+  className?: string;
+}) {
+  const active = sort.sort.key === sort.sortKey;
+  const set = (from: string, to: string) => {
+    // A backwards range is read the right way round.
+    const [a, b] = from && to && from > to ? [to, from] : [from, to];
+    onChange(a || b ? { from: a, to: b } : null);
+  };
+  const lastDays = (n: number) => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - (n - 1));
+    set(isoDay(start), isoDay(end));
+  };
+  const field = "input px-2 py-1.5 text-sm";
+  return (
+    <th
+      scope="col"
+      aria-sort={active ? (sort.sort.dir === "asc" ? "ascending" : "descending") : "none"}
+      className={`px-3 py-3 text-left font-semibold ${className}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        <SortButton label={label} {...sort} />
+        <FilterPopover name={label.toLowerCase()} active={value !== null} activeText={value ? rangeLabel(value) : ""} role="dialog" width={312}>
+          {(close) => (
+            <div className="space-y-3 p-1.5">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="space-y-1 text-xs text-muted">
+                  <span>From</span>
+                  <input type="date" className={field} min={min} max={value?.to || max} value={value?.from ?? ""} onChange={(e) => set(e.target.value, value?.to ?? "")} />
+                </label>
+                <label className="space-y-1 text-xs text-muted">
+                  <span>To</span>
+                  <input type="date" className={field} min={value?.from || min} max={max} value={value?.to ?? ""} onChange={(e) => set(value?.from ?? "", e.target.value)} />
+                </label>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <button type="button" className="chip-btn py-1 text-xs" onClick={() => lastDays(7)}>
+                  Last 7 days
+                </button>
+                <button type="button" className="chip-btn py-1 text-xs" onClick={() => lastDays(30)}>
+                  Last 30 days
+                </button>
+              </div>
+              <div className="flex justify-between gap-2 border-t border-ink/10 pt-2">
+                <button type="button" className="rounded px-2 py-1 text-sm text-muted outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/70 disabled:opacity-40" disabled={!value} onClick={() => onChange(null)}>
+                  Clear
+                </button>
+                <button type="button" className="btn-primary px-3 py-1 text-sm" onClick={() => close(true)}>
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+        </FilterPopover>
+      </span>
     </th>
   );
 }
