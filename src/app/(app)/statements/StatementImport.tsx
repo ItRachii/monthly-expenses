@@ -272,6 +272,10 @@ export function StatementImport({
       const res = await importStatementAction({
         ctx,
         summary: summaryInput && !summarySaved ? summaryInput : undefined,
+        card:
+          parsed?.card && parsed.period
+            ? { bank: parsed.bank, last4: parsed.card.last4, product: parsed.card.product, period: parsed.period }
+            : undefined,
         lineage: lineage ?? undefined,
         rows: selectedRows.map((r) => ({
           date: r.date,

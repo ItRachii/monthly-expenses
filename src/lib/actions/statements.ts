@@ -10,7 +10,8 @@ import { displayNameFor } from "@/lib/users";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { statementsEnabled } from "@/lib/features";
-import { saveCardStatement, validateSaveInput, type SaveStatementInput } from "@/lib/cards";
+import { BANK_LABEL, fileStatementShell, saveCardStatement, validateSaveInput, type SaveStatementInput } from "@/lib/cards";
+import type { Bank } from "@/lib/statements/types";
 import { recordPendingGst, saveLineage, validateLineage } from "@/lib/loans";
 import type { LineagePayload } from "@/lib/statements/lineage";
 
@@ -41,6 +42,11 @@ export async function importStatementAction(input: {
   rows: ImportRow[];
   /** The statement's summary, filed under the user's card in the same go. */
   summary?: SaveStatementInput;
+  /**
+   * Which card and month the rows come from, so they are listed under the
+   * statement even when the file carried no summary box (ICICI's CSV).
+   */
+  card?: { bank: Bank; last4: string; product: string | null; period: string };
   /** EMI instalments billed here, and GST charges traced to earlier ones. */
   lineage?: LineagePayload;
 }): Promise<{ ok: true; count: number; summarySaved: boolean } | { ok: false; error: string }> {
@@ -79,7 +85,23 @@ export async function importStatementAction(input: {
     rows.map((r) => r.category),
   );
 
-  const period = input.summary?.period ?? input.lineage?.instalments[0]?.period ?? null;
+  // The statement the rows belong to, filed first so each row can point at it.
+  let summarySaved = false;
+  let cardId: string | null = null;
+  let statementId: number | null = null;
+  if (input.summary && !validateSaveInput(input.summary)) {
+    ({ cardId, statementId } = await saveCardStatement(email, input.summary));
+    summarySaved = true;
+  } else if (input.card && /^\d{4}$/.test(input.card.last4) && /^\d{4}-\d{2}$/.test(input.card.period) && input.card.bank in BANK_LABEL) {
+    ({ cardId, statementId } = await fileStatementShell(email, {
+      bank: input.card.bank,
+      last4: input.card.last4,
+      product: typeof input.card.product === "string" ? input.card.product : null,
+      period: input.card.period,
+    }));
+  }
+
+  const period = input.summary?.period ?? input.card?.period ?? input.lineage?.instalments[0]?.period ?? null;
   for (let i = 0; i < rows.length; i++) {
     const created = await createExpense({
       date: rows[i].date,
@@ -91,6 +113,7 @@ export async function importStatementAction(input: {
       shares: null,
       ownerEmail,
       groupId,
+      statementId,
     });
     if (rows[i].untracedRefKey) {
       await recordPendingGst(email, {
@@ -117,12 +140,6 @@ export async function importStatementAction(input: {
     }
   }
 
-  let summarySaved = false;
-  let cardId: string | null = null;
-  if (input.summary && !validateSaveInput(input.summary)) {
-    cardId = (await saveCardStatement(email, input.summary)).cardId;
-    summarySaved = true;
-  }
   if (input.lineage && !validateLineage(input.lineage)) await saveLineage(email, cardId, input.lineage);
 
   revalidatePath("/", "layout");

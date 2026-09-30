@@ -98,6 +98,8 @@ export async function createExpense(data: {
   payers?: Shares | null;
   ownerEmail: string | null;
   groupId: string | null;
+  /** The card statement the row was imported from. */
+  statementId?: number | null;
 }): Promise<{ id: number }> {
   return prisma.expense.create({
     select: { id: true },
@@ -112,6 +114,7 @@ export async function createExpense(data: {
       payers: data.payers ?? Prisma.DbNull,
       ownerEmail: data.ownerEmail,
       groupId: data.groupId,
+      statementId: data.statementId ?? null,
     },
   });
 }

@@ -117,6 +117,8 @@ the statement summaries saved from the statement import.
 photo shown in place of member names; run it before deploying that code.
 `2026_09_expense_payers.sql` adds `expenses.payers`, what each person put in
 when several people paid for one expense; run it before deploying that code.
+`2026_09_expense_statement.sql` adds `expenses.statement_id`, the card
+statement an expense was imported from; run it before deploying that code.
 
 ## Google OAuth setup
 

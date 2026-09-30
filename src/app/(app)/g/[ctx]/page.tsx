@@ -12,6 +12,7 @@ import { buildGroupView, type GroupView } from "@/lib/groupView";
 import { getGroupSharesByMonth, getIncomeHistory } from "@/lib/income";
 import { monthKey } from "@/lib/format";
 import { listCards } from "@/lib/cards";
+import { listLoans } from "@/lib/loans";
 import { statementsEnabled } from "@/lib/features";
 import { savingsByMonth } from "@/lib/incomeMath";
 import type { FinanceData } from "@/components/PersonalFinance";
@@ -44,7 +45,7 @@ export default async function SpacePage({
     );
   }
 
-  const [rowsRaw, settlementsRaw, usedCategories, incomeData, , cards] = await Promise.all([
+  const [rowsRaw, settlementsRaw, usedCategories, incomeData, , cards, loans] = await Promise.all([
     getExpenses(r.context, "desc"),
     getSettlements(r.context),
     getUsedCategories(r.context),
@@ -56,6 +57,7 @@ export default async function SpacePage({
     r.isPersonal ? Promise.resolve() : touchGroupVisit(user.email, r.ctxValue),
     // Cards are filed under the user's account, so only Personal shows them.
     r.isPersonal && statementsEnabled() ? listCards(user.email) : Promise.resolve(null),
+    r.isPersonal && statementsEnabled() ? listLoans(user.email) : Promise.resolve([]),
   ]);
   // The income never reaches the browser: only whether it is set and what
   // was saved each month as a percent of it.
@@ -134,6 +136,7 @@ export default async function SpacePage({
       settings={settings}
       finance={finance}
       cards={cards}
+      loans={loans}
     />
   );
 }
