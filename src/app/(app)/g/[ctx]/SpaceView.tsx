@@ -17,6 +17,8 @@ import { ExpenseFeed } from "./ExpenseFeed";
 import { Settlement } from "../../settlement/Settlement";
 import { Summary } from "../../summary/Summary";
 import { PeopleProvider } from "@/components/Person";
+import type { CardView } from "@/lib/cards";
+import { CardStatements } from "./CardStatements";
 
 interface Member {
   key: string;
@@ -27,7 +29,7 @@ interface Opt {
   label: string;
 }
 
-export type SpaceTab = "expenses" | "balances" | "summary";
+export type SpaceTab = "expenses" | "statements" | "balances" | "summary";
 
 // One screen per group (or Personal) — Splitwise-style hero with the overall
 // balance, then Expenses / Balances / Summary as tabs.
@@ -50,6 +52,7 @@ export function SpaceView({
   selfKey,
   settings,
   finance,
+  cards,
 }: {
   ctx: string;
   name: string;
@@ -73,10 +76,13 @@ export function SpaceView({
   settings: GroupView | null;
   /** Income and group shares for savings; Personal only. */
   finance: FinanceData | null;
+  /** Saved card statements; Personal only, null when the feature is off. */
+  cards: CardView[] | null;
 }) {
   const tabs: { id: SpaceTab; label: string }[] = isPersonal
     ? [
         { id: "expenses", label: "Expenses" },
+        ...(cards ? [{ id: "statements" as const, label: "Statements" }] : []),
         { id: "summary", label: "Summary" },
       ]
     : [
@@ -165,6 +171,8 @@ export function SpaceView({
             memberCount={memberCount}
           />
         ) : null}
+
+        {tab === "statements" && cards ? <CardStatements cards={cards} /> : null}
 
         {tab === "balances" && !isPersonal ? (
           <Settlement
