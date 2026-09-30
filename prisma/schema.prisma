@@ -44,10 +44,16 @@ model Expense {
   // { userId: rupees }, adding up to the amount. Null for a single payer.
   payers Json?
 
+  // The card statement this expense was imported from, so the Statements
+  // tab can list it under the statement. Null for hand-entered expenses.
+  statementId Int?           @map("statement_id")
+  statement   CardStatement? @relation(fields: [statementId], references: [id], onDelete: SetNull)
+
   // GST charges imported before the instalment they tax was on record.
   gstPending GstPending[]
 
   @@index([receiptId], map: "expenses_receipt_idx")
+  @@index([statementId], map: "expenses_statement_idx")
   @@map("expenses")
 }
 
@@ -265,6 +271,7 @@ model CardStatement {
   emiTotal           Float?    @map("emi_total")
   importedAt         DateTime  @default(now()) @map("imported_at") @db.Timestamptz(6)
   card               Card      @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  expenses           Expense[]
 
   @@unique([cardId, period], map: "card_statements_card_period_key")
   @@map("card_statements")

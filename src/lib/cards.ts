@@ -12,6 +12,17 @@ export const BANK_LABEL: Record<Bank, string> = {
   unknown: "Card",
 };
 
+/** An expense imported from a statement, and where it was filed. */
+export interface StatementExpenseView {
+  id: number;
+  date: string;
+  item: string;
+  category: string;
+  amount: number;
+  /** The group it was added to, or null for Personal. */
+  group: { id: string; name: string } | null;
+}
+
 export interface CardStatementView {
   id: number;
   period: string;
@@ -29,6 +40,9 @@ export interface CardStatementView {
   domesticTotal: number | null;
   internationalTotal: number | null;
   emiTotal: number | null;
+  /** True when the statement carried no summary box (ICICI's CSV export). */
+  figuresMissing: boolean;
+  expenses: StatementExpenseView[];
 }
 
 export interface CardView {
@@ -62,7 +76,17 @@ export async function listCards(ownerEmail: string): Promise<CardView[]> {
   const cards = await prisma.card.findMany({
     where: { ownerEmail },
     orderBy: [{ bank: "asc" }, { last4: "asc" }],
-    include: { statements: { orderBy: { period: "desc" } } },
+    include: {
+      statements: {
+        orderBy: { period: "desc" },
+        include: {
+          expenses: {
+            orderBy: [{ date: "desc" }, { id: "desc" }],
+            select: { id: true, date: true, item: true, category: true, amount: true, group: { select: { id: true, name: true } } },
+          },
+        },
+      },
+    },
   });
   return cards.map((c) => ({
     id: c.id,
@@ -86,12 +110,45 @@ export async function listCards(ownerEmail: string): Promise<CardView[]> {
       domesticTotal: s.domesticTotal,
       internationalTotal: s.internationalTotal,
       emiTotal: s.emiTotal,
+      figuresMissing: s.totalDue === null && s.purchases === null && s.creditLimit === null && s.dueDate === null,
+      expenses: s.expenses.map((e) => ({
+        id: e.id,
+        date: formatDate(e.date),
+        item: e.item,
+        category: e.category,
+        amount: e.amount,
+        group: e.group,
+      })),
     })),
   }));
 }
 
+/**
+ * The card and statement an import belongs to, created without figures
+ * when the file had no summary box (ICICI's CSV), so its expenses still
+ * have a statement to sit under. A later summary save fills the figures in.
+ */
+export async function fileStatementShell(
+  ownerEmail: string,
+  input: { bank: Bank; last4: string; product: string | null; period: string },
+): Promise<{ cardId: string; statementId: number }> {
+  const product = input.product ? input.product.slice(0, 40) : null;
+  const card = await prisma.card.upsert({
+    where: { ownerEmail_bank_last4: { ownerEmail, bank: input.bank, last4: input.last4 } },
+    create: { ownerEmail, bank: input.bank, last4: input.last4, product },
+    update: product ? { product } : {},
+  });
+  const statement = await prisma.cardStatement.upsert({
+    where: { cardId_period: { cardId: card.id, period: input.period } },
+    create: { cardId: card.id, period: input.period },
+    update: {},
+    select: { id: true },
+  });
+  return { cardId: card.id, statementId: statement.id };
+}
+
 /** Files one statement's summary under its card, replacing the same month. */
-export async function saveCardStatement(ownerEmail: string, input: SaveStatementInput): Promise<{ cardId: string }> {
+export async function saveCardStatement(ownerEmail: string, input: SaveStatementInput): Promise<{ cardId: string; statementId: number }> {
   const product = input.product ? input.product.slice(0, 40) : null;
   const card = await prisma.card.upsert({
     where: { ownerEmail_bank_last4: { ownerEmail, bank: input.bank, last4: input.last4 } },
@@ -116,12 +173,13 @@ export async function saveCardStatement(ownerEmail: string, input: SaveStatement
     emiTotal: num(input.totals.emi),
     importedAt: new Date(),
   };
-  await prisma.cardStatement.upsert({
+  const statement = await prisma.cardStatement.upsert({
     where: { cardId_period: { cardId: card.id, period: input.period } },
     create: { cardId: card.id, period: input.period, ...data },
     update: data,
+    select: { id: true },
   });
-  return { cardId: card.id };
+  return { cardId: card.id, statementId: statement.id };
 }
 
 export async function deleteCard(ownerEmail: string, id: string): Promise<void> {

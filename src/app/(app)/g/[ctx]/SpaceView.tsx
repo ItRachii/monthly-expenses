@@ -18,6 +18,7 @@ import { Settlement } from "../../settlement/Settlement";
 import { Summary } from "../../summary/Summary";
 import { PeopleProvider } from "@/components/Person";
 import type { CardView } from "@/lib/cards";
+import type { LoanView } from "@/lib/loans";
 import { CardStatements } from "./CardStatements";
 
 interface Member {
@@ -53,6 +54,7 @@ export function SpaceView({
   settings,
   finance,
   cards,
+  loans,
 }: {
   ctx: string;
   name: string;
@@ -78,6 +80,8 @@ export function SpaceView({
   finance: FinanceData | null;
   /** Saved card statements; Personal only, null when the feature is off. */
   cards: CardView[] | null;
+  /** EMIs on record; Personal only. */
+  loans: LoanView[];
 }) {
   const tabs: { id: SpaceTab; label: string }[] = isPersonal
     ? [
@@ -172,7 +176,7 @@ export function SpaceView({
           />
         ) : null}
 
-        {tab === "statements" && cards ? <CardStatements cards={cards} /> : null}
+        {tab === "statements" && cards ? <CardStatements cards={cards} loans={loans} /> : null}
 
         {tab === "balances" && !isPersonal ? (
           <Settlement
