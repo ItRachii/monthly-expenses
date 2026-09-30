@@ -176,27 +176,38 @@ export function sectionOf(line: string): Section | null {
   return null;
 }
 
+/**
+ * Which bank issued the statement: the one named first in its own text,
+ * masthead before footer. Transaction lines are skipped, since a bill paid
+ * by NEFT from an HDFC account names HDFC on an ICICI card's statement.
+ */
 export function detectBank(lines: string[]): Bank {
-  const head = lines.slice(0, 80).join(" ");
-  if (/\bHDFC\b/i.test(head)) return "hdfc";
-  if (/\bICICI\b/i.test(head)) return "icici";
-  const all = lines.join(" ");
-  if (/\bHDFC\b/i.test(all)) return "hdfc";
-  if (/\bICICI\b/i.test(all)) return "icici";
+  const own = lines.filter((l) => !isDateLed(l));
+  const at = (re: RegExp, pool: string[]) => {
+    const i = pool.findIndex((l) => re.test(l));
+    return i < 0 ? Number.POSITIVE_INFINITY : i;
+  };
+  for (const pool of [own.slice(0, 80), own]) {
+    const h = at(/\bHDFC\b/i, pool);
+    const c = at(/\bICICI\b/i, pool);
+    if (h === Number.POSITIVE_INFINITY && c === Number.POSITIVE_INFINITY) continue;
+    return h <= c ? "hdfc" : "icici";
+  }
   return "unknown";
 }
 
 const GST_RE = /\b(?:i|c|s|ut)?gst\b/i;
 const MARKUP_RE = /mark[ -]?u ?p\b|forex|\bfx\b|\bfcy\b|cross[ -]?currency|currency conv|\bdcc\b|intl\.? ?(?:txn|transaction)? ?fee|international (?:txn|transaction) fee/i;
 const FEE_RE = /\bfees?\b|\bcharges?\b|surcharge|late payment|over ?limit|finance charge|interest charge|annual membership|joining/i;
-const EMI_RE = /\bemi\b|instal?lment/i;
+// ICICI's CSV: "Interest Amount Amortization - <3/9>Avenue Supermarts Ltd".
+const EMI_RE = /\bemi\b|instal?lment|amorti[sz]ation/i;
 // "EMI PRINCIPAL AMT", "OFFUS EMI,PRIN NB:02", "EMI INTEREST", "EMI,INT NBR:02"
 const PRINCIPAL_RE = /\bprin(?:cipal)?\b/i;
 const INTEREST_RE = /\bint(?:erest)?\b/i;
 
 const MERCHANTS: [RegExp, string][] = [
   [/swiggy|zomato|domino|pizza|mcdonald|kfc|burger|starbucks|cafe|coffee|restaurant|eatsure|barbeque|biryani|dine/i, "Dining Out"],
-  [/bigbasket|blinkit|zepto|instamart|dmart|d-mart|grofers|reliance fresh|more retail|kirana|supermarket|grocer/i, "Groceries"],
+  [/bigbasket|blinkit|zepto|instamart|dmart|d-mart|avenue supermarts|grofers|reliance fresh|more retail|kirana|supermarket|grocer/i, "Groceries"],
   [/amazon|flipkart|myntra|ajio|meesho|nykaa|croma|reliance digital|decathlon|ikea|tata cliq|shoppers stop|lifestyle|zara|h&m|uniqlo/i, "Shopping"],
   [/netflix|spotify|hotstar|prime video|youtube|apple\.com|apple bill|google \*|google play|openai|chatgpt|anthropic|claude|microsoft|adobe|notion|github|jio ?cinema|sony ?liv|zee5|canva|dropbox|icloud|kindle/i, "Subscriptions"],
   [/irctc|indigo|air india|vistara|akasa|spicejet|makemytrip|goibibo|redbus|\boyo\b|airbnb|booking\.com|agoda|hotel|yatra|cleartrip|ixigo|emirates|lufthansa|resort/i, "Travel"],
@@ -204,7 +215,7 @@ const MERCHANTS: [RegExp, string][] = [
   [/pharm|apollo|medplus|1mg|netmeds|hospital|clinic|diagnostic|practo|dental|lab\b/i, "Healthcare"],
   [/electricity|bescom|tata power|adani|bses|msedcl|airtel|\bjio\b|vodafone|\bvi\b|bsnl|act fibernet|broadband|indane|\bgas\b|water|tneb|kseb/i, "Utilities"],
   [/\bpvr\b|inox|bookmyshow|cinepolis|gaming|steam|playstation|xbox|nintendo|cinema/i, "Entertainment"],
-  [/cult\.?fit|gym|fitness|salon|spa\b|yoga|wellness/i, "Wellness"],
+  [/cult\.?fit|cure ?fit|gym|fitness|salon|spa\b|yoga|wellness/i, "Wellness"],
   [/\brent\b|nobroker|housing|maintenance|society/i, "Housing"],
 ];
 
@@ -245,12 +256,26 @@ function ratioClose(a: number, b: number, tolerance: number): boolean {
   return Math.abs(a - b) / b <= tolerance;
 }
 
+/**
+ * An EMI line's description without its part words, so the row is named
+ * after the loan: "Interest Amount Amortization - <3/9>Avenue Supermarts
+ * Ltd" becomes "Avenue Supermarts Ltd". HDFC's "OFFUS EMI,PRIN NB:02" has
+ * no merchant to keep and is left alone.
+ */
+function emiTitle(description: string): string {
+  const t = description
+    .replace(/^(?:principal|interest)\s+(?:amount\s+)?amorti[sz]ation\s*[-:]?\s*/i, "")
+    .replace(/<\s*\d{1,2}\s*\/\s*\d{1,3}\s*>\s*/g, "")
+    .trim();
+  return t || description;
+}
+
 function newRow(line: Line, kind: RowKind, part: RowPart): StatementRow {
   return {
     id: `${line.page}-${line.index}`,
     kind,
     date: line.date,
-    description: cleanDescription(line.description),
+    description: cleanDescription(kind === "emi" ? emiTitle(line.description) : line.description),
     total: 0,
     credit: line.credit,
     parts: [part],
@@ -546,7 +571,12 @@ export function assembleStatement(a: AssembleInput): ParsedStatement {
       warnings.push(`The statement's GST summary says ${formatINR(gstBilled)} of GST was billed, but the GST lines read add up to ${formatINR(read)}. A line may have been missed.`);
   }
   redactedLines.push(`## card: ${identity ? `last4 from ${identity.source}${identity.product ? `, ${identity.product}` : ""}` : "not found"}`);
-  if (!summary) warnings.push("No summary figures (dues, limits, due date) were found, so nothing can be saved for the card.");
+  if (!summary)
+    warnings.push(
+      bank === "icici"
+        ? "No summary figures (dues, limits, due date) were found, so nothing can be saved for the card. ICICI's CSV export leaves them out; the PDF statement has them."
+        : "No summary figures (dues, limits, due date) were found, so nothing can be saved for the card.",
+    );
   if (!card) warnings.push("No card number found, so the summary cannot be filed under a card.");
   if (rows.length === 0) warnings.push("No transactions were found. The statement may be a scanned image or an unsupported layout.");
   if (unparsed.length > 0) warnings.push(`${unparsed.length} line(s) looked like transactions but could not be read.`);
@@ -682,8 +712,10 @@ function commonMonth(rows: StatementRow[]): string | null {
     const k = r.date.slice(0, 7);
     counts.set(k, (counts.get(k) ?? 0) + 1);
   }
+  // A tie goes to the later month: a statement is dated after its last
+  // transaction, so a cycle spanning two months belongs to the second.
   let best: string | null = null;
   let n = 0;
-  for (const [k, c] of counts) if (c > n) [best, n] = [k, c];
+  for (const [k, c] of counts) if (c > n || (c === n && best !== null && k > best)) [best, n] = [k, c];
   return best;
 }

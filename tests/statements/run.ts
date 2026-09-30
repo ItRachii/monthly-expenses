@@ -8,7 +8,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { itemsToPage, type PageText, type PositionedText } from "../../src/lib/statements/lines";
-import { parseStatement } from "../../src/lib/statements/parse";
+import { detectBank, parseStatement } from "../../src/lib/statements/parse";
 import { amountCell, parseCsv, parseSheet, type Grid } from "../../src/lib/statements/sheet";
 import { readXlsx } from "../../src/lib/statements/xlsx";
 import { applyKeys, canonicalDigits, gstLineageName, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
@@ -37,11 +37,12 @@ async function pagesOf(path: string, password?: string): Promise<PageText[]> {
   }
 }
 
-const PII = ["AWASTHI", "RACHIT", "9876543210", "98765 43210", "@", "ABCDE1234F", "4695", "4375", "Indiranagar", "Sunrise", "50100234567890", "1092130725", "1092555312"];
+const PII = ["AWASTHI", "RACHIT", "9876543210", "98765 43210", "@", "ABCDE1234F", "4695", "4375", "Indiranagar", "Sunrise", "50100234567890", "1092130725", "1092555312", "ANANYA", "VERMA", "Rose Villa", "98765432", "15031444601", "15040937902"];
 
 function piiScan(label: string, parsed: ReturnType<typeof parseStatement>) {
   const blob = [...parsed.redactedLines, ...parsed.rows.map((r) => r.description), ...parsed.unparsed.map((u) => u.text)].join("\n");
-  const hits = PII.filter((p) => blob.includes(p));
+  // "@" stands for any email address; ICICI's "IGST-CI@18%" is not one.
+  const hits = PII.filter((p) => (p === "@" ? /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(blob) : blob.includes(p)));
   check(`${label}: no PII in parser output`, hits.length === 0, hits.join(","));
 }
 
@@ -383,6 +384,39 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("xlsx: the loan keys the same as in the August PDF", xEmi.loan?.key === augPayload.instalments[0].loanKey, JSON.stringify([xEmi.loan?.key, augPayload.instalments[0].loanKey]));
 
   // Other layouts: generic CSV exports.
+  // Which bank: the statement's own text names it; a payment from the other
+  // bank on a transaction line must not flip it.
+  console.log("\n== bank ==");
+  check("bank: masthead wins over a transaction naming the other bank", detectBank(["ICICI Bank Credit Card Statement", "23/08/2026 NEFT FROM HDFC BANK 10000.00 Cr"]) === "icici");
+  check("bank: HDFC statement paying via ICICI stays HDFC", detectBank(["HDFC Bank Credit Card Statement", "04/09/2026 NEFT ICICI BANK 5000.00 Cr", "Registered Office: HDFC Bank"]) === "hdfc");
+  check("bank: first named wins when both appear in the header", detectBank(["Statement", "ICICI Bank Ltd", "Payments to HDFC Bank are not accepted"]) === "icici");
+  check("bank: nothing named is unknown", detectBank(["Statement", "23/08/2026 SWIGGY 350.00"]) === "unknown");
+
+  // ICICI's CSV export: no bank name, no summary box, a "BillingAmountSign"
+  // column, the masked card number as a row of its own under the header,
+  // EMIs as "Interest/Principal Amount Amortization - <3/9>Merchant" lines
+  // with an "IGST-CI@18%" between them, and an unnumbered EMI Details table.
+  console.log("\n== ICICI csv ==");
+  const ic = parseSheet([parseCsv(readFileSync(`${dir}/icici-export.csv`, "utf8"))], { filename: "CreditCardStatement.CSV" });
+  ic.rows.forEach((r) => console.log(fmt(r)));
+  console.log("warnings:", ic.warnings, "| unparsed:", ic.unparsed);
+  check("icici csv: bank told from the column names", ic.bank === "icici" && !ic.warnings.some((w) => /could not tell/i.test(w)), ic.bank);
+  check("icici csv: card from the lone masked-number row", ic.card?.last4 === "1122", JSON.stringify(ic.card));
+  check("icici csv: 8 rows, none unparsed", ic.rows.length === 8 && ic.unparsed.length === 0, `${ic.rows.length} / ${JSON.stringify(ic.unparsed)}`);
+  check("icici csv: the BillingAmountSign column marks payments as credits", ic.rows.filter((r) => r.credit).map((r) => r.total).join(",") === "10000,14831.84", JSON.stringify(ic.rows.filter((r) => r.credit).map((r) => [r.description, r.total])));
+  const icEmi = ic.rows.filter((r) => r.kind === "emi");
+  check("icici csv: three EMI rows, each interest + GST + principal", icEmi.length === 3 && icEmi.every((r) => r.parts.map((p) => p.kind).join(",") === "interest,gst,principal"), JSON.stringify(icEmi.map((r) => r.parts.map((p) => p.kind))));
+  check("icici csv: EMI totals and instalments", icEmi.map((r) => `${r.total} ${r.installment}`).join(" | ") === "1452.9 3 of 9 | 357.31 3 of 9 | 1487.93 2 of 12", icEmi.map((r) => `${r.total} ${r.installment}`).join(" | "));
+  check("icici csv: EMI rows named after the merchant", icEmi.map((r) => r.description).join(" | ") === "Avenue Supermarts Ltd | AMAZONIN | CURE FIT HEALTHCARE", icEmi.map((r) => r.description).join(" | "));
+  check("icici csv: EMI merchants categorised (DMart, Cure.fit)", icEmi[0].category === "Groceries" && icEmi[2].category === "Wellness", icEmi.map((r) => r.category).join(","));
+  check("icici csv: no lone GST rows", !ic.rows.some((r) => r.parts.length === 1 && r.parts[0].kind === "gst"));
+  check("icici csv: period from the rows when there is no statement date", ic.period === "2026-09" && ic.statementDate === null, `${ic.period} ${ic.statementDate}`);
+  check("icici csv: no summary box, and it says so once", ic.summary === null && ic.warnings.length === 1 && /no summary/i.test(ic.warnings[0]), JSON.stringify(ic.warnings));
+  check("icici csv: three unnumbered loans from EMI Details", ic.loans.length === 3 && ic.loans.every((l) => l.last4 === null && l.type === "EMI on Call"), JSON.stringify(ic.loans));
+  check("icici csv: first loan: booked 24 Jun, 11934.40 over 9, 6 left, 8564.83 outstanding", JSON.stringify([ic.loans[0]?.bookedOn, ic.loans[0]?.amount, ic.loans[0]?.tenureMonths, ic.loans[0]?.remainingMonths, ic.loans[0]?.principalOutstanding]) === JSON.stringify(["2026-06-24", 11934.4, 9, 6, 8564.83]), JSON.stringify(ic.loans[0]));
+  piiScan("icici csv", ic);
+  check("icici csv: account number and serials never enter the output", !JSON.stringify(ic).includes("98765432") && !JSON.stringify(ic).includes("1503144"), "");
+
   const g1 = parseSheet([parseCsv("Date,Transaction Details,Amount (in Rs.),Reference Number\r\n12/07/2026,AMAZON PAY INDIA,\"1,234.00\",10921307256\r\n20/07/2026,PAYMENT RECEIVED,\"25,000.00 Cr\",10925553129\r\n")]);
   check("csv: generic header, Cr suffix, reference column never read", g1.rows.length === 2 && g1.rows[0].total === 1234 && g1.rows[1].credit && !g1.redactedLines.join(" ").includes("1092"), JSON.stringify(g1.redactedLines));
   const g2 = parseSheet([parseCsv("Txn Date;Narration;Debit;Credit\n14/07/2026;OPENAI *CHATGPT SUBSCR;1760.30;\n15/07/2026;REFUND FLIPKART;;499.00\n")]);
