@@ -382,6 +382,7 @@ export function StatementImport({
               <div className="min-w-0">
                 <h2 className="section-title">
                   {BANK_LABEL[parsed.bank]}
+                  {parsed.card ? ` •••• ${parsed.card.last4}` : ""}
                   {parsed.period ? <span className="font-normal text-muted"> · {monthLabel(parsed.period)}</span> : null}
                 </h2>
                 <p className="truncate text-sm text-muted">{file?.name}</p>

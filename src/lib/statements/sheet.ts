@@ -149,7 +149,8 @@ type Field = "ignore" | "drcr" | "debit" | "credit" | "type" | "foreign" | "date
 // First match wins, so the specific names come before the general ones.
 const HEADERS: [Field, RegExp][] = [
   ["ignore", /name|customer|card ?holder|reward|points|serial|sr\.? ?no|^ref(erence)?\.?\s*(no\.?|number|#)?$/i],
-  ["drcr", /^(debit|dr)\.?\s*\/\s*(credit|cr)\.?$|^(credit|cr)\.?\s*\/\s*(debit|dr)\.?$|^dr\.?\s*cr\.?$/i],
+  // "Debit / Credit", "Dr Cr", or ICICI's "BillingAmountSign" ("CR", else blank).
+  ["drcr", /^(debit|dr)\.?\s*\/\s*(credit|cr)\.?$|^(credit|cr)\.?\s*\/\s*(debit|dr)\.?$|^dr\.?\s*cr\.?$|sign$/i],
   ["debit", /^debit(\s+amount)?(\s*\(.*\))?$|^withdrawals?(\s+amt\.?)?$/i],
   ["credit", /^credit(\s+amount)?(\s*\(.*\))?$|^deposits?(\s+amt\.?)?$/i],
   ["type", /^(transaction|txn)\.?\s+type$|^type$/i],
@@ -164,6 +165,9 @@ interface Column {
   from: number;
   to: number;
 }
+
+// "4035XXXXXXXX9008", "XXXX XXXX XXXX 9008", "4035 XXXX XXXX 9008": nothing else in the cell.
+const CARD_CELL = /^(?:\d{4,6}[Xx*]{6,8}\d{4}|(?:[Xx*]{4}[ -]?){1,3}\d{4}|\d{4}[ -](?:[Xx*]{4}[ -]){2}\d{4})$/;
 
 function fieldOf(t: string): Field | null {
   for (const [f, re] of HEADERS) if (re.test(t)) return f;
@@ -185,26 +189,32 @@ function transactionHeader(cells: Cell[]): Column[] | null {
 
 type LoanField = "type" | "number" | "booked" | "principalLeft" | "interestLeft" | "remaining" | "amount" | "tenure" | "rate";
 
+// HDFC's "Loan Summary" names each loan; ICICI's "EMI Details" does not
+// ("Transaction/LoanType, Creation Date, Finish Date, No. of Installments,
+// EMI/Loan Amount, Pending Installments, Outstanding Amount*, Monthly
+// Installment Amount"), so a loan number column is optional.
 const LOAN_HEADERS: [LoanField, RegExp][] = [
   ["number", /loan\s*(number|no\.?|a\/?c|account)/i],
   ["type", /loan\s*type|type\s*of\s*loan|product/i],
-  ["booked", /booked|booking|start|disburs/i],
-  ["principalLeft", /(balance|outstanding).*principal|principal.*(outstanding|balance)/i],
+  ["booked", /booked|booking|start|disburs|creat/i],
+  ["principalLeft", /(balance|outstanding).*principal|principal.*(outstanding|balance)|^outstanding\s*(amount|balance)/i],
   ["interestLeft", /(balance|outstanding).*interest|interest.*(payable|outstanding)/i],
-  ["remaining", /balance\s*tenure|remaining|months?\s*left/i],
+  ["remaining", /balance\s*tenure|remaining|months?\s*left|pending\s*instal/i],
   ["rate", /rate|\broi\b/i],
   ["amount", /loan\s*amount|principal\s*amount|^amount$/i],
-  ["tenure", /tenure/i],
+  ["tenure", /tenure|no\.?\s*of\s*instal/i],
 ];
 
 function loanHeader(cells: Cell[]): { field: LoanField; from: number; to: number }[] | null {
-  if (!cells.some((x) => LOAN_HEADERS[0][1].test(x.t))) return null;
   const cols: { field: LoanField; from: number; to: number }[] = [];
   cells.forEach((x, i) => {
     const f = LOAN_HEADERS.find(([, re]) => re.test(x.t))?.[0];
     if (f) cols.push({ field: f, from: x.c, to: cells[i + 1]?.c ?? Number.POSITIVE_INFINITY });
   });
-  return cols.length >= 3 ? cols : null;
+  const has = (f: LoanField) => cols.some((c) => c.field === f);
+  if (cols.length < 3) return null;
+  if (has("number")) return cols;
+  return has("type") && has("amount") && (has("tenure") || has("remaining")) ? cols : null;
 }
 
 function intOf(t: string): number | null {
@@ -219,11 +229,13 @@ function loanRow(cells: Cell[], cols: { field: LoanField; from: number; to: numb
   };
   const number = get("number");
   const digits = number ? cellText(number.v).replace(/\D/g, "") : "";
-  if (digits.length < 4) return null;
   const amt = (f: LoanField) => {
     const c = get(f);
     return c ? amountCell(c.v)?.amount ?? null : null;
   };
+  // A numbered table needs the number; an unnumbered one needs the amount,
+  // so a footnote row under the table is not read as a loan.
+  if (cols.some((c) => c.field === "number") ? digits.length < 4 : amt("amount") === null) return null;
   const rate = get("rate");
   const tenure = get("tenure");
   const remaining = get("remaining");
@@ -231,7 +243,7 @@ function loanRow(cells: Cell[], cols: { field: LoanField; from: number; to: numb
   return {
     type: get("type")?.t ?? null,
     // The last four digits only: the loan number itself is never kept.
-    last4: digits.slice(-4),
+    last4: digits.length >= 4 ? digits.slice(-4) : null,
     bookedOn: booked ? dateOf(booked.v) : null,
     amount: amt("amount"),
     tenureMonths: tenure ? intOf(tenure.t) : null,
@@ -325,6 +337,8 @@ export function parseSheet(grids: Grid[], opts: { filename?: string } = {}): Par
   let gstBilled: number | null = null;
   let sectioned = false;
   let index = 0;
+  // ICICI's CSV export never names the bank; its column names do.
+  let iciciColumns = false;
 
   const summary: StatementSummary = {
     previousDues: null,
@@ -368,6 +382,7 @@ export function parseSheet(grids: Grid[], opts: { filename?: string } = {}): Par
       if (header) {
         table = header;
         loanCols = null;
+        if (cells.some((x) => /billing\s*amount\s*sign|reward\s*point\s*header/i.test(x.t))) iciciColumns = true;
         continue;
       }
       const lh = loanHeader(cells);
@@ -378,6 +393,12 @@ export function parseSheet(grids: Grid[], opts: { filename?: string } = {}): Par
         continue;
       }
 
+      // A lone masked card number (ICICI prints it as a row of its own under
+      // the table header) names the card and does not end the table.
+      if (cells.length === 1 && CARD_CELL.test(cells[0].t)) {
+        cardCells.push(cells[0].t);
+        continue;
+      }
       // A lone cell is a title: a section of the transaction table, or the
       // start of another block, which ends the table.
       if (cells.length === 1) {
@@ -492,6 +513,7 @@ export function parseSheet(grids: Grid[], opts: { filename?: string } = {}): Par
   let bank = detectBank(bankText);
   // HDFC names its downloads "Sep2026_BilledStatements_7043_….xlsx".
   if (bank === "unknown" && /billedstatements/i.test(opts.filename ?? "")) bank = "hdfc";
+  if (bank === "unknown" && iciciColumns) bank = "icici";
   const any = Object.values(summary).some((v) => v !== null);
   return assembleStatement({
     bank,
