@@ -11,6 +11,8 @@ import { getUserGroups, touchGroupVisit } from "@/lib/groups";
 import { buildGroupView, type GroupView } from "@/lib/groupView";
 import { getGroupSharesByMonth, getIncomeHistory } from "@/lib/income";
 import { monthKey } from "@/lib/format";
+import { listCards } from "@/lib/cards";
+import { statementsEnabled } from "@/lib/features";
 import { savingsByMonth } from "@/lib/incomeMath";
 import type { FinanceData } from "@/components/PersonalFinance";
 import { SpaceView, type SpaceTab } from "./SpaceView";
@@ -42,7 +44,7 @@ export default async function SpacePage({
     );
   }
 
-  const [rowsRaw, settlementsRaw, usedCategories, incomeData] = await Promise.all([
+  const [rowsRaw, settlementsRaw, usedCategories, incomeData, , cards] = await Promise.all([
     getExpenses(r.context, "desc"),
     getSettlements(r.context),
     getUsedCategories(r.context),
@@ -52,6 +54,8 @@ export default async function SpacePage({
       : Promise.resolve(null),
     // Feeds the sidebar's recent groups.
     r.isPersonal ? Promise.resolve() : touchGroupVisit(user.email, r.ctxValue),
+    // Cards are filed under the user's account, so only Personal shows them.
+    r.isPersonal && statementsEnabled() ? listCards(user.email) : Promise.resolve(null),
   ]);
   // The income never reaches the browser: only whether it is set and what
   // was saved each month as a percent of it.
@@ -105,7 +109,7 @@ export default async function SpacePage({
     ? "me"
     : r.wire.members.find((m) => m.isSelf)?.key ?? "";
   const tabParam = typeof sp.tab === "string" ? sp.tab : "expenses";
-  const initialTab = (["expenses", "balances", "summary"].includes(tabParam)
+  const initialTab = (["expenses", "statements", "balances", "summary"].includes(tabParam)
     ? tabParam
     : "expenses") as SpaceTab;
 
@@ -129,6 +133,7 @@ export default async function SpacePage({
       selfKey={selfKey}
       settings={settings}
       finance={finance}
+      cards={cards}
     />
   );
 }

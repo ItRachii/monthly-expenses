@@ -67,3 +67,4 @@ export const DownloadIcon = icon("download");
 export const CalendarIcon = icon("calendar_month");
 export const FilterIcon = icon("filter_list");
 export const PeopleIcon = icon("group");
+export const CreditCardIcon = icon("credit_card");
