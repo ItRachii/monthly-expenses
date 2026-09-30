@@ -30,11 +30,13 @@ function sheet(wb: ExcelJS.Workbook, name: string, header: string[], rows: (stri
   ws.views = [{ state: "frozen", ySplit: 1 }];
 }
 
-export async function buildCardWorkbook(ownerEmail: string, cardId: string): Promise<{ buffer: Buffer; name: string } | null> {
+/** The whole card, or with `period` (YYYY-MM) just that statement. */
+export async function buildCardWorkbook(ownerEmail: string, cardId: string, period?: string): Promise<{ buffer: Buffer; name: string } | null> {
   const card = await prisma.card.findFirst({
     where: { id: cardId, ownerEmail },
     include: {
       statements: {
+        where: period ? { period } : undefined,
         orderBy: { period: "desc" },
         include: {
           expenses: {
@@ -43,10 +45,10 @@ export async function buildCardWorkbook(ownerEmail: string, cardId: string): Pro
           },
         },
       },
-      instalments: { orderBy: [{ loanKey: "asc" }, { date: "asc" }] },
+      instalments: { where: period ? { period } : undefined, orderBy: [{ loanKey: "asc" }, { date: "asc" }] },
     },
   });
-  if (!card) return null;
+  if (!card || (period && card.statements.length === 0)) return null;
   const bank = BANK_LABEL[card.bank as Bank] ?? card.bank;
   const d = (x: Date | null) => (x ? formatDate(x) : null);
 
@@ -104,5 +106,5 @@ export async function buildCardWorkbook(ownerEmail: string, cardId: string): Pro
 
   const buffer = Buffer.from(await wb.xlsx.writeBuffer());
   const name = `${bank}-${card.last4}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-  return { buffer, name: `${name}_card-history.xlsx` };
+  return { buffer, name: period ? `${name}_${period}_statement.xlsx` : `${name}_card-history.xlsx` };
 }

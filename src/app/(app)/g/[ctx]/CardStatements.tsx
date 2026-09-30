@@ -5,7 +5,13 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { CardStatementView, CardView, StatementExpenseView } from "@/lib/cards";
 import type { LoanView } from "@/lib/loans";
-import { cardRemovalPreviewAction, deleteCardAction, deleteCardStatementAction, type CardRemovalPreview } from "@/lib/actions/cards";
+import {
+  cardRemovalPreviewAction,
+  deleteCardAction,
+  deleteCardStatementAction,
+  statementRemovalPreviewAction,
+  type RemovalPreview,
+} from "@/lib/actions/cards";
 import { AlertTriangleIcon, CalendarIcon, CreditCardIcon, DownloadIcon } from "@/components/Icons";
 import { PendingFlagNote } from "@/components/PendingFlag";
 import { LoansPanel } from "@/components/LoansPanel";
@@ -153,15 +159,18 @@ function CardBlock({ card, statements }: { card: CardView; statements: CardState
       {error ? <div className="alert-error">{error}</div> : null}
       <div className="space-y-2">
         {statements.map((s) => (
-          <StatementBlock key={s.id} statement={s} pending={pending} onDelete={() => run(() => deleteCardStatementAction(s.id))} />
+          <StatementBlock key={s.id} cardId={card.id} statement={s} />
         ))}
       </div>
       <button type="button" className="text-xs text-negative hover:underline" onClick={() => setConfirm(true)}>
         Remove this card
       </button>
       {confirm ? (
-        <RemoveCardDialog
-          card={card}
+        <RemoveDialog
+          kind="card"
+          title={`Remove ${card.bank} •••• ${card.last4}?`}
+          load={() => cardRemovalPreviewAction(card.id)}
+          exportHref={`/api/cards/export?id=${encodeURIComponent(card.id)}`}
           pending={pending}
           actionError={error}
           onCancel={() => setConfirm(false)}
@@ -173,7 +182,8 @@ function CardBlock({ card, statements }: { card: CardView; statements: CardState
 }
 
 /** One statement: the summary line, then its figures and the expenses added from it. */
-function StatementBlock({ statement: s, pending, onDelete }: { statement: CardStatementView; pending: boolean; onDelete: () => void }) {
+function StatementBlock({ cardId, statement: s }: { cardId: string; statement: CardStatementView }) {
+  const { pending, error, run } = useAction();
   const [confirm, setConfirm] = useState(false);
   const n = s.expenses.length;
   const added = s.expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -226,21 +236,21 @@ function StatementBlock({ statement: s, pending, onDelete }: { statement: CardSt
           </ul>
         )}
 
-        {!confirm ? (
-          <button type="button" className="text-xs text-negative hover:underline" onClick={() => setConfirm(true)}>
-            Remove this statement
-          </button>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted">Remove the {monthLabel(s.period)} statement? Its expenses stay.</span>
-            <button type="button" className="btn-danger px-3 py-1.5 text-xs" disabled={pending} onClick={onDelete}>
-              Yes, remove
-            </button>
-            <button type="button" className="btn-secondary px-3 py-1.5 text-xs" onClick={() => setConfirm(false)}>
-              Cancel
-            </button>
-          </div>
-        )}
+        <button type="button" className="text-xs text-negative hover:underline" onClick={() => setConfirm(true)}>
+          Remove this statement
+        </button>
+        {confirm ? (
+          <RemoveDialog
+            kind="statement"
+            title={`Remove the ${monthLabel(s.period)} statement?`}
+            load={() => statementRemovalPreviewAction(s.id)}
+            exportHref={`/api/cards/export?id=${encodeURIComponent(cardId)}&period=${s.period}`}
+            pending={pending}
+            actionError={error}
+            onCancel={() => setConfirm(false)}
+            onConfirm={() => run(() => deleteCardStatementAction(s.id))}
+          />
+        ) : null}
       </div>
     </details>
   );
@@ -297,28 +307,36 @@ function StatementExpenseRow({ expense: e }: { expense: StatementExpenseView }) 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * Confirms removing a card, listing everything that goes with it, with the
- * card's whole history one tap away as an Excel file first.
+ * Confirms removing a card or a statement, listing everything that goes
+ * with it, with its history one tap away as an Excel file first.
  */
-function RemoveCardDialog({
-  card,
+function RemoveDialog({
+  kind,
+  title,
+  load,
+  exportHref,
   pending,
   actionError,
   onCancel,
   onConfirm,
 }: {
-  card: CardView;
+  kind: "card" | "statement";
+  title: string;
+  load: () => Promise<{ ok: true; preview: RemovalPreview } | { ok: false; error: string }>;
+  exportHref: string;
   pending: boolean;
   actionError: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const [preview, setPreview] = useState<CardRemovalPreview | null>(null);
+  const [preview, setPreview] = useState<RemovalPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Load once, when the popup opens.
+  const [loader] = useState(() => load);
   useEffect(() => {
     let live = true;
-    cardRemovalPreviewAction(card.id).then((res) => {
+    loader().then((res) => {
       if (!live) return;
       if (res.ok) setPreview(res.preview);
       else setError(res.error);
@@ -326,7 +344,7 @@ function RemoveCardDialog({
     return () => {
       live = false;
     };
-  }, [card.id]);
+  }, [loader]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -339,7 +357,7 @@ function RemoveCardDialog({
   const p = preview;
   const lines: string[] = p
     ? [
-        plural(p.statements, "statement"),
+        ...(kind === "card" ? [plural(p.statements, "statement")] : ["The statement summary"]),
         ...(p.personal.count > 0 ? [`${plural(p.personal.count, "Personal expense")} · ${formatINR(p.personal.total)}`] : []),
         ...p.groups.map((g) => `${plural(g.count, "expense")} in ${g.name} · ${formatINR(g.total)}`),
         ...(p.instalments > 0 ? [plural(p.instalments, "EMI instalment record")] : []),
@@ -351,23 +369,26 @@ function RemoveCardDialog({
       <div
         role="alertdialog"
         aria-modal="true"
-        aria-labelledby="remove-card-title"
-        aria-describedby="remove-card-text"
+        aria-labelledby="remove-title"
+        aria-describedby="remove-text"
         className="modal-pop card max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
-        data-remove-card
+        data-remove={kind}
       >
-        <h2 id="remove-card-title" className="section-title">
-          Remove {card.bank} •••• {card.last4}?
+        <h2 id="remove-title" className="section-title">
+          {title}
         </h2>
-        <div id="remove-card-text" className="space-y-3 text-sm">
+        <div id="remove-text" className="space-y-3 text-sm">
           {error ? (
             <div className="alert-error">{error}</div>
           ) : !p ? (
-            <p className="text-muted">Checking what is linked to this card…</p>
+            <p className="text-muted">Checking what is linked to this {kind}…</p>
           ) : (
             <>
-              <p className="text-muted">This permanently deletes the card and everything imported from it:</p>
+              <p className="text-muted">
+                This permanently deletes the {kind} and everything imported from it, everywhere it appears: the Expenses tab, group pages,
+                summaries and change history.
+              </p>
               <ul className="list-disc space-y-1 pl-5" data-remove-lines>
                 {lines.map((l) => (
                   <li key={l}>{l}</li>
@@ -383,7 +404,7 @@ function RemoveCardDialog({
                   {plural(p.kept, "expense")} in groups you have left stay{p.kept === 1 ? "s" : ""} as {p.kept === 1 ? "it is" : "they are"}.
                 </p>
               ) : null}
-              <p className="text-muted">This cannot be undone. Export the card&rsquo;s history first if you may need it.</p>
+              <p className="text-muted">This cannot be undone. Export the history first if you may need it.</p>
             </>
           )}
           {actionError ? <div className="alert-error">{actionError}</div> : null}
@@ -391,11 +412,7 @@ function RemoveCardDialog({
         {/* Phones: export first, then delete, then cancel. Wider: export on
             the left, the destructive action last on the right. */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <a
-            href={`/api/cards/export?id=${encodeURIComponent(card.id)}`}
-            className="btn-secondary inline-flex items-center justify-center gap-2 whitespace-nowrap sm:mr-auto"
-            download
-          >
+          <a href={exportHref} className="btn-secondary inline-flex items-center justify-center gap-2 whitespace-nowrap sm:mr-auto" download>
             <DownloadIcon className="h-4 w-4 text-muted" />
             Export history
           </a>
