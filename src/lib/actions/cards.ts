@@ -7,9 +7,10 @@ import {
   deleteCard,
   deleteCardStatement,
   planCardRemoval,
+  planStatementRemoval,
   saveCardStatement,
   validateSaveInput,
-  type CardRemovalPlan,
+  type RemovalPlan,
   type SaveStatementInput,
 } from "@/lib/cards";
 import { prisma } from "@/lib/prisma";
@@ -57,23 +58,63 @@ export async function deleteLoanAction(loanKey: string): Promise<Result> {
   return { ok: true };
 }
 
-export type CardRemovalPreview = Omit<CardRemovalPlan, "expenseIds">;
+export type RemovalPreview = Omit<RemovalPlan, "expenseIds" | "instalmentIds">;
+type PreviewResult = { ok: true; preview: RemovalPreview } | { ok: false; error: string };
+
+// Only what the popup shows; row ids stay on the server.
+const toPreview = (p: RemovalPlan): RemovalPreview => ({
+  label: p.label,
+  statements: p.statements,
+  personal: p.personal,
+  groups: p.groups,
+  kept: p.kept,
+  instalments: p.instalments,
+});
 
 /** What removing a card would delete, for the confirmation popup. */
-export async function cardRemovalPreviewAction(id: string): Promise<{ ok: true; preview: CardRemovalPreview } | { ok: false; error: string }> {
+export async function cardRemovalPreviewAction(id: string): Promise<PreviewResult> {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
   if (typeof id !== "string") return { ok: false, error: "Invalid card." };
   const plan = await planCardRemoval(email, id);
-  if (!plan) return { ok: false, error: "Card not found." };
-  const { expenseIds: _ids, ...preview } = plan;
-  return { ok: true, preview };
+  return plan ? { ok: true, preview: toPreview(plan) } : { ok: false, error: "Card not found." };
+}
+
+/** What removing one statement would delete, for the confirmation popup. */
+export async function statementRemovalPreviewAction(id: number): Promise<PreviewResult> {
+  const email = await requireEmail();
+  if (!email) return { ok: false, error: "Not signed in." };
+  if (!Number.isInteger(id)) return { ok: false, error: "Invalid statement." };
+  const plan = await planStatementRemoval(email, id);
+  return plan ? { ok: true, preview: toPreview(plan) } : { ok: false, error: "Statement not found." };
+}
+
+/**
+ * Tells each group that lost expenses, since its balances change for
+ * everyone in it. The message carries a count and total, nothing more.
+ */
+async function notifyRemoval(email: string, plan: RemovalPlan) {
+  if (plan.groups.length === 0) return;
+  try {
+    const u = await prisma.appUser.findUnique({ where: { email } });
+    // Stored and shown to other members: never the raw address.
+    const who = displayNameFor(u, maskEmail(email));
+    for (const g of plan.groups) {
+      await notifyGroup({
+        groupId: g.id,
+        actorEmail: email,
+        type: "expense_deleted",
+        message: `${who} deleted ${g.count} imported expense${g.count === 1 ? "" : "s"} (${formatINR(g.total)})`,
+      });
+    }
+  } catch {
+    // Best-effort, as for single deletions.
+  }
 }
 
 /**
  * Removes a card with its statements, the expenses imported from them
- * (Personal and group) and its EMI records. Each group that lost expenses
- * is told, since its balances change for everyone in it.
+ * (Personal and group) and their history, and its EMI records.
  */
 export async function deleteCardAction(id: string): Promise<Result> {
   const email = await requireEmail();
@@ -81,34 +122,20 @@ export async function deleteCardAction(id: string): Promise<Result> {
   if (typeof id !== "string") return { ok: false, error: "Invalid card." };
   const plan = await deleteCard(email, id);
   if (!plan) return { ok: false, error: "Card not found." };
-
-  if (plan.groups.length > 0) {
-    try {
-      const u = await prisma.appUser.findUnique({ where: { email } });
-      // Stored and shown to other members: never the raw address.
-      const who = displayNameFor(u, maskEmail(email));
-      for (const g of plan.groups) {
-        await notifyGroup({
-          groupId: g.id,
-          actorEmail: email,
-          type: "expense_deleted",
-          message: `${who} removed a card and its ${g.count} expense${g.count === 1 ? "" : "s"} (${formatINR(g.total)})`,
-        });
-      }
-    } catch {
-      // Best-effort, as for single deletions.
-    }
-  }
+  await notifyRemoval(email, plan);
   // Personal and group expenses both changed.
   revalidatePath("/", "layout");
   return { ok: true };
 }
 
+/** Removes one statement the same way: its expenses, their history, its EMIs. */
 export async function deleteCardStatementAction(id: number): Promise<Result> {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
   if (!Number.isInteger(id)) return { ok: false, error: "Invalid statement." };
-  await deleteCardStatement(email, id);
-  revalidatePath("/statements");
+  const plan = await deleteCardStatement(email, id);
+  if (!plan) return { ok: false, error: "Statement not found." };
+  await notifyRemoval(email, plan);
+  revalidatePath("/", "layout");
   return { ok: true };
 }
