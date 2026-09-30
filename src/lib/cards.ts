@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { formatDate } from "./format";
+import { pendingGstReason } from "./loans";
 import type { Bank, StatementSummary } from "./statements/types";
 
 // Credit cards and their statement summaries. Filed under the user's own
@@ -21,6 +22,11 @@ export interface StatementExpenseView {
   amount: number;
   /** The group it was added to, or null for Personal. */
   group: { id: string; name: string } | null;
+  /**
+   * Set while this is a GST charge whose instalment is not on record yet:
+   * the statement month (YYYY-MM) that billed the instalment, and why.
+   */
+  gstPending: { month: string; reason: string } | null;
 }
 
 export interface CardStatementView {
@@ -82,7 +88,15 @@ export async function listCards(ownerEmail: string): Promise<CardView[]> {
         include: {
           expenses: {
             orderBy: [{ date: "desc" }, { id: "desc" }],
-            select: { id: true, date: true, item: true, category: true, amount: true, group: { select: { id: true, name: true } } },
+            select: {
+              id: true,
+              date: true,
+              item: true,
+              category: true,
+              amount: true,
+              group: { select: { id: true, name: true } },
+              gstPending: { where: { resolvedAt: null }, select: { amount: true, date: true }, take: 1 },
+            },
           },
         },
       },
@@ -118,6 +132,9 @@ export async function listCards(ownerEmail: string): Promise<CardView[]> {
         category: e.category,
         amount: e.amount,
         group: e.group,
+        gstPending: e.gstPending[0]
+          ? { month: formatDate(e.gstPending[0].date).slice(0, 7), reason: pendingGstReason(e.gstPending[0]) }
+          : null,
       })),
     })),
   }));
