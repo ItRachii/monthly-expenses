@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { CardStatementView, CardView } from "@/lib/cards";
+import type { CardStatementView, CardView, StatementExpenseView } from "@/lib/cards";
 import type { LoanView } from "@/lib/loans";
 import { deleteCardAction, deleteCardStatementAction } from "@/lib/actions/cards";
-import { CalendarIcon, CreditCardIcon } from "@/components/Icons";
+import { AlertTriangleIcon, CalendarIcon, CreditCardIcon } from "@/components/Icons";
+import { PendingFlagNote } from "@/components/PendingFlag";
 import { LoansPanel } from "@/components/LoansPanel";
 import { DateBadge } from "@/components/DateBadge";
 import { formatINR, monthLabel } from "@/lib/format";
@@ -223,23 +224,7 @@ function StatementBlock({ statement: s, pending, onDelete }: { statement: CardSt
         ) : (
           <ul className="divide-y divide-ink/5 rounded-lg border border-ink/10">
             {s.expenses.map((e) => (
-              <li key={e.id} className="flex items-center gap-3 px-3 py-2">
-                <DateBadge iso={e.date} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{e.item}</div>
-                  <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
-                    <span className="truncate">{e.category || "Uncategorised"}</span>
-                    {e.group ? (
-                      <Link href={`/g/${encodeURIComponent(e.group.id)}`} className="pill shrink-0 hover:text-ink" title={`Added to the group ${e.group.name}`}>
-                        {e.group.name}
-                      </Link>
-                    ) : (
-                      <span className="shrink-0">· Personal</span>
-                    )}
-                  </div>
-                </div>
-                <div className="shrink-0 text-sm font-semibold tabular-nums">{formatINR(e.amount)}</div>
-              </li>
+              <StatementExpenseRow key={e.id} expense={e} />
             ))}
           </ul>
         )}
@@ -261,5 +246,53 @@ function StatementBlock({ statement: s, pending, onDelete }: { statement: CardSt
         )}
       </div>
     </details>
+  );
+}
+
+const shortMonth = (ym: string) => new Date(`${ym}-01T00:00:00.000Z`).toLocaleDateString("en-IN", { month: "short", timeZone: "UTC" });
+
+/**
+ * One imported expense. A GST charge whose instalment is not on record yet
+ * carries a pill naming the statement to import; tapping it shows why.
+ */
+function StatementExpenseRow({ expense: e }: { expense: StatementExpenseView }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="px-3 py-2" data-expense={e.id}>
+      <div className="flex items-center gap-3">
+        <DateBadge iso={e.date} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{e.item}</div>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+            <span className="truncate">{e.category || "Uncategorised"}</span>
+            {e.group ? (
+              <Link href={`/g/${encodeURIComponent(e.group.id)}`} className="pill shrink-0 hover:text-ink" title={`Added to the group ${e.group.name}`}>
+                {e.group.name}
+              </Link>
+            ) : (
+              <span className="shrink-0">· Personal</span>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0 text-sm font-semibold tabular-nums">{formatINR(e.amount)}</div>
+      </div>
+      {/* Its own line, lined up with the item, full width on phones so it stays one line. */}
+      {e.gstPending ? (
+        <div className="sm:pl-12">
+          <button
+            type="button"
+            className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-left text-xs font-medium text-warning hover:bg-amber-500/15"
+            title={e.gstPending.reason}
+            aria-expanded={open}
+            data-gst-pending
+            onClick={() => setOpen((o) => !o)}
+          >
+            <AlertTriangleIcon className="h-3 w-3 shrink-0" />
+            <span>GST pending: import {shortMonth(e.gstPending.month)} statement</span>
+          </button>
+          {open ? <PendingFlagNote reason={e.gstPending.reason} /> : null}
+        </div>
+      ) : null}
+    </li>
   );
 }
