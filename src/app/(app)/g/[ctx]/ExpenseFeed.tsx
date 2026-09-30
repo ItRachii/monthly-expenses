@@ -130,6 +130,26 @@ export function ExpenseFeed({
     if (v) setMonth(ALL);
     setSelected(new Set());
   };
+  // Flagged shows every flagged expense whatever its month: turning it on
+  // widens to All months (dropping a date range), and turning it off puts
+  // back the month and range from before, unless another was picked since.
+  const [beforeFlagged, setBeforeFlagged] = useState<{ month: string | null; range: DateRange | null } | null>(null);
+  const toggleFlagged = () => {
+    if (!onlyFlagged) {
+      setBeforeFlagged({ month: monthPick, range });
+      setMonth(ALL);
+      setRange(null);
+      setFlaggedOnly(true);
+    } else {
+      if (beforeFlagged && month === ALL && !range) {
+        setMonth(beforeFlagged.month);
+        setRange(beforeFlagged.range);
+      }
+      setBeforeFlagged(null);
+      setFlaggedOnly(false);
+    }
+    setSelected(new Set());
+  };
   const categoryOptions = useMemo(
     () =>
       Array.from(new Set(rows.map(categoryOf)))
@@ -260,10 +280,7 @@ export function ExpenseFeed({
             type="button"
             aria-pressed={onlyFlagged}
             className={`chip-btn ${onlyFlagged ? "border-warning/50 bg-warning/10" : ""}`}
-            onClick={() => {
-              setFlaggedOnly((f) => !f);
-              setSelected(new Set());
-            }}
+            onClick={toggleFlagged}
           >
             <AlertTriangleIcon className="h-4 w-4 text-warning" />
             Flagged {flaggedCount}
