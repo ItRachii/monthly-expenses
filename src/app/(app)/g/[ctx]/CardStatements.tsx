@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { CardStatementView, CardView, StatementExpenseView } from "@/lib/cards";
 import type { LoanView } from "@/lib/loans";
-import { deleteCardAction, deleteCardStatementAction } from "@/lib/actions/cards";
-import { AlertTriangleIcon, CalendarIcon, CreditCardIcon } from "@/components/Icons";
+import { cardRemovalPreviewAction, deleteCardAction, deleteCardStatementAction, type CardRemovalPreview } from "@/lib/actions/cards";
+import { AlertTriangleIcon, CalendarIcon, CreditCardIcon, DownloadIcon } from "@/components/Icons";
 import { PendingFlagNote } from "@/components/PendingFlag";
 import { LoansPanel } from "@/components/LoansPanel";
 import { DateBadge } from "@/components/DateBadge";
@@ -156,21 +156,18 @@ function CardBlock({ card, statements }: { card: CardView; statements: CardState
           <StatementBlock key={s.id} statement={s} pending={pending} onDelete={() => run(() => deleteCardStatementAction(s.id))} />
         ))}
       </div>
-      {!confirm ? (
-        <button type="button" className="text-xs text-negative hover:underline" onClick={() => setConfirm(true)}>
-          Remove this card
-        </button>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted">Remove this card and its saved statements? Expenses added from them stay.</span>
-          <button type="button" className="btn-danger px-3 py-1.5 text-xs" disabled={pending} onClick={() => run(() => deleteCardAction(card.id))}>
-            Yes, remove
-          </button>
-          <button type="button" className="btn-secondary px-3 py-1.5 text-xs" onClick={() => setConfirm(false)}>
-            Cancel
-          </button>
-        </div>
-      )}
+      <button type="button" className="text-xs text-negative hover:underline" onClick={() => setConfirm(true)}>
+        Remove this card
+      </button>
+      {confirm ? (
+        <RemoveCardDialog
+          card={card}
+          pending={pending}
+          actionError={error}
+          onCancel={() => setConfirm(false)}
+          onConfirm={() => run(() => deleteCardAction(card.id))}
+        />
+      ) : null}
     </section>
   );
 }
@@ -294,5 +291,122 @@ function StatementExpenseRow({ expense: e }: { expense: StatementExpenseView }) 
         </div>
       ) : null}
     </li>
+  );
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Confirms removing a card, listing everything that goes with it, with the
+ * card's whole history one tap away as an Excel file first.
+ */
+function RemoveCardDialog({
+  card,
+  pending,
+  actionError,
+  onCancel,
+  onConfirm,
+}: {
+  card: CardView;
+  pending: boolean;
+  actionError: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const [preview, setPreview] = useState<CardRemovalPreview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    cardRemovalPreviewAction(card.id).then((res) => {
+      if (!live) return;
+      if (res.ok) setPreview(res.preview);
+      else setError(res.error);
+    });
+    return () => {
+      live = false;
+    };
+  }, [card.id]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !pending) onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel, pending]);
+
+  const p = preview;
+  const lines: string[] = p
+    ? [
+        plural(p.statements, "statement"),
+        ...(p.personal.count > 0 ? [`${plural(p.personal.count, "Personal expense")} · ${formatINR(p.personal.total)}`] : []),
+        ...p.groups.map((g) => `${plural(g.count, "expense")} in ${g.name} · ${formatINR(g.total)}`),
+        ...(p.instalments > 0 ? [plural(p.instalments, "EMI instalment record")] : []),
+      ]
+    : [];
+
+  return (
+    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !pending && onCancel()}>
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="remove-card-title"
+        aria-describedby="remove-card-text"
+        className="modal-pop card max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+        data-remove-card
+      >
+        <h2 id="remove-card-title" className="section-title">
+          Remove {card.bank} •••• {card.last4}?
+        </h2>
+        <div id="remove-card-text" className="space-y-3 text-sm">
+          {error ? (
+            <div className="alert-error">{error}</div>
+          ) : !p ? (
+            <p className="text-muted">Checking what is linked to this card…</p>
+          ) : (
+            <>
+              <p className="text-muted">This permanently deletes the card and everything imported from it:</p>
+              <ul className="list-disc space-y-1 pl-5" data-remove-lines>
+                {lines.map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+              {p.groups.length > 0 ? (
+                <p className="text-warning">
+                  Balances in {p.groups.map((g) => g.name).join(", ")} change for everyone in {p.groups.length === 1 ? "that group" : "those groups"}, and they are notified.
+                </p>
+              ) : null}
+              {p.kept > 0 ? (
+                <p className="text-muted">
+                  {plural(p.kept, "expense")} in groups you have left stay{p.kept === 1 ? "s" : ""} as {p.kept === 1 ? "it is" : "they are"}.
+                </p>
+              ) : null}
+              <p className="text-muted">This cannot be undone. Export the card&rsquo;s history first if you may need it.</p>
+            </>
+          )}
+          {actionError ? <div className="alert-error">{actionError}</div> : null}
+        </div>
+        {/* Phones: export first, then delete, then cancel. Wider: export on
+            the left, the destructive action last on the right. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <a
+            href={`/api/cards/export?id=${encodeURIComponent(card.id)}`}
+            className="btn-secondary inline-flex items-center justify-center gap-2 whitespace-nowrap sm:mr-auto"
+            download
+          >
+            <DownloadIcon className="h-4 w-4 text-muted" />
+            Export history
+          </a>
+          <button type="button" className="btn-danger whitespace-nowrap sm:order-last" disabled={pending || !p} onClick={onConfirm}>
+            {pending ? "Removing…" : "Delete everything"}
+          </button>
+          <button type="button" className="btn-secondary whitespace-nowrap" autoFocus disabled={pending} onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
