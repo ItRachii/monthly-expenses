@@ -103,6 +103,9 @@ export function StatementImport({
   const [copied, setCopied] = useState(false);
   const [summarySaved, setSummarySaved] = useState(false);
   const [savingSummary, startSaveSummary] = useTransition();
+  // A file the parser could not place with HDFC or ICICI: a popup says which
+  // banks are supported before the generic-rules review is shown.
+  const [unsupported, setUnsupported] = useState(false);
 
   // Categories already used in the chosen destination, so the picker offers them.
   useEffect(() => {
@@ -146,6 +149,7 @@ export function StatementImport({
       setTab("all");
       setQuery("");
       setPhase("review");
+      setUnsupported(p.bank === "unknown");
     } catch (e) {
       setPhase("pick");
       if (e instanceof PdfPasswordError) {
@@ -169,6 +173,7 @@ export function StatementImport({
   function reset() {
     setFile(null);
     setParsed(null);
+    setUnsupported(false);
     setPhase("pick");
     setPassword("");
     setNeedPassword(false);
@@ -373,6 +378,10 @@ export function StatementImport({
           {phase === "reading" ? <div className="alert-info">Reading the statement…</div> : null}
           {error ? <div className="alert-error">{error}</div> : null}
         </section>
+      ) : null}
+
+      {phase === "review" && parsed && unsupported ? (
+        <UnsupportedBankDialog fileName={file?.name ?? "This file"} rows={parsed.rows.length} onPickAnother={reset} onReviewAnyway={() => setUnsupported(false)} />
       ) : null}
 
       {phase === "review" && parsed ? (
@@ -996,6 +1005,59 @@ function NewCategoryDialog({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/** Shown when the statement names neither bank: only HDFC and ICICI are supported. */
+function UnsupportedBankDialog({
+  fileName,
+  rows,
+  onPickAnother,
+  onReviewAnyway,
+}: {
+  fileName: string;
+  rows: number;
+  onPickAnother: () => void;
+  onReviewAnyway: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onPickAnother();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onPickAnother]);
+
+  return (
+    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onPickAnother}>
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="unsupported-bank-title"
+        aria-describedby="unsupported-bank-text"
+        className="modal-pop card w-full max-w-sm space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="unsupported-bank-title" className="section-title">
+          Only HDFC and ICICI statements are supported
+        </h2>
+        <p id="unsupported-bank-text" className="text-sm text-muted">
+          <span className="font-medium text-ink">{fileName}</span> does not look like an HDFC Bank or ICICI Bank credit card
+          statement. Statements from other banks are not supported yet.
+          {rows > 0 ? ` The generic rules did read ${rows} row${rows === 1 ? "" : "s"}, which you can review, but amounts and EMIs may be wrong.` : ""}
+        </p>
+        <div className="flex justify-end gap-2">
+          {rows > 0 ? (
+            <button type="button" className="btn-secondary whitespace-nowrap" onClick={onReviewAnyway}>
+              Review anyway
+            </button>
+          ) : null}
+          <button type="button" className="btn-primary whitespace-nowrap" autoFocus onClick={onPickAnother}>
+            Choose another file
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
