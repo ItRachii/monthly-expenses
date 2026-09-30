@@ -176,13 +176,23 @@ export function sectionOf(line: string): Section | null {
   return null;
 }
 
+/**
+ * Which bank issued the statement: the one named first in its own text,
+ * masthead before footer. Transaction lines are skipped, since a bill paid
+ * by NEFT from an HDFC account names HDFC on an ICICI card's statement.
+ */
 export function detectBank(lines: string[]): Bank {
-  const head = lines.slice(0, 80).join(" ");
-  if (/\bHDFC\b/i.test(head)) return "hdfc";
-  if (/\bICICI\b/i.test(head)) return "icici";
-  const all = lines.join(" ");
-  if (/\bHDFC\b/i.test(all)) return "hdfc";
-  if (/\bICICI\b/i.test(all)) return "icici";
+  const own = lines.filter((l) => !isDateLed(l));
+  const at = (re: RegExp, pool: string[]) => {
+    const i = pool.findIndex((l) => re.test(l));
+    return i < 0 ? Number.POSITIVE_INFINITY : i;
+  };
+  for (const pool of [own.slice(0, 80), own]) {
+    const h = at(/\bHDFC\b/i, pool);
+    const c = at(/\bICICI\b/i, pool);
+    if (h === Number.POSITIVE_INFINITY && c === Number.POSITIVE_INFINITY) continue;
+    return h <= c ? "hdfc" : "icici";
+  }
   return "unknown";
 }
 

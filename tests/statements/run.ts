@@ -8,7 +8,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { itemsToPage, type PageText, type PositionedText } from "../../src/lib/statements/lines";
-import { parseStatement } from "../../src/lib/statements/parse";
+import { detectBank, parseStatement } from "../../src/lib/statements/parse";
 import { amountCell, parseCsv, parseSheet, type Grid } from "../../src/lib/statements/sheet";
 import { readXlsx } from "../../src/lib/statements/xlsx";
 import { applyKeys, canonicalDigits, gstLineageName, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
@@ -384,6 +384,14 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("xlsx: the loan keys the same as in the August PDF", xEmi.loan?.key === augPayload.instalments[0].loanKey, JSON.stringify([xEmi.loan?.key, augPayload.instalments[0].loanKey]));
 
   // Other layouts: generic CSV exports.
+  // Which bank: the statement's own text names it; a payment from the other
+  // bank on a transaction line must not flip it.
+  console.log("\n== bank ==");
+  check("bank: masthead wins over a transaction naming the other bank", detectBank(["ICICI Bank Credit Card Statement", "23/08/2026 NEFT FROM HDFC BANK 10000.00 Cr"]) === "icici");
+  check("bank: HDFC statement paying via ICICI stays HDFC", detectBank(["HDFC Bank Credit Card Statement", "04/09/2026 NEFT ICICI BANK 5000.00 Cr", "Registered Office: HDFC Bank"]) === "hdfc");
+  check("bank: first named wins when both appear in the header", detectBank(["Statement", "ICICI Bank Ltd", "Payments to HDFC Bank are not accepted"]) === "icici");
+  check("bank: nothing named is unknown", detectBank(["Statement", "23/08/2026 SWIGGY 350.00"]) === "unknown");
+
   // ICICI's CSV export: no bank name, no summary box, a "BillingAmountSign"
   // column, the masked card number as a row of its own under the header,
   // EMIs as "Interest/Principal Amount Amortization - <3/9>Merchant" lines
