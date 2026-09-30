@@ -6,10 +6,17 @@ import { statementsEnabled } from "@/lib/features";
 import {
   deleteCard,
   deleteCardStatement,
+  planCardRemoval,
   saveCardStatement,
   validateSaveInput,
+  type CardRemovalPlan,
   type SaveStatementInput,
 } from "@/lib/cards";
+import { prisma } from "@/lib/prisma";
+import { notifyGroup } from "@/lib/notifications";
+import { displayNameFor } from "@/lib/users";
+import { maskEmail } from "@/lib/pii";
+import { formatINR } from "@/lib/format";
 import { deleteLoan, saveLineage, validateLineage } from "@/lib/loans";
 import type { LineagePayload } from "@/lib/statements/lineage";
 
@@ -50,11 +57,50 @@ export async function deleteLoanAction(loanKey: string): Promise<Result> {
   return { ok: true };
 }
 
+export type CardRemovalPreview = Omit<CardRemovalPlan, "expenseIds">;
+
+/** What removing a card would delete, for the confirmation popup. */
+export async function cardRemovalPreviewAction(id: string): Promise<{ ok: true; preview: CardRemovalPreview } | { ok: false; error: string }> {
+  const email = await requireEmail();
+  if (!email) return { ok: false, error: "Not signed in." };
+  if (typeof id !== "string") return { ok: false, error: "Invalid card." };
+  const plan = await planCardRemoval(email, id);
+  if (!plan) return { ok: false, error: "Card not found." };
+  const { expenseIds: _ids, ...preview } = plan;
+  return { ok: true, preview };
+}
+
+/**
+ * Removes a card with its statements, the expenses imported from them
+ * (Personal and group) and its EMI records. Each group that lost expenses
+ * is told, since its balances change for everyone in it.
+ */
 export async function deleteCardAction(id: string): Promise<Result> {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
-  await deleteCard(email, id);
-  revalidatePath("/statements");
+  if (typeof id !== "string") return { ok: false, error: "Invalid card." };
+  const plan = await deleteCard(email, id);
+  if (!plan) return { ok: false, error: "Card not found." };
+
+  if (plan.groups.length > 0) {
+    try {
+      const u = await prisma.appUser.findUnique({ where: { email } });
+      // Stored and shown to other members: never the raw address.
+      const who = displayNameFor(u, maskEmail(email));
+      for (const g of plan.groups) {
+        await notifyGroup({
+          groupId: g.id,
+          actorEmail: email,
+          type: "expense_deleted",
+          message: `${who} removed a card and its ${g.count} expense${g.count === 1 ? "" : "s"} (${formatINR(g.total)})`,
+        });
+      }
+    } catch {
+      // Best-effort, as for single deletions.
+    }
+  }
+  // Personal and group expenses both changed.
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 

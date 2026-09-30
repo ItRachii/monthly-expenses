@@ -199,8 +199,78 @@ export async function saveCardStatement(ownerEmail: string, input: SaveStatement
   return { cardId: card.id, statementId: statement.id };
 }
 
-export async function deleteCard(ownerEmail: string, id: string): Promise<void> {
-  await prisma.card.deleteMany({ where: { id, ownerEmail } });
+/**
+ * Everything removing a card takes with it: its statements, the expenses
+ * imported from them (Personal ones, and group ones in groups the owner is
+ * still in), and the EMI instalments it billed. Group expenses in a group
+ * the owner has left are not theirs to delete; they stay, unlinked.
+ */
+export interface CardRemovalPlan {
+  card: { bank: string; last4: string };
+  statements: number;
+  personal: { count: number; total: number };
+  groups: { id: string; name: string; count: number; total: number }[];
+  /** Group expenses in groups the owner has left, which are kept. */
+  kept: number;
+  instalments: number;
+  expenseIds: number[];
+}
+
+export async function planCardRemoval(ownerEmail: string, id: string): Promise<CardRemovalPlan | null> {
+  const card = await prisma.card.findFirst({
+    where: { id, ownerEmail },
+    select: { bank: true, last4: true, _count: { select: { statements: true, instalments: true } } },
+  });
+  if (!card) return null;
+  const linked = await prisma.expense.findMany({
+    where: { statement: { cardId: id } },
+    select: { id: true, ownerEmail: true, groupId: true, amount: true, group: { select: { name: true } } },
+  });
+  const groupIds = Array.from(new Set(linked.flatMap((e) => (e.groupId && !e.ownerEmail ? [e.groupId] : []))));
+  const memberOf = new Set(
+    (await prisma.groupMember.findMany({ where: { groupId: { in: groupIds }, email: ownerEmail }, select: { groupId: true } })).map((m) => m.groupId),
+  );
+
+  const plan: CardRemovalPlan = {
+    card: { bank: BANK_LABEL[card.bank as Bank] ?? card.bank, last4: card.last4 },
+    statements: card._count.statements,
+    personal: { count: 0, total: 0 },
+    groups: [],
+    kept: 0,
+    instalments: card._count.instalments,
+    expenseIds: [],
+  };
+  const byGroup = new Map<string, CardRemovalPlan["groups"][number]>();
+  for (const e of linked) {
+    if (e.ownerEmail === ownerEmail && !e.groupId) {
+      plan.personal.count++;
+      plan.personal.total += e.amount;
+    } else if (e.groupId && !e.ownerEmail && memberOf.has(e.groupId)) {
+      const g = byGroup.get(e.groupId) ?? { id: e.groupId, name: e.group?.name ?? "Group", count: 0, total: 0 };
+      g.count++;
+      g.total += e.amount;
+      byGroup.set(e.groupId, g);
+    } else {
+      plan.kept++;
+      continue;
+    }
+    plan.expenseIds.push(e.id);
+  }
+  plan.groups = Array.from(byGroup.values()).sort((a, b) => a.name.localeCompare(b.name));
+  return plan;
+}
+
+/** Removes the card and everything in its plan, in one transaction. */
+export async function deleteCard(ownerEmail: string, id: string): Promise<CardRemovalPlan | null> {
+  const plan = await planCardRemoval(ownerEmail, id);
+  if (!plan) return null;
+  await prisma.$transaction([
+    prisma.expense.deleteMany({ where: { id: { in: plan.expenseIds } } }),
+    prisma.emiInstalment.deleteMany({ where: { ownerEmail, cardId: id } }),
+    // Its statements go with it (ON DELETE CASCADE).
+    prisma.card.deleteMany({ where: { id, ownerEmail } }),
+  ]);
+  return plan;
 }
 
 export async function deleteCardStatement(ownerEmail: string, id: number): Promise<void> {
