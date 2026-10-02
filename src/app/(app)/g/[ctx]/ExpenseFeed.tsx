@@ -13,6 +13,9 @@ import { deleteExpenseAction } from "@/lib/actions/expenses";
 import { EditExpenseModal } from "../../log/ExpenseLog";
 import { ExportButton } from "./ExportDialog";
 import { PersonAvatar, PersonAvatars } from "@/components/Person";
+import type { DeletedExpense, NotificationFocus } from "@/lib/notifications";
+import { landingFor, placeGhosts, type Landing } from "@/lib/landing";
+import { LandingNote, LandingPill, landedNotifications, useLandingScroll } from "@/components/Landing";
 
 interface Opt {
   value: string;
@@ -73,6 +76,7 @@ export function ExpenseFeed({
   isPersonal,
   selfKey,
   memberCount,
+  focus = null,
 }: {
   ctx: string;
   rows: ExpenseDTO[];
@@ -83,6 +87,8 @@ export function ExpenseFeed({
   isPersonal: boolean;
   selfKey: string;
   memberCount: number;
+  /** Opened from a notification: the record to land on. */
+  focus?: NotificationFocus | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -95,14 +101,27 @@ export function ExpenseFeed({
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
 
+  // Opened from a notification: highlight what it was about, or show what
+  // was deleted crossed out where it was, on that month, filters cleared.
+  const [landing, setLanding] = useState<Landing | null>(() =>
+    focus && !landedNotifications.has(focus.id) ? landingFor(focus, rows) : null,
+  );
+  const marked = useMemo(() => new Set(landing?.kind === "expenses" ? landing.ids : []), [landing]);
+  const ghosts = landing?.kind === "deleted" ? landing.ghosts : [];
+
   // Month filter, beside the search: every month with expenses, newest
-  // first, or all of them. Flagged is a separate toggle.
+  // first, or all of them. Flagged is a separate toggle. A deleted expense
+  // being shown keeps its month listed even when it was the month's last.
   const months = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a)),
-    [rows],
+    () =>
+      Array.from(new Set([...rows.map((r) => r.date.slice(0, 7)), ...ghosts.map((g) => g.date.slice(0, 7))])).sort((a, b) =>
+        b.localeCompare(a),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, landing],
   );
   const flaggedCount = rows.filter((r) => r.flag).length;
-  const [monthPick, setMonth] = useState<string | null>(null);
+  const [monthPick, setMonth] = useState<string | null>(() => landing?.month ?? null);
   // Until one is picked, the latest month; a pick that disappears (its last
   // expense deleted) falls back the same way.
   const month = monthPick === ALL || (monthPick && months.includes(monthPick)) ? monthPick : (months[0] ?? ALL);
@@ -181,6 +200,17 @@ export function ExpenseFeed({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, month, onlyFlagged, payer, category, range, query, sort, isPersonal, nameMap]);
   const shownTotal = round2(shown.reduce((s, r) => s + r.amount, 0));
+  // Deleted expenses from the notification, in their month and only while
+  // nothing narrows the list (they matched no filter; they no longer exist).
+  const narrowed = Boolean(query.trim()) || filterCount > 0 || onlyFlagged;
+  const placed = placeGhosts(
+    shown,
+    narrowed ? [] : ghosts.filter((g) => month === ALL || g.date.startsWith(month)),
+    sort.key === "date" ? sort.dir : null,
+  );
+
+  // Bring the highlighted (or crossed-out) record into view once.
+  useLandingScroll(focus?.id ?? null, landing !== null);
 
   // Selection only covers rows still on show; a deleted or filtered-out row drops out.
   const picked = shown.filter((r) => selected.has(r.id));
@@ -239,7 +269,7 @@ export function ExpenseFeed({
     });
   }
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !landing) {
     return (
       <div className="alert-info">
         No expenses recorded yet. Tap <strong>Add expense</strong> to get started.
@@ -249,6 +279,7 @@ export function ExpenseFeed({
 
   return (
     <div className="space-y-4">
+      {landing ? <LandingBanner landing={landing} month={month} onDismiss={() => setLanding(null)} /> : null}
       {/* Toolbar: count and total (or the selection's), bulk delete, export, search. */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-1 text-sm text-muted" aria-live="polite">
@@ -338,7 +369,7 @@ export function ExpenseFeed({
         </div>
       ) : null}
 
-      {shown.length === 0 ? (
+      {placed.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted">
           {query.trim()
             ? `No expenses match "${query.trim()}".`
@@ -395,10 +426,14 @@ export function ExpenseFeed({
               </tr>
             </thead>
             <tbody>
-              {shown.map((r) => (
+              {placed.map(({ row: r, ghost }, i) =>
+                ghost ? (
+                  <GhostTableRow key={`ghost-${i}`} ghost={ghost} columns={isPersonal ? 6 : 8} />
+                ) : (
                 <ExpenseTableRow
                   key={r.id}
                   row={r}
+                  mark={marked.has(r.id) && landing?.kind === "expenses" ? landing.verb : null}
                   checked={selected.has(r.id)}
                   isNew={fresh.has(r.id)}
                   paidBy={isPersonal ? null : payersOf(r)}
@@ -408,7 +443,8 @@ export function ExpenseFeed({
                   onEdit={() => setEditing(r)}
                   onDelete={() => setActionsFor({ expense: r, confirm: true })}
                 />
-              ))}
+                ),
+              )}
             </tbody>
           </table>
         </div>
@@ -417,10 +453,13 @@ export function ExpenseFeed({
         <div className="space-y-2 md:hidden">
           <p className="text-xs text-muted">Press and hold an expense to edit or delete it.</p>
           <div className="card divide-y divide-ink/5 p-0">
-            {shown.map((r) => {
+            {placed.map(({ row: r, ghost }, i) => {
+              if (ghost) return <GhostRow key={`ghost-${i}`} ghost={ghost} />;
               return (
                 <ExpenseRow
                   key={r.id}
+                  id={r.id}
+                  mark={marked.has(r.id) && landing?.kind === "expenses" ? landing.verb : null}
                   item={r.item}
                   receiptMerchant={r.receiptMerchant}
                   flag={r.flag}
@@ -487,6 +526,7 @@ export function ExpenseFeed({
 /** One expense as a table row (desktop). */
 function ExpenseTableRow({
   row,
+  mark,
   checked,
   isNew,
   paidBy,
@@ -497,6 +537,8 @@ function ExpenseTableRow({
   onDelete,
 }: {
   row: ExpenseDTO;
+  /** The record a notification is about: highlighted, with what happened. */
+  mark: "added" | "edited" | null;
   checked: boolean;
   isNew: boolean;
   /** The payers' member keys; null in Personal. */
@@ -511,7 +553,12 @@ function ExpenseTableRow({
   return (
     // 700ms is on purpose: past the 300ms UI budget, but this is the slow
     // fade-out of the "just added" highlight, not a reply to a click.
-    <tr data-selected={checked || undefined} className={`duration-700 hover:bg-ink/[0.03] ${isNew ? "!bg-primary/15" : ""}`}>
+    <tr
+      data-selected={checked || undefined}
+      data-expense-id={row.id}
+      data-landing={mark ? "" : undefined}
+      className={`duration-700 hover:bg-ink/[0.03] ${isNew ? "!bg-primary/15" : ""} ${mark ? "landing-mark" : ""}`}
+    >
       <td>
         <RowCheckbox checked={checked} onChange={onToggle} label={`Select ${row.item}`} />
       </td>
@@ -521,6 +568,7 @@ function ExpenseTableRow({
           <span className="truncate font-semibold" title={row.item}>
             {row.item}
           </span>
+          {mark ? <MarkPill mark={mark} /> : null}
           {row.receiptMerchant ? (
             <span className="shrink-0 rounded bg-ink/5 px-1 py-0.5 text-[10px] text-muted" title={`From scanned receipt: ${row.receiptMerchant}`}>
               <ReceiptIcon className="inline h-3 w-3 align-[-1px]" />
@@ -630,6 +678,8 @@ const MOVE_TOLERANCE_PX = 10;
  *   edit and delete icons at the end of the row. No long press.
  */
 function ExpenseRow({
+  id,
+  mark,
   item,
   receiptMerchant,
   flag,
@@ -645,6 +695,9 @@ function ExpenseRow({
   onEdit,
   onDelete,
 }: {
+  id: number;
+  /** The record a notification is about: highlighted, with what happened. */
+  mark: "added" | "edited" | null;
   item: string;
   receiptMerchant: string | null;
   /** Why the row needs attention, shown behind a warning icon; null when nothing is pending. */
@@ -728,9 +781,11 @@ function ExpenseRow({
     // and the eye misses which row was new.
     <div
       {...(isDesktop ? {} : pressable)}
+      data-expense-id={id}
+      data-landing={mark ? "" : undefined}
       className={`flex items-center gap-3 px-3 py-2.5 transition-colors duration-700 ${
         isNew ? "bg-primary/15" : ""
-      } ${
+      } ${mark ? "landing-mark" : ""} ${
         isDesktop
           ? ""
           : "cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-ink/5 active:bg-ink/5"
@@ -739,6 +794,7 @@ function ExpenseRow({
       <DateBadge iso={date} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">
+          {mark ? <MarkPill mark={mark} className="mr-1.5" /> : null}
           {item}
           {receiptMerchant ? (
             <span
@@ -936,4 +992,82 @@ function FilterChip({ label, onClear }: { label: string; onClear: () => void }) 
       </button>
     </span>
   );
+}
+
+/** "Added" or "Edited", on the row a notification was about. */
+function MarkPill({ mark, className = "" }: { mark: "added" | "edited"; className?: string }) {
+  return <LandingPill className={className}>{mark === "added" ? "Added" : "Edited"}</LandingPill>;
+}
+
+/** A deleted expense from a notification, crossed out where it used to be (desktop). */
+function GhostTableRow({ ghost, columns }: { ghost: DeletedExpense; columns: number }) {
+  return (
+    <tr data-landing="" data-ghost className="landing-mark text-muted">
+      <td />
+      <td className="whitespace-nowrap">{tableDate(ghost.date)}</td>
+      <td className="max-w-0">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate line-through" title={ghost.item}>
+            {ghost.item}
+          </span>
+          <DeletedPill />
+        </div>
+      </td>
+      <td className="truncate line-through">{ghost.category || "Uncategorised"}</td>
+      {/* Paid by and Status (groups) have nothing to say about a deleted row. */}
+      {Array.from({ length: columns - 6 }, (_, i) => (
+        <td key={i} />
+      ))}
+      <td className="whitespace-nowrap text-right tabular-nums line-through">{formatINR(ghost.amount)}</td>
+      <td />
+    </tr>
+  );
+}
+
+/** A deleted expense from a notification, crossed out where it used to be (phones). */
+function GhostRow({ ghost }: { ghost: DeletedExpense }) {
+  return (
+    <div data-landing="" data-ghost className="landing-mark flex items-center gap-3 px-3 py-2.5 text-muted">
+      <DateBadge iso={ghost.date} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+          <DeletedPill />
+          <span className="truncate line-through">{ghost.item}</span>
+        </div>
+        <div className="mt-0.5 flex min-w-0 items-baseline gap-1 text-xs">
+          <span className="shrink-0 font-semibold line-through">{formatINR(ghost.amount)}</span>
+          <span className="shrink-0">·</span>
+          <span className="min-w-0 truncate line-through">{ghost.category || "Uncategorised"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeletedPill() {
+  return <LandingPill tone="negative">Deleted</LandingPill>;
+}
+
+/** Says what the notification was about and where it is, with a way to clear it. */
+function LandingBanner({ landing, month, onDismiss }: { landing: Landing; month: string; onDismiss: () => void }) {
+  const where = month === ALL ? "" : ` in ${monthTab(month)}`;
+  let text: string;
+  if (landing.kind === "expenses") {
+    const n = landing.ids.length;
+    const gone = landing.missing;
+    if (n === 0) {
+      text =
+        gone === 1
+          ? "The expense from this notification is no longer in the group: it was deleted afterwards."
+          : `None of the ${gone} expenses from this notification are in the group any more: they were deleted afterwards.`;
+    } else {
+      text = `${n === 1 ? "The expense" : `The ${n} expenses`} ${landing.verb === "edited" ? "edited" : "added"} in this notification ${n === 1 ? "is" : "are"} highlighted below${where}.`;
+      if (gone > 0) text += ` ${gone} of them ${gone === 1 ? "has" : "have"} since been deleted.`;
+    }
+  } else if (landing.ghosts.length > 0) {
+    text = `${landing.ghosts.length === 1 ? "This expense was" : `These ${landing.ghosts.length} expenses were`} deleted. ${landing.ghosts.length === 1 ? "It is" : "They are"} shown crossed out where ${landing.ghosts.length === 1 ? "it" : "they"} used to be${where}.`;
+  } else {
+    text = `${landing.count} expense${landing.count === 1 ? " was" : "s were"} deleted (${formatINR(landing.total)}), so there is nothing left to show.`;
+  }
+  return <LandingNote onDismiss={onDismiss}>{text}</LandingNote>;
 }

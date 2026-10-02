@@ -304,6 +304,11 @@ function removalWrites(plan: RemovalPlan) {
     prisma.expense.deleteMany({ where: { id: { in: plan.expenseIds } } }),
     // After the delete: the audit trigger has just logged it too.
     prisma.$executeRaw`delete from expense_changes where expense_id = any(${plan.expenseIds}::int[])`,
+    // Notifications that pointed only at these expenses ("X added 12
+    // expenses from a card statement") go too.
+    prisma.$executeRaw`delete from notifications
+      where target->>'kind' = 'expenses' and jsonb_array_length(target->'ids') > 0
+        and (select array_agg(x::int) from jsonb_array_elements_text(target->'ids') x) <@ ${plan.expenseIds}::int[]`,
     prisma.emiInstalment.deleteMany({ where: { id: { in: plan.instalmentIds } } }),
   ];
 }

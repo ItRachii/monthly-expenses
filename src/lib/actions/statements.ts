@@ -102,6 +102,7 @@ export async function importStatementAction(input: {
   }
 
   const period = input.summary?.period ?? input.card?.period ?? input.lineage?.instalments[0]?.period ?? null;
+  const createdIds: number[] = [];
   for (let i = 0; i < rows.length; i++) {
     const created = await createExpense({
       date: rows[i].date,
@@ -115,6 +116,7 @@ export async function importStatementAction(input: {
       groupId,
       statementId,
     });
+    createdIds.push(created.id);
     if (rows[i].untracedRefKey) {
       await recordPendingGst(email, {
         expenseId: created.id,
@@ -134,6 +136,7 @@ export async function importStatementAction(input: {
         actorEmail: email,
         type: "expense_added",
         message: `${displayNameFor(actor, "A member")} added ${rows.length} expense${rows.length === 1 ? "" : "s"} from a card statement`,
+        target: { kind: "expenses", ids: createdIds },
       });
     } catch {
       // Notifications are best-effort.

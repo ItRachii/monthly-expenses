@@ -14,6 +14,7 @@ import { monthKey } from "@/lib/format";
 import { listCards } from "@/lib/cards";
 import { listLoans } from "@/lib/loans";
 import { statementsEnabled } from "@/lib/features";
+import { openNotification } from "@/lib/notifications";
 import { savingsByMonth } from "@/lib/incomeMath";
 import type { FinanceData } from "@/components/PersonalFinance";
 import { SpaceView, type SpaceTab } from "./SpaceView";
@@ -110,13 +111,18 @@ export default async function SpacePage({
   const selfKey = r.isPersonal
     ? "me"
     : r.wire.members.find((m) => m.isSelf)?.key ?? "";
-  const tabParam = typeof sp.tab === "string" ? sp.tab : "expenses";
+  // Opened from a notification: land on the record it is about.
+  const nParam = typeof sp.n === "string" && /^\d{1,9}$/.test(sp.n) ? Number(sp.n) : null;
+  const focus = nParam !== null && !r.isPersonal ? await openNotification(user.email, nParam, r.ctxValue) : null;
+  const tabParam = focus ? (focus.target.kind === "settlement" ? "balances" : "expenses") : typeof sp.tab === "string" ? sp.tab : "expenses";
   const initialTab = (["expenses", "statements", "balances", "summary"].includes(tabParam)
     ? tabParam
     : "expenses") as SpaceTab;
 
   return (
     <SpaceView
+      // A new notification remounts the view, so it lands on the new record.
+      key={focus ? `n${focus.id}` : "view"}
       ctx={r.ctxValue}
       name={name}
       isPersonal={r.isPersonal}
@@ -124,6 +130,7 @@ export default async function SpacePage({
       heroNet={heroNet}
       heroLines={heroLines}
       initialTab={initialTab}
+      focus={focus}
       rows={rows}
       settlements={settlements}
       nameMap={r.wire.nameMap}

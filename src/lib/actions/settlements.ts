@@ -74,7 +74,7 @@ export async function settleAction(input: {
     remainingAfter = round2(Math.max(0, due - input.amount));
   }
 
-  await createSettlement({
+  const created = await createSettlement({
     month: input.month,
     settledBy,
     settledTo,
@@ -94,13 +94,14 @@ export async function settleAction(input: {
       const name = (e: string) => displayNameFor(byEmail.get(e) ?? null, maskEmail(e));
       const status =
         remainingAfter != null && remainingAfter > SETTLE_EPS
-          ? `part payment — ${formatINR(remainingAfter)} still due`
+          ? `part payment, ${formatINR(remainingAfter)} still due`
           : "fully settled";
       await notifyGroup({
         groupId,
         actorEmail: email,
         type: "settlement_recorded",
         message: `${name(email)} recorded a payment for ${input.month}: ${name(settledBy)} paid ${name(settledTo)} ${formatINR(input.amount)} (${status})`,
+        target: { kind: "settlement", id: created.id, month: input.month },
       });
     } catch {
       // ignore notification errors

@@ -12,6 +12,7 @@
     "db:push": "prisma db push",
     "test:statements": "tsx tests/statements/run.ts",
     "test:money": "tsx tests/money/run.ts",
+    "test:landing": "tsx tests/landing/run.ts",
     "db:setup-local": "prisma db push && prisma db execute --schema prisma/schema.prisma --file db/expense_changes_cdc.sql && prisma db execute --schema prisma/schema.prisma --file db/2026_09_pii_email.sql"
   },
   "dependencies": {
