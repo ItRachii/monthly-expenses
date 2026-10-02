@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import type { NotificationFocus } from "@/lib/notifications";
+import { settlementLanding } from "@/lib/landing";
+import { LandingNote, LandingPill, landedNotifications, useLandingScroll } from "@/components/Landing";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
 import type { SettlementDTO } from "@/lib/settlements";
@@ -54,6 +57,7 @@ export function Settlement({
   nameMap,
   members,
   payerOptions,
+  focus = null,
 }: {
   ctx: string;
   rows: ExpenseDTO[];
@@ -62,6 +66,8 @@ export function Settlement({
   nameMap: Record<string, string>;
   members: Member[];
   payerOptions: Opt[];
+  /** Opened from a payment notification: the payment to land on. */
+  focus?: NotificationFocus | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -72,7 +78,15 @@ export function Settlement({
     return Array.from(set).sort().reverse();
   }, [rows]);
 
-  const [month, setMonth] = useState(months[0] ?? "");
+  // Opened from a payment notification: its month above, the payment
+  // highlighted in the history below.
+  const [landing, setLanding] = useState(() =>
+    focus && !landedNotifications.has(focus.id) ? settlementLanding(focus, settlements.map((s) => s.id)) : null,
+  );
+  useLandingScroll(focus?.id ?? null, landing !== null);
+  const marked = landing?.present ? landing.id : null;
+
+  const [month, setMonth] = useState(() => (landing && months.includes(landing.month) ? landing.month : months[0] ?? ""));
 
   const nameOf = (v: string) => nameMap[v] ?? v;
 
@@ -417,6 +431,13 @@ export function Settlement({
       {/* History */}
       <div className="space-y-2">
         <h2 className="section-title">Settlement History</h2>
+        {landing ? (
+          <LandingNote onDismiss={() => setLanding(null)}>
+            {landing.present
+              ? `The payment from this notification is highlighted below. The balances above are for ${monthLabel(landing.month)}, the month it was for.`
+              : "The payment from this notification is no longer on record."}
+          </LandingNote>
+        ) : null}
         {settlements.length === 0 ? (
           <div className="alert-info">No settlements recorded yet.</div>
         ) : (
@@ -427,10 +448,15 @@ export function Settlement({
                 const at = settledAt(s.settledAt);
                 const progress = progressText(lineageById.get(s.id));
                 return (
-                  <li key={s.id} className="flex items-center gap-3 px-3 py-2.5">
+                  <li
+                    key={s.id}
+                    data-landing={marked === s.id ? "" : undefined}
+                    className={`flex items-center gap-3 px-3 py-2.5 ${marked === s.id ? "landing-mark" : ""}`}
+                  >
                     <DateBadge iso={at.day} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">
+                        {marked === s.id ? <LandingPill className="mr-1.5">Recorded</LandingPill> : null}
                         {nameOf(s.settledBy)} paid{s.settledTo ? ` ${nameOf(s.settledTo)}` : ""}
                       </div>
                       <div className="truncate text-xs text-muted">
@@ -463,8 +489,11 @@ export function Settlement({
                   {settlements.map((s) => {
                     const at = settledAt(s.settledAt);
                     return (
-                      <tr key={s.id}>
-                        <td className="whitespace-nowrap">{monthLabel(s.month)}</td>
+                      <tr key={s.id} data-landing={marked === s.id ? "" : undefined} className={marked === s.id ? "landing-mark" : ""}>
+                        <td className="whitespace-nowrap">
+                          {monthLabel(s.month)}
+                          {marked === s.id ? <LandingPill className="ml-1.5">Recorded</LandingPill> : null}
+                        </td>
                         <td className="whitespace-nowrap">
                           {tableDate(at.day)}, {at.time}
                         </td>

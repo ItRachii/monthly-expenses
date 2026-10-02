@@ -105,6 +105,8 @@ async function notifyRemoval(email: string, plan: RemovalPlan) {
         actorEmail: email,
         type: "expense_deleted",
         message: `${who} deleted ${g.count} imported expense${g.count === 1 ? "" : "s"} (${formatINR(g.total)})`,
+        // A count and total only: a removed card or statement leaves no item names behind.
+        target: { kind: "deleted", items: [], count: g.count, total: g.total },
       });
     }
   } catch {

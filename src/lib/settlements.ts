@@ -45,8 +45,9 @@ export async function createSettlement(data: {
   note: string | null;
   ownerEmail: string | null;
   groupId: string | null;
-}) {
-  await prisma.settlement.create({
+}): Promise<{ id: number }> {
+  return prisma.settlement.create({
+    select: { id: true },
     data: {
       month: data.month,
       settledAt: new Date(),

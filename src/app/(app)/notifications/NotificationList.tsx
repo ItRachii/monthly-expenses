@@ -75,10 +75,11 @@ export function NotificationList({
 
       <div className="space-y-2">
         {notifications.map((n) => (
-          // Opens the group it happened in; opening it counts as seeing it.
+          // Opens the group on the record it is about (highlighted there);
+          // opening it counts as seeing it.
           <Link
             key={n.id}
-            href={`/g/${encodeURIComponent(n.groupId)}`}
+            href={n.href}
             onClick={() => void markReadAction(n.id)}
             className="card flex w-full items-start gap-3 border-primary/30 bg-primary/5 text-left transition hover:bg-primary/10 active:scale-[0.99]"
           >

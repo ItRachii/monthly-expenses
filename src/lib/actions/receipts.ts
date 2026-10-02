@@ -99,7 +99,7 @@ export async function addReceiptAction(input: {
   );
   items.forEach((it, i) => (it.category = categories[i]));
 
-  await createReceiptWithItems({
+  const receiptId = await createReceiptWithItems({
     merchant,
     purchasedOn: input.purchasedOn,
     total,
@@ -119,7 +119,11 @@ export async function addReceiptAction(input: {
         groupId,
         actorEmail: email,
         type: "expense_added",
-        message: `${who} scanned a receipt from ${merchant} — ${items.length} items (${formatINR(total)})`,
+        message: `${who} scanned a receipt from ${merchant}: ${items.length} items (${formatINR(total)})`,
+        target: {
+          kind: "expenses",
+          ids: (await prisma.expense.findMany({ where: { receiptId }, select: { id: true } })).map((e) => e.id),
+        },
       });
     } catch {
       // best-effort

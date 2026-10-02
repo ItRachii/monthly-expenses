@@ -411,3 +411,33 @@
     animation: none !important;
   }
 }
+
+/* The record a notification was about: tinted, with a bar on its leading
+   edge, and two soft pulses on arrival so the eye finds it. A deleted one,
+   shown crossed out where it was, takes the negative tone. */
+.landing-mark {
+  --landing: var(--c-primary);
+  background-color: rgb(var(--landing) / 0.12);
+  box-shadow: inset 3px 0 0 rgb(var(--landing));
+  animation: landing-pulse 1.2s ease-in-out 2;
+}
+.landing-mark[data-ghost] {
+  --landing: var(--c-negative);
+}
+/* Table rows draw the bar on their first cell. */
+tr.landing-mark {
+  box-shadow: none;
+}
+tr.landing-mark > td:first-child {
+  box-shadow: inset 3px 0 0 rgb(var(--landing));
+}
+@keyframes landing-pulse {
+  50% {
+    background-color: rgb(var(--landing) / 0.28);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-mark {
+    animation: none;
+  }
+}

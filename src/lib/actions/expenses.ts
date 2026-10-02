@@ -12,7 +12,7 @@ import {
 import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
 import { displayNameFor } from "@/lib/users";
-import { formatINR } from "@/lib/format";
+import { formatDate, formatINR } from "@/lib/format";
 import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { MAX_AMOUNT, cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { SETTLE_EPS, round2, type Shares } from "@/lib/settlementMath";
@@ -180,7 +180,7 @@ export async function addExpenseAction(input: {
     [checked.category],
   );
 
-  await createExpense({
+  const created = await createExpense({
     date: input.date,
     category,
     item,
@@ -202,6 +202,7 @@ export async function addExpenseAction(input: {
         actorEmail: email,
         type: "expense_added",
         message: `${who} added "${item}" (${formatINR(input.amount)})`,
+        target: { kind: "expenses", ids: [created.id] },
       });
     } catch {
       // ignore notification errors
@@ -304,6 +305,7 @@ export async function updateExpenseAction(
         actorEmail: email,
         type: "expense_updated",
         message: `${who} edited "${item}" (${formatINR(input.amount)})`,
+        target: { kind: "expenses", ids: [id] },
       });
     } catch {
       // ignore notification errors
@@ -344,6 +346,13 @@ export async function deleteExpenseAction(id: number): Promise<ActionResult> {
         actorEmail: email,
         type: "expense_deleted",
         message: `${who} deleted "${exp.item}" (${formatINR(exp.amount)})`,
+        // The row is gone, so the notification keeps what it was.
+        target: {
+          kind: "deleted",
+          items: [{ date: formatDate(exp.date), item: exp.item, category: exp.category, amount: exp.amount }],
+          count: 1,
+          total: exp.amount,
+        },
       });
     } catch {
       // ignore notification errors

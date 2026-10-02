@@ -119,6 +119,9 @@ photo shown in place of member names; run it before deploying that code.
 when several people paid for one expense; run it before deploying that code.
 `2026_09_expense_statement.sql` adds `expenses.statement_id`, the card
 statement an expense was imported from; run it before deploying that code.
+`2026_10_notification_target.sql` adds `notifications.target`, the expense
+or payment a notification is about, so opening it lands on that record;
+run it before deploying that code.
 
 ## Google OAuth setup
 

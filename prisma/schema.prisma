@@ -201,6 +201,9 @@ model Notification {
   message        String
   isRead         Boolean  @default(false) @map("is_read")
   createdAt      DateTime @default(now()) @map("created_at")
+  /// What it points at: expense ids, a deleted expense's snapshot, or a
+  /// payment id. Null on notifications from before it existed.
+  target         Json?
   group          Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@index([recipientEmail, isRead, createdAt(sort: Desc)], map: "notifications_recipient_idx")

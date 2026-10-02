@@ -19,6 +19,7 @@ import { Summary } from "../../summary/Summary";
 import { PeopleProvider } from "@/components/Person";
 import type { CardView } from "@/lib/cards";
 import type { LoanView } from "@/lib/loans";
+import type { NotificationFocus } from "@/lib/notifications";
 import { CardStatements } from "./CardStatements";
 
 interface Member {
@@ -42,6 +43,7 @@ export function SpaceView({
   heroNet,
   heroLines,
   initialTab,
+  focus,
   rows,
   settlements,
   nameMap,
@@ -64,6 +66,8 @@ export function SpaceView({
   heroNet: number;
   heroLines: BalanceLine[];
   initialTab: SpaceTab;
+  /** Opened from a notification: the record to land on. */
+  focus: NotificationFocus | null;
   rows: ExpenseDTO[];
   settlements: SettlementDTO[];
   nameMap: Record<string, string>;
@@ -173,6 +177,7 @@ export function SpaceView({
             isPersonal={isPersonal}
             selfKey={selfKey}
             memberCount={memberCount}
+            focus={focus}
           />
         ) : null}
 
@@ -187,6 +192,7 @@ export function SpaceView({
             nameMap={nameMap}
             members={members}
             payerOptions={payerOptions}
+            focus={focus}
           />
         ) : null}
 
