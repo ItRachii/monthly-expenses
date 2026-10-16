@@ -8,7 +8,9 @@ import { parseStatement } from "@/lib/statements/parse";
 import { parseCsv, parseSheet } from "@/lib/statements/sheet";
 import { readXlsx } from "@/lib/statements/xlsx";
 import type { ParsedStatement, RowKind, StatementRow } from "@/lib/statements/types";
-import { importStatementAction } from "@/lib/actions/statements";
+import { checkStatementDuplicatesAction, importStatementAction, type ImportRow } from "@/lib/actions/statements";
+import type { DuplicateView } from "@/lib/statementDuplicates";
+import { occurrences } from "@/lib/statements/duplicates";
 import { saveStatementSummaryAction } from "@/lib/actions/cards";
 import type { SaveStatementInput } from "@/lib/cards";
 import { applyKeys, lineagePayload, lineageWarnings, resolveLineage, type KnownInstalment } from "@/lib/statements/lineage";
@@ -67,6 +69,32 @@ function dayLabel(iso: string): string {
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" });
 }
 
+/** What to do with a ticked row that is already on record. "add" is only offered for likely matches. */
+type Choice = "skip" | "replace" | "add";
+
+/** Row id to which time that exact row (day, amount, description) appears in the statement. */
+function occurrenceMap(rows: StatementRow[]): Map<string, number> {
+  const n = occurrences(rows.map((r) => ({ date: r.date, total: r.total, description: r.description })));
+  return new Map(rows.map((r, i) => [r.id, n[i]]));
+}
+
+/** A row as the import sends it. */
+function payloadOf(r: StatementRow, category: string, occ: Map<string, number>): ImportRow {
+  return {
+    date: r.date,
+    item: r.description,
+    amount: r.total,
+    category,
+    untracedRefKey: r.untraced && r.taxRefKey ? r.taxRefKey : null,
+    occurrence: occ.get(r.id) ?? 1,
+  };
+}
+
+/** The card a parsed statement is for, when it says. */
+function cardOf(p: ParsedStatement): { bank: ParsedStatement["bank"]; last4: string } | undefined {
+  return p.card ? { bank: p.bank, last4: p.card.last4 } : undefined;
+}
+
 export function StatementImport({
   contexts,
   loanSalt,
@@ -99,7 +127,12 @@ export function StatementImport({
   const [ctx, setCtx] = useState(contexts[0]?.value ?? "personal");
   const [ctxCategories, setCtxCategories] = useState<string[]>([]);
   const [importing, startImport] = useTransition();
-  const [result, setResult] = useState<{ count: number; ctx: string } | null>(null);
+  const [result, setResult] = useState<{ count: number; replaced: number; skipped: number; ctx: string } | null>(null);
+  // Rows already on record (an earlier read of this statement, or the same
+  // spend added by hand): row id to the expense they repeat.
+  const [onRecord, setOnRecord] = useState<Map<string, DuplicateView>>(new Map());
+  // The prompt shown when Add finds some of the ticked rows on record.
+  const [review, setReview] = useState<{ rows: StatementRow[]; dups: Map<string, DuplicateView>; choice: Map<string, Choice> } | null>(null);
   const [copied, setCopied] = useState(false);
   const [summarySaved, setSummarySaved] = useState(false);
   const [savingSummary, startSaveSummary] = useTransition();
@@ -148,8 +181,24 @@ export function StatementImport({
       setWrongPassword(false);
       setTab("all");
       setQuery("");
+      setOnRecord(new Map());
+      setReview(null);
       setPhase("review");
       setUnsupported(p.bank === "unknown");
+      // Which rows are already expenses: labelled and left unticked, so a
+      // second read of a statement adds only what is new.
+      const debits = p.rows.filter((r) => !r.credit);
+      if (debits.length > 0) {
+        const occ = occurrenceMap(p.rows);
+        checkStatementDuplicatesAction({ rows: debits.map((r) => payloadOf(r, r.category, occ)), card: cardOf(p) })
+          .then((res) => {
+            if (!res.ok || res.duplicates.length === 0) return;
+            const map = new Map(res.duplicates.map((d) => [debits[d.index].id, d]));
+            setOnRecord(map);
+            setSelected((sel) => new Set([...sel].filter((id) => !map.has(id))));
+          })
+          .catch(() => {});
+      }
     } catch (e) {
       setPhase("pick");
       if (e instanceof PdfPasswordError) {
@@ -265,36 +314,73 @@ export function StatementImport({
     setCategories((m) => ({ ...m, ...Object.fromEntries(selectedRows.map((r) => [r.id, c])) }));
   }
 
+  const occ = useMemo(() => occurrenceMap(rows), [rows]);
+
+  /** Adds the ticked rows, first asking about any that are already on record. */
   function doImport() {
     if (selectedRows.length === 0) return;
     setError(null);
+    const batch = selectedRows;
     startImport(async () => {
-      const res = await importStatementAction({
-        ctx,
-        summary: summaryInput && !summarySaved ? summaryInput : undefined,
-        card:
-          parsed?.card && parsed.period
-            ? { bank: parsed.bank, last4: parsed.card.last4, product: parsed.card.product, period: parsed.period }
-            : undefined,
-        lineage: lineage ?? undefined,
-        rows: selectedRows.map((r) => ({
-          date: r.date,
-          item: r.description,
-          amount: r.total,
-          category: categories[r.id] ?? r.category,
-          untracedRefKey: r.untraced && r.taxRefKey ? r.taxRefKey : null,
-        })),
+      const check = await checkStatementDuplicatesAction({
+        rows: batch.map((r) => payloadOf(r, categories[r.id] ?? r.category, occ)),
+        card: parsed ? cardOf(parsed) : undefined,
       });
-      if (!res.ok) {
-        setError(res.error);
+      if (!check.ok) {
+        setError(check.error);
         return;
       }
-      setAdded((a) => new Set([...a, ...selectedRows.map((r) => r.id)]));
-      setSelected(new Set());
-      setResult({ count: res.count, ctx });
-      if (res.summarySaved) setSummarySaved(true);
-      router.refresh();
+      if (check.duplicates.length === 0) {
+        await send(batch, new Map(), new Set());
+        return;
+      }
+      const dups = new Map(check.duplicates.map((d) => [batch[d.index].id, d]));
+      setReview({ rows: batch, dups, choice: new Map([...dups.keys()].map((id) => [id, "skip"])) });
     });
+  }
+
+  /** Sends the batch: rows to replace carry the expense they overwrite; skipped ones stay out. */
+  async function send(batch: StatementRow[], replace: Map<string, number>, skip: Set<string>) {
+    const sending = batch.filter((r) => !skip.has(r.id));
+    if (sending.length === 0) {
+      setAdded((a) => new Set([...a, ...batch.map((r) => r.id)]));
+      setSelected(new Set());
+      setReview(null);
+      setResult({ count: 0, replaced: 0, skipped: skip.size, ctx });
+      return;
+    }
+    const res = await importStatementAction({
+      ctx,
+      summary: summaryInput && !summarySaved ? summaryInput : undefined,
+      card:
+        parsed?.card && parsed.period
+          ? { bank: parsed.bank, last4: parsed.card.last4, product: parsed.card.product, period: parsed.period }
+          : undefined,
+      lineage: lineage ?? undefined,
+      rows: sending.map((r) => ({ ...payloadOf(r, categories[r.id] ?? r.category, occ), replaceId: replace.get(r.id) ?? null })),
+    });
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setAdded((a) => new Set([...a, ...batch.map((r) => r.id)]));
+    setSelected(new Set());
+    setReview(null);
+    setResult({ count: res.count, replaced: res.replaced, skipped: skip.size + res.skipped, ctx });
+    if (res.summarySaved) setSummarySaved(true);
+    router.refresh();
+  }
+
+  function confirmReview() {
+    if (!review) return;
+    const replace = new Map<string, number>();
+    const skip = new Set<string>();
+    for (const [id, c] of review.choice) {
+      if (c === "replace") replace.set(id, review.dups.get(id)!.existing.id);
+      else if (c === "skip") skip.add(id);
+      // "add": a likely match the user knows is a separate spend; sent as new.
+    }
+    startImport(() => send(review.rows, replace, skip));
   }
 
   async function copyDebug() {
@@ -384,6 +470,18 @@ export function StatementImport({
         </section>
       ) : null}
 
+      {review ? (
+        <DuplicatesDialog
+          review={review}
+          destination={ctxLabel}
+          pending={importing}
+          onChoice={(id, c) => setReview((r) => (r ? { ...r, choice: new Map(r.choice).set(id, c) } : r))}
+          onAll={(c) => setReview((r) => (r ? { ...r, choice: new Map([...r.choice.keys()].map((id) => [id, c])) } : r))}
+          onCancel={() => setReview(null)}
+          onConfirm={confirmReview}
+        />
+      ) : null}
+
       {phase === "review" && parsed && unsupported ? (
         <UnsupportedBankDialog fileName={file?.name ?? "This file"} rows={parsed.rows.length} onPickAnother={reset} onReviewAnyway={() => setUnsupported(false)} />
       ) : null}
@@ -424,13 +522,28 @@ export function StatementImport({
                 {w}
               </div>
             ))}
+            {onRecord.size > 0 ? (
+              <div className="alert-info" data-on-record>
+                {onRecord.size === 1 ? "1 row is" : `${onRecord.size} rows are`} already in your expenses, from an earlier read of this
+                statement or added before, so {onRecord.size === 1 ? "it is" : "they are"} left unticked and marked Already added. Tick{" "}
+                {onRecord.size === 1 ? "it" : "them"} to replace the {onRecord.size === 1 ? "expense" : "expenses"} on record.
+              </div>
+            ) : null}
             {result ? (
-              <div className="alert-success">
-                Added {result.count} expense{result.count === 1 ? "" : "s"} to{" "}
-                <Link href={result.ctx === "personal" ? "/g/personal" : `/g/${encodeURIComponent(result.ctx)}`} className="font-semibold underline">
-                  {contexts.find((c) => c.value === result.ctx)?.label ?? "Personal"}
-                </Link>
-                .
+              <div className="alert-success" data-import-result>
+                {result.count > 0 ? (
+                  <>
+                    Added {result.count} expense{result.count === 1 ? "" : "s"} to{" "}
+                    <Link href={result.ctx === "personal" ? "/g/personal" : `/g/${encodeURIComponent(result.ctx)}`} className="font-semibold underline">
+                      {contexts.find((c) => c.value === result.ctx)?.label ?? "Personal"}
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  "Nothing new added."
+                )}
+                {result.replaced > 0 ? ` Replaced ${result.replaced} already on record.` : ""}
+                {result.skipped > 0 ? ` Skipped ${result.skipped} already added.` : ""}
               </div>
             ) : null}
             {error ? <div className="alert-error">{error}</div> : null}
@@ -582,6 +695,7 @@ export function StatementImport({
                           open={expanded === r.id}
                           checked={selected.has(r.id)}
                           isAdded={added.has(r.id)}
+                          dup={onRecord.get(r.id)}
                           category={categories[r.id] ?? r.category}
                           categories={allCategories}
                           onToggleOpen={() => setExpanded((x) => (x === r.id ? null : r.id))}
@@ -608,6 +722,7 @@ export function StatementImport({
                         open={expanded === r.id}
                         checked={selected.has(r.id)}
                         isAdded={added.has(r.id)}
+                        dup={onRecord.get(r.id)}
                         category={categories[r.id] ?? r.category}
                         categories={allCategories}
                         onToggleOpen={() => setExpanded((x) => (x === r.id ? null : r.id))}
@@ -708,6 +823,8 @@ interface RowProps {
   open: boolean;
   checked: boolean;
   isAdded: boolean;
+  /** The expense on record this row repeats, if any. */
+  dup?: DuplicateView;
   category: string;
   categories: string[];
   onToggleOpen: () => void;
@@ -717,9 +834,18 @@ interface RowProps {
   onNewCategory?: () => void;
 }
 
-/** A row's state as a pill: added, a credit, untraced GST, or new. */
-function statusOf(row: StatementRow, isAdded: boolean) {
+/** Where an expense on record lives, for labels: "Personal" or the group's name. */
+const placeOf = (d: DuplicateView) => d.existing.group?.name ?? "Personal";
+
+/** A row's state as a pill: added, already on record, a credit, untraced GST, or new. */
+function statusOf(row: StatementRow, isAdded: boolean, dup?: DuplicateView) {
   if (isAdded) return <StatusPill tone="positive">Added</StatusPill>;
+  if (dup)
+    return (
+      <StatusPill tone="warning" title={`Already in ${placeOf(dup)} as "${dup.existing.item}", ${formatINR(dup.existing.amount)} on ${tableDate(dup.existing.date)}`}>
+        Already added
+      </StatusPill>
+    );
   if (row.credit) return <StatusPill tone="info" title="Credits are not expenses">Credit</StatusPill>;
   if (row.untraced)
     return (
@@ -751,7 +877,7 @@ function Amount({ row }: { row: StatementRow }) {
   );
 }
 
-function RowView({ row, open, checked, isAdded, category, categories, onToggleOpen, onToggleChecked, onCategory, onNewCategory }: RowProps) {
+function RowView({ row, open, checked, isAdded, dup, category, categories, onToggleOpen, onToggleChecked, onCategory, onNewCategory }: RowProps) {
   const disabled = row.credit || isAdded;
   return (
     <>
@@ -799,7 +925,7 @@ function RowView({ row, open, checked, isAdded, category, categories, onToggleOp
             </select>
           )}
         </td>
-        <td>{statusOf(row, isAdded)}</td>
+        <td>{statusOf(row, isAdded, dup)}</td>
         <td className="text-right">
           <Amount row={row} />
         </td>
@@ -827,7 +953,7 @@ function RowView({ row, open, checked, isAdded, category, categories, onToggleOp
   );
 }
 
-function PhoneRow({ row, open, checked, isAdded, category, categories, onToggleOpen, onToggleChecked, onCategory }: RowProps) {
+function PhoneRow({ row, open, checked, isAdded, dup, category, categories, onToggleOpen, onToggleChecked, onCategory }: RowProps) {
   const disabled = row.credit || isAdded;
   return (
     <li data-selected={(checked && !isAdded) || undefined} className={`data-[selected]:bg-primary/[0.06] ${isAdded ? "opacity-60" : ""}`}>
@@ -850,7 +976,7 @@ function PhoneRow({ row, open, checked, isAdded, category, categories, onToggleO
           </span>
           <span className="flex shrink-0 flex-col items-end gap-1 text-sm">
             <Amount row={row} />
-            {statusOf(row, isAdded)}
+            {statusOf(row, isAdded, dup)}
           </span>
         </button>
       </div>
@@ -1059,6 +1185,143 @@ function UnsupportedBankDialog({
           ) : null}
           <button type="button" className="btn-primary whitespace-nowrap" autoFocus onClick={onPickAnother}>
             Choose another file
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Asks what to do with ticked rows that are already expenses: replace the
+ * expense on record with this read (it stays where it is, no second copy)
+ * or skip the row. New rows in the batch are added either way.
+ */
+function DuplicatesDialog({
+  review,
+  destination,
+  pending,
+  onChoice,
+  onAll,
+  onCancel,
+  onConfirm,
+}: {
+  review: { rows: StatementRow[]; dups: Map<string, DuplicateView>; choice: Map<string, Choice> };
+  destination: string;
+  pending: boolean;
+  onChoice: (rowId: string, c: Choice) => void;
+  onAll: (c: Choice) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !pending) onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel, pending]);
+
+  const dupRows = review.rows.filter((r) => review.dups.has(r.id));
+  const fresh = review.rows.length - dupRows.length;
+  const replacing = [...review.choice.values()].filter((c) => c === "replace").length;
+  const keeping = [...review.choice.values()].filter((c) => c === "add").length;
+  const skipping = dupRows.length - replacing - keeping;
+  const adding = fresh + keeping;
+  const action =
+    adding + replacing === 0
+      ? "Skip them"
+      : [adding > 0 ? `Add ${adding} new` : "", replacing > 0 ? `replace ${replacing}` : ""].filter(Boolean).join(", ").replace(/^./, (c) => c.toUpperCase());
+
+  return (
+    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !pending && onCancel()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dups-title"
+        aria-describedby="dups-text"
+        // Phones scroll the whole popup; wider screens keep the header and
+        // buttons still and scroll the list.
+        className="modal-pop card flex max-h-[90dvh] w-full max-w-xl flex-col gap-4 max-sm:overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+        data-duplicates
+      >
+        <div className="space-y-1">
+          <h2 id="dups-title" className="section-title">
+            {dupRows.length === 1 ? "1 of these is already added" : `${dupRows.length} of these are already added`}
+          </h2>
+          <p id="dups-text" className="text-sm text-muted">
+            <strong className="text-ink">Replace</strong> overwrites the expense on record with this row (date, amount, description, category), where
+            it is, with no second copy. <strong className="text-ink">Skip</strong> leaves it as it is. A row that only looks the same can also be kept
+            as a separate expense.
+            {fresh > 0 ? ` The ${fresh} new row${fresh === 1 ? "" : "s"} go${fresh === 1 ? "es" : ""} to ${destination} either way.` : ""}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted">For all:</span>
+          <button type="button" className="chip-btn" disabled={pending} onClick={() => onAll("skip")}>
+            Skip all
+          </button>
+          <button type="button" className="chip-btn" disabled={pending} onClick={() => onAll("replace")}>
+            Replace all
+          </button>
+        </div>
+
+        <ul className="-mx-1 shrink-0 divide-y divide-ink/[0.06] rounded-xl border border-ink/10 sm:min-h-0 sm:flex-1 sm:shrink sm:overflow-y-auto">
+          {dupRows.map((r) => {
+            const d = review.dups.get(r.id)!;
+            const choice = review.choice.get(r.id) ?? "skip";
+            const options: Choice[] = d.how === "exact" ? ["skip", "replace"] : ["skip", "replace", "add"];
+            const elsewhere = placeOf(d) !== destination;
+            return (
+              <li key={r.id} className="space-y-2 px-3 py-2.5" data-dup-row>
+                <div className="flex items-baseline gap-3">
+                  <span className="w-14 shrink-0 text-xs text-muted">{dayLabel(r.date)}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium" title={r.description}>
+                    {r.description}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">{formatINR(r.total)}</span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 pl-[4.25rem] max-sm:pl-0">
+                  <p className="min-w-0 text-xs text-muted">
+                    {d.how === "exact" ? "Same row, already read from this statement." : "Same day and amount, already on record."} In{" "}
+                    <span className="font-medium text-ink/80">{placeOf(d)}</span>
+                    {d.existing.item !== r.description ? ` as "${d.existing.item}"` : ""}
+                    {elsewhere && choice === "replace" ? `; replacing keeps it in ${placeOf(d)}` : ""}.
+                  </p>
+                  <div role="radiogroup" aria-label={`What to do with ${r.description}`} className="inline-flex shrink-0 rounded-lg border border-ink/10 p-0.5">
+                    {options.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        role="radio"
+                        aria-checked={choice === c}
+                        disabled={pending}
+                        onClick={() => onChoice(r.id, c)}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          choice === c ? (c === "replace" ? "bg-warning/15 text-warning" : "bg-ink/10 text-ink") : "text-muted hover:text-ink"
+                        }`}
+                      >
+                        {c === "skip" ? "Skip" : c === "replace" ? "Replace" : "Keep both"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <span className="text-xs text-muted sm:mr-auto" aria-live="polite">
+            {adding} new · {replacing} to replace · {skipping} to skip
+          </span>
+          <button type="button" className="btn-secondary whitespace-nowrap" disabled={pending} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="btn-primary whitespace-nowrap" autoFocus disabled={pending} onClick={onConfirm}>
+            {pending ? "Saving…" : action}
           </button>
         </div>
       </div>

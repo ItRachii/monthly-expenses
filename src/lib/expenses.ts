@@ -100,6 +100,8 @@ export async function createExpense(data: {
   groupId: string | null;
   /** The card statement the row was imported from. */
   statementId?: number | null;
+  /** Keyed hash of that statement row (see statementDuplicates). */
+  importKey?: string | null;
 }): Promise<{ id: number }> {
   return prisma.expense.create({
     select: { id: true },
@@ -115,6 +117,7 @@ export async function createExpense(data: {
       ownerEmail: data.ownerEmail,
       groupId: data.groupId,
       statementId: data.statementId ?? null,
+      importKey: data.importKey ?? null,
     },
   });
 }
