@@ -49,11 +49,16 @@ model Expense {
   statementId Int?           @map("statement_id")
   statement   CardStatement? @relation(fields: [statementId], references: [id], onDelete: SetNull)
 
+  // Keyed hash of the statement row it was imported from, so a statement
+  // read twice is not added twice. Null for hand-entered expenses.
+  importKey String? @map("import_key")
+
   // GST charges imported before the instalment they tax was on record.
   gstPending GstPending[]
 
   @@index([receiptId], map: "expenses_receipt_idx")
   @@index([statementId], map: "expenses_statement_idx")
+  @@index([importKey], map: "expenses_import_key_idx")
   @@map("expenses")
 }
 

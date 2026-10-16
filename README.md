@@ -122,6 +122,9 @@ statement an expense was imported from; run it before deploying that code.
 `2026_10_notification_target.sql` adds `notifications.target`, the expense
 or payment a notification is about, so opening it lands on that record;
 run it before deploying that code.
+`2026_10_expense_import_key.sql` adds `expenses.import_key`, a keyed hash of
+the statement row an expense was imported from, so a statement read twice
+is not added twice; run it before deploying that code.
 
 ## Google OAuth setup
 
