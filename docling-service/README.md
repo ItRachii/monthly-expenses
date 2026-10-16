@@ -45,7 +45,9 @@ To run n8n and the scanner from one ngrok agent, list both in
           url: 8787
 
 The free plan includes one static domain; a second fixed address may
-need a paid plan or a random ngrok URL.
+need a paid plan or a random ngrok URL. If your ngrok version rejects
+this file, check its agent configuration docs: the format has changed
+between versions.
 
 ## Test a scan
 

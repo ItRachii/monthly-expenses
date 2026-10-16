@@ -25,7 +25,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY server.py warmup.py ./
-RUN python warmup.py && rm warmup.py
+RUN python warmup.py && rm -rf warmup.py /tmp/*
 
 # Run as a normal user, not root.
 RUN useradd --system --uid 10001 --home /app scanner \
