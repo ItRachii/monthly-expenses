@@ -1,0 +1,6 @@
+# Versions tested together with the three quick-commerce screenshots.
+# torch and torchvision come from PyTorch's CPU-only index (see Dockerfile).
+docling==2.140.0
+fastapi==0.143.3
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32

@@ -1,0 +1,16 @@
+# Start:  docker compose up -d --build
+# Logs:   docker compose logs -f
+# Stop:   docker compose down
+services:
+  scanner:
+    build: .
+    image: ledger-scanner
+    container_name: ledger-scanner
+    env_file: .env
+    # Only reachable from this laptop; ngrok forwards the outside world to it.
+    # Port 8787 so it stays clear of n8n on 5678.
+    ports:
+      - "127.0.0.1:8787:8787"
+    restart: unless-stopped
+    # Docling needs about 1.7 GB while scanning; this caps it well above that.
+    mem_limit: 4g
