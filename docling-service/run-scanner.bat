@@ -1,6 +1,6 @@
 @echo off
 rem Builds and starts Ledger's scanner one step at a time, stopping at the
-rem first step that fails. Double-click it, or run .\run-scanner.bat from
+rem first step that fails, then opens it to the app with ngrok. Double-click it, or run .\run-scanner.bat from
 rem PowerShell or Command Prompt. It works from any folder.
 setlocal
 cd /d "%~dp0"
@@ -16,7 +16,7 @@ if not exist .env (
 )
 
 echo.
-echo [1/3] Building the image: docker compose build
+echo [1/4] Building the image: docker compose build
 echo       The first build takes a while, and a step can sit with no new output. Leave it running.
 docker compose build
 if errorlevel 1 (
@@ -25,7 +25,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/3] Checking the image: docker images ledger-scanner
+echo [2/4] Checking the image: docker images ledger-scanner
 docker images ledger-scanner
 docker image inspect ledger-scanner >nul 2>&1
 if errorlevel 1 (
@@ -34,7 +34,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [3/3] Starting the scanner: docker compose up -d
+echo [3/4] Starting the scanner: docker compose up -d
 docker compose up -d
 if errorlevel 1 (
   echo The scanner did not start. See: docker compose logs scanner
@@ -64,6 +64,34 @@ goto fail
 :ready
 echo.
 echo Scanner is ready: http://127.0.0.1:8787/health shows {"ok":true}
+
+echo.
+echo [4/4] Opening it to the app with ngrok in a new window
+where ngrok >nul 2>&1
+if errorlevel 1 (
+  echo ngrok is not installed or not on PATH. Install it from https://ngrok.com/download then run: ngrok http 8787
+  goto finish
+)
+rem NGROK_URL in .env is your static ngrok domain, so the address Vercel
+rem uses stays the same on every start.
+set "NGROK_URL="
+for /f "usebackq tokens=1,* delims==" %%a in (".env") do if /i "%%a"=="NGROK_URL" set "NGROK_URL=%%b"
+if defined NGROK_URL set "NGROK_URL=%NGROK_URL:https://=%"
+if defined NGROK_URL goto static
+echo No NGROK_URL in .env, so ngrok picks a new random address each time.
+echo Copy the https address from the ngrok window into Vercel as DOCLING_URL, every time.
+start "ngrok scanner" cmd /k ngrok http 8787
+goto done
+
+:static
+echo Address for Vercel DOCLING_URL: https://%NGROK_URL%
+start "ngrok scanner" cmd /k ngrok http --url=%NGROK_URL% 8787
+
+:done
+echo Keep the ngrok window open: closing it takes the scanner offline for the app.
+
+:finish
+echo.
 pause
 exit /b 0
 
