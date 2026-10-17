@@ -33,15 +33,18 @@ RUN if [ "$DOCLING_VERSION" = latest ]; then spec=docling; else spec="docling==$
  && pip install --upgrade --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt "$spec" \
  && python -c "from importlib.metadata import version as v; print('Installed docling', v('docling'), 'torch', v('torch'))"
 
+# Runs as a normal user, not root.
+RUN useradd --uid 10001 --no-create-home --home-dir /app --shell /usr/sbin/nologin scanner
+
 # The warm-up scans a sample image: it bakes the models in, and a Docling
 # release that no longer works here fails the build instead of the scans.
+# Ownership is set in this same step: a later step would make Docker copy
+# the models (and, before, all of site-packages) into a new layer, which
+# took minutes on Docker Desktop.
 COPY server.py envelope.py test_client.py warmup.py ./
-RUN python warmup.py && rm -rf warmup.py /tmp/*
-
-# Run as a normal user, not root.
-RUN useradd --system --uid 10001 --home /app scanner \
+RUN python warmup.py && rm -rf warmup.py /tmp/* \
  && chown -R scanner /app /opt/models \
- && chmod -R a+rX /usr/local/lib/python3.11/site-packages
+ && chmod -R a+rX /usr/local/lib/python3.11/site-packages/rapidocr
 USER scanner
 
 EXPOSE 8787
