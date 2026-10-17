@@ -1,6 +1,6 @@
 @echo off
 rem Builds and starts Ledger's scanner one step at a time, stopping at the
-rem first step that fails. Double-click it, or run .\run-scanner.cmd from
+rem first step that fails. Double-click it, or run .\run-scanner.bat from
 rem PowerShell or Command Prompt. It works from any folder.
 setlocal
 cd /d "%~dp0"

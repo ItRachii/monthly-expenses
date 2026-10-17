@@ -1,2 +1,3 @@
 # cmd.exe misreads labels in files with Unix line endings.
+*.bat text eol=crlf
 *.cmd text eol=crlf

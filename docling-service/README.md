@@ -31,11 +31,11 @@ derived from `DOCLING_SECRET`, see `envelope.py`):
 
        docker compose up -d --build
 
-   On Windows, `run-scanner.cmd` does the same one step at a time
+   On Windows, `run-scanner.bat` does the same one step at a time
    (`docker compose build`, `docker images ledger-scanner`,
    `docker compose up -d`), stops at the first step that fails, and waits
    until the scanner reports healthy. Double-click it or run
-   `.\run-scanner.cmd`.
+   `.\run-scanner.bat`.
 
 4. Check it is up (it needs about a minute after start to load models):
 
