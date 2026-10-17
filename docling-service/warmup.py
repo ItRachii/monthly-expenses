@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 
 import os
 
-os.environ.setdefault("DOCLING_API_KEY", "x" * 32)  # server.py refuses to load without one
+os.environ.setdefault("DOCLING_SECRET", "x" * 32)  # server.py refuses to load without one
 import server  # noqa: E402  (builds the converter, fetching the layout models)
 
 img = Image.new("RGB", (480, 160), "white")

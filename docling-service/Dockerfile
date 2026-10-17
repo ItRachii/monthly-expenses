@@ -24,7 +24,7 @@ RUN pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.p
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY server.py warmup.py ./
+COPY server.py envelope.py test_client.py warmup.py ./
 RUN python warmup.py && rm -rf warmup.py /tmp/*
 
 # Run as a normal user, not root.

@@ -2,27 +2,33 @@
 returns its text pieces with their positions, for the app to turn into
 expenses.
 
-Privacy: the upload lives only in a temporary file for the length of one
-scan and is deleted straight after, whatever happens. Nothing is logged
-but timings. Every call except /health needs the API key.
+Security: request and response bodies are encrypted end to end (see
+envelope.py), so a tunnel in between only relays ciphertext, and only the
+app, which holds the same secret, can send a scan. The upload lives in a
+temporary file for the length of one scan and is deleted straight after.
+Nothing is logged but timings.
 """
 
-import hmac
+import json
 import os
 import tempfile
 import threading
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
 from docling.document_converter import DocumentConverter, ImageFormatOption, PdfFormatOption
 
-API_KEY = os.environ.get("DOCLING_API_KEY", "")
-if len(API_KEY) < 24:
-    raise SystemExit("Set DOCLING_API_KEY to a random secret of at least 24 characters.")
+from envelope import Envelope, Rejected
+
+SECRET = os.environ.get("DOCLING_SECRET", "")
+if len(SECRET) < 32:
+    raise SystemExit("Set DOCLING_SECRET to a random secret of at least 32 characters (openssl rand -hex 32).")
+envelope = Envelope(SECRET)
 MAX_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "10")) * 1024 * 1024
 MAX_PAGES = int(os.environ.get("MAX_PAGES", "10"))
 
@@ -69,12 +75,26 @@ def health() -> dict:
 
 
 @app.post("/v1/extract")
-def extract(file: UploadFile = File(...), x_api_key: str = Header(default="")) -> dict:
-    if not hmac.compare_digest(x_api_key.encode(), API_KEY.encode()):
-        raise HTTPException(status_code=401, detail="Missing or wrong API key.")
-    data = file.file.read(MAX_BYTES + 1)
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail=f"File is larger than {MAX_BYTES // (1024 * 1024)} MB.")
+async def extract(request: Request) -> Response:
+    # Read at most the limit (plus the 16-byte tag) before doing anything else.
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_BYTES + 16:
+            raise HTTPException(status_code=413, detail=f"File is larger than {MAX_BYTES // (1024 * 1024)} MB.")
+    nonce = request.headers.get("x-ledger-nonce", "")
+    try:
+        data = envelope.open_request(bytes(body), request.headers.get("x-ledger-ts", ""), nonce)
+    except Rejected:
+        # Wrong secret, altered in transit, too old, or a replay: one answer for all.
+        raise HTTPException(status_code=401, detail="Request could not be verified.")
+    del body
+    result = await run_in_threadpool(scan, data)
+    sealed, reply_nonce = envelope.seal_response(json.dumps(result).encode(), nonce)
+    return Response(content=sealed, media_type="application/octet-stream", headers={"X-Ledger-Nonce": reply_nonce})
+
+
+def scan(data: bytes) -> dict:
     suffix = kind_of(data[:16])
     if suffix is None:
         raise HTTPException(status_code=415, detail="Only PNG, JPEG, WebP and PDF files can be read.")
