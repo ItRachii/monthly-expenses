@@ -30,5 +30,5 @@ try:
 except urllib.error.HTTPError as e:
     sys.exit(f"Scanner said {e.code}: {e.read().decode(errors='replace')}")
 print(f"OK: {len(result['items'])} text pieces in {result['ms']} ms")
-for item in result["items"][:15]:
+for item in result["items"]:
     print("  ", item["text"])

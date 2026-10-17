@@ -97,7 +97,7 @@ cryptography`) and the same secret:
 
     DOCLING_SECRET=<secret> python test_client.py order.jpg https://<your-domain>
 
-It prints how many pieces of text were found and the first few. The
+It prints how many pieces of text were found and each one in order. The
 scanner returns every piece with its position (`box`: left, top, right,
 bottom), whether it sat inside a picture region, and how long the scan
 took. Errors: 401 not sealed with the secret (or replayed, or clock more
