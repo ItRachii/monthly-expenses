@@ -22,8 +22,19 @@ WORKDIR /app
 # much larger CUDA build.
 RUN pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Docling is pinned to the release tested with Ledger. To take the newest
+# release instead, build with --build-arg DOCLING_VERSION=latest; change
+# DOCLING_REFRESH (any new value, e.g. the date) to look again on a later
+# build, since Docker otherwise reuses the version it fetched last time.
+# The CPU index stays available in case a new release needs newer torch.
+ARG DOCLING_VERSION=2.140.0
+ARG DOCLING_REFRESH=
+RUN if [ "$DOCLING_VERSION" = latest ]; then spec=docling; else spec="docling==$DOCLING_VERSION"; fi \
+ && pip install --upgrade --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt "$spec" \
+ && python -c "from importlib.metadata import version as v; print('Installed docling', v('docling'), 'torch', v('torch'))"
 
+# The warm-up scans a sample image: it bakes the models in, and a Docling
+# release that no longer works here fails the build instead of the scans.
 COPY server.py envelope.py test_client.py warmup.py ./
 RUN python warmup.py && rm -rf warmup.py /tmp/*
 

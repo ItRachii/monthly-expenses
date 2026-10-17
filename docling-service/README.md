@@ -35,6 +35,25 @@ derived from `DOCLING_SECRET`, see `envelope.py`):
 
        curl http://127.0.0.1:8787/health          -> {"ok":true}
 
+## Docling version
+
+The image installs the Docling release tested with Ledger (set by
+`DOCLING_VERSION` in the Dockerfile). To move to the newest release:
+
+    docker compose build --pull --build-arg DOCLING_VERSION=latest --build-arg DOCLING_REFRESH=2026-10-17
+    docker compose up -d
+
+- Change `DOCLING_REFRESH` to today's date each time: Docker otherwise
+  reuses the version it fetched on an earlier build. `--pull` also takes
+  the newest Python base image, with its security fixes.
+- The build prints `Installed docling <version>` and then scans a sample
+  receipt. If the new release cannot read it, the build stops and your
+  running scanner is left as it was.
+- Check what is running with `docker compose exec scanner pip show docling`.
+- Then scan a real order with the test client (below). If it reads well,
+  set that version as the `DOCLING_VERSION` default so every rebuild
+  gets the same one.
+
 ## Expose it with ngrok
 
 n8n keeps port 5678; the scanner is on **8787**.
