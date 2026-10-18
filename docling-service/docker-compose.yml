@@ -6,7 +6,12 @@ services:
     build: .
     image: ledger-scanner
     container_name: ledger-scanner
-    env_file: .env
+    # Only what the scanner reads, taken from .env. Not the whole file: it
+    # also holds the ngrok token, which the container has no use for.
+    environment:
+      DOCLING_SECRET: ${DOCLING_SECRET:?Set DOCLING_SECRET in .env}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      MAX_PAGES: ${MAX_PAGES:-10}
     # Only reachable from this laptop; ngrok forwards the outside world to it.
     # Port 8787 so it stays clear of n8n on 5678.
     ports:

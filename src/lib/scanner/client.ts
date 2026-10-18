@@ -11,8 +11,13 @@ export type ScanOutcome =
   | { ok: false; reason: "unavailable" | "unsupported" | "too-large" | "no-text" };
 
 const HEALTH_TIMEOUT_MS = 5_000;
-// One image takes 10 to 30 seconds on the laptop's CPU; allow for a queue.
-const SCAN_TIMEOUT_MS = 100_000;
+// One image takes 10 to 30 seconds on the laptop's CPU. Kept under the
+// route's 60-second limit, so a slow scan ends as "unavailable", not a crash.
+const SCAN_TIMEOUT_MS = 55_000;
+// The health answer is reused briefly: opening the scan screen should not
+// cost a request through the tunnel every time.
+const HEALTH_CACHE_MS = 15_000;
+let lastHealth: { at: number; ok: boolean } | null = null;
 
 // ngrok's free plan puts a warning page in front of browser requests; this
 // header (and a non-browser user agent) keeps it out of the way.
@@ -32,8 +37,15 @@ function config(): { url: string; key: Buffer } | null {
 export async function scannerAvailable(): Promise<boolean> {
   const cfg = config();
   if (!cfg) return false;
+  if (lastHealth && Date.now() - lastHealth.at < HEALTH_CACHE_MS) return lastHealth.ok;
+  const ok = await checkHealth(cfg.url);
+  lastHealth = { at: Date.now(), ok };
+  return ok;
+}
+
+async function checkHealth(url: string): Promise<boolean> {
   try {
-    const res = await fetch(`${cfg.url}/health`, {
+    const res = await fetch(`${url}/health`, {
       headers: HEADERS,
       cache: "no-store",
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),

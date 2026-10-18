@@ -150,6 +150,7 @@ export function ReceiptScanner({
         if (body.error === "unsupported")
           setError(`Image ${i + 1} is in a format that can't be read. Use JPG, PNG or WebP.`);
         else if (body.error === "too-large") setError(`Image ${i + 1} is too large. Try a smaller photo or a screenshot.`);
+        else if (body.error === "rate-limited") setError("That's a lot of scans in a short time. Wait a few minutes and try again.");
         else setService("down");
         return;
       }
