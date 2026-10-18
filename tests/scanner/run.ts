@@ -4,6 +4,7 @@
 import { deriveKey, openResponse, sealRequest } from "../../src/lib/scanner/envelope";
 import { scanToLines, type ScanResult } from "../../src/lib/scanner/lines";
 import { parseReceipt } from "../../src/lib/receipt/parse";
+import { isDeveloper } from "../../src/lib/features";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -102,6 +103,21 @@ const twoPages = scanToLines({
   ],
 });
 check("pages in order", JSON.stringify(twoPages) === JSON.stringify(["Page one", "Page two"]), JSON.stringify(twoPages));
+
+// Who may see the scan inspector and the scanner's full result.
+const env = process.env as Record<string, string | undefined>;
+const savedEnv = { NODE_ENV: env.NODE_ENV, DEVELOPER_EMAILS: env.DEVELOPER_EMAILS };
+env.NODE_ENV = "production";
+env.DEVELOPER_EMAILS = " Dev@Example.com , other@example.com";
+check("developer listed", isDeveloper("dev@example.com") && isDeveloper("other@example.com"));
+check("others are not developers", !isDeveloper("user@example.com") && !isDeveloper(null) && !isDeveloper(""));
+env.DEVELOPER_EMAILS = "";
+check("nobody in production without a list", !isDeveloper("dev@example.com"));
+env.NODE_ENV = "development";
+check("everyone locally without a list", isDeveloper("user@example.com"));
+env.DEVELOPER_EMAILS = "dev@example.com";
+check("only the list locally once set", !isDeveloper("user@example.com"));
+Object.assign(env, savedEnv);
 
 if (failures) {
   console.error(`${failures} check(s) failed`);

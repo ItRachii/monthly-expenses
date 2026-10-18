@@ -11,3 +11,18 @@ export function statementsEnabled(): boolean {
   if (v === "0") return false;
   return process.env.NODE_ENV !== "production";
 }
+
+/**
+ * Developer tools, such as the receipt scan inspector (/dev/scan). Only the
+ * sign-in addresses in DEVELOPER_EMAILS (comma-separated) see them in
+ * production; in development every signed-in user does.
+ */
+export function isDeveloper(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const list = (process.env.DEVELOPER_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (list.includes(email.trim().toLowerCase())) return true;
+  return process.env.NODE_ENV !== "production" && list.length === 0;
+}

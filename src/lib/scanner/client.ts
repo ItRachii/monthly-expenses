@@ -7,7 +7,7 @@ import { deriveKey, openResponse, sealRequest } from "./envelope";
 import { scanToLines, type ScanResult } from "./lines";
 
 export type ScanOutcome =
-  | { ok: true; lines: string[] }
+  | { ok: true; lines: string[]; result: ScanResult & { ms?: number } }
   | { ok: false; reason: "unavailable" | "unsupported" | "too-large" | "no-text" };
 
 const HEALTH_TIMEOUT_MS = 5_000;
@@ -79,8 +79,8 @@ export async function scanFile(data: Uint8Array): Promise<ScanOutcome> {
 
   try {
     const plain = openResponse(cfg.key, Buffer.from(await res.arrayBuffer()), replyNonce, sealed.nonce);
-    const result = JSON.parse(plain.toString("utf8")) as ScanResult;
-    return { ok: true, lines: scanToLines(result) };
+    const result = JSON.parse(plain.toString("utf8")) as ScanResult & { ms?: number };
+    return { ok: true, lines: scanToLines(result), result };
   } catch {
     console.error("Scanner reply could not be decrypted or read.");
     return { ok: false, reason: "unavailable" };
