@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   const session = await auth();
   const email = session?.user?.email;
   if (!email) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
-  const debug = new URL(req.url).searchParams.get("debug") === "1" && isDeveloper(email);
+  const debug = new URL(req.url).searchParams.get("debug") === "1" && (await isDeveloper(email));
 
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BYTES)
     return NextResponse.json({ error: "too-large" }, { status: 413 });

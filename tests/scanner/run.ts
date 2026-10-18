@@ -5,6 +5,7 @@ import { deriveKey, openResponse, sealRequest } from "../../src/lib/scanner/enve
 import { scanToLines, type ScanResult } from "../../src/lib/scanner/lines";
 import { parseReceipt } from "../../src/lib/receipt/parse";
 import { isDeveloper } from "../../src/lib/features";
+import { emailId } from "../../src/lib/piiCrypto";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -104,23 +105,33 @@ const twoPages = scanToLines({
 });
 check("pages in order", JSON.stringify(twoPages) === JSON.stringify(["Page one", "Page two"]), JSON.stringify(twoPages));
 
-// Who may see the scan inspector and the scanner's full result.
+// Who may see the developer pages. Sessions hold user ids, never addresses.
 const env = process.env as Record<string, string | undefined>;
-const savedEnv = { NODE_ENV: env.NODE_ENV, DEVELOPER_EMAILS: env.DEVELOPER_EMAILS };
-env.NODE_ENV = "production";
-env.DEVELOPER_EMAILS = " Dev@Example.com , other@example.com";
-check("developer listed", isDeveloper("dev@example.com") && isDeveloper("other@example.com"));
-check("others are not developers", !isDeveloper("user@example.com") && !isDeveloper(null) && !isDeveloper(""));
-env.DEVELOPER_EMAILS = "";
-check("nobody in production without a list", !isDeveloper("dev@example.com"));
-env.NODE_ENV = "development";
-check("everyone locally without a list", isDeveloper("user@example.com"));
-env.DEVELOPER_EMAILS = "dev@example.com";
-check("only the list locally once set", !isDeveloper("user@example.com"));
-Object.assign(env, savedEnv);
+const savedEnv = { NODE_ENV: env.NODE_ENV, DEVELOPER_EMAILS: env.DEVELOPER_EMAILS, PII_SECRET: env.PII_SECRET };
 
-if (failures) {
-  console.error(`${failures} check(s) failed`);
-  process.exit(1);
+async function developerChecks() {
+  env.PII_SECRET = "test-pii-secret";
+  const dev = await emailId("dev@example.com");
+  const other = await emailId("other@example.com");
+  const user = await emailId("user@example.com");
+  env.NODE_ENV = "production";
+  env.DEVELOPER_EMAILS = " Dev@Example.com , other@example.com";
+  check("developer listed, by user id", (await isDeveloper(dev)) && (await isDeveloper(other)));
+  check("raw address is not a session id", !(await isDeveloper("dev@example.com")));
+  check("others are not developers", !(await isDeveloper(user)) && !(await isDeveloper(null)) && !(await isDeveloper("")));
+  env.DEVELOPER_EMAILS = "";
+  check("nobody in production without a list", !(await isDeveloper(dev)));
+  env.NODE_ENV = "development";
+  check("everyone locally without a list", await isDeveloper(user));
+  env.DEVELOPER_EMAILS = "dev@example.com";
+  check("only the list locally once set", !(await isDeveloper(user)) && (await isDeveloper(dev)));
+  Object.assign(env, savedEnv);
 }
-console.log("all scanner checks passed");
+
+void developerChecks().then(() => {
+  if (failures) {
+    console.error(`${failures} check(s) failed`);
+    process.exit(1);
+  }
+  console.log("all scanner checks passed");
+});

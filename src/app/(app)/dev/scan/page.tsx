@@ -8,7 +8,7 @@ import { ScanInspector } from "./ScanInspector";
 // Anyone not in DEVELOPER_EMAILS gets a plain 404, and nothing links here.
 export default async function DevScanPage() {
   const user = await requireUser();
-  if (!isDeveloper(user.email)) notFound();
+  if (!(await isDeveloper(user.email))) notFound();
   return (
     <div className="space-y-4">
       <h1>Scan inspector</h1>

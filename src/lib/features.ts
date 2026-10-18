@@ -1,3 +1,5 @@
+import { emailId } from "./piiCrypto";
+
 // Feature flags read on the server. New screens ship behind one so they can
 // be merged and tested without changing what users see in production.
 
@@ -13,16 +15,27 @@ export function statementsEnabled(): boolean {
 }
 
 /**
- * Developer tools, such as the receipt scan inspector (/dev/scan). Only the
- * sign-in addresses in DEVELOPER_EMAILS (comma-separated) see them in
- * production; in development every signed-in user does.
+ * Developer tools: the scan inspector (/dev/scan) and the metrics page
+ * (/dev/metrics). DEVELOPER_EMAILS is a comma-separated list of sign-in
+ * addresses. Sessions carry the user id, not the address (see
+ * src/lib/piiCrypto.ts), so each listed address is turned into its id the
+ * same way. In development, with the list empty, every signed-in user counts.
  */
-export function isDeveloper(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const list = (process.env.DEVELOPER_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-  if (list.includes(email.trim().toLowerCase())) return true;
-  return process.env.NODE_ENV !== "production" && list.length === 0;
+export async function isDeveloper(userId: string | null | undefined): Promise<boolean> {
+  if (!userId) return false;
+  const ids = await developerIds();
+  if (ids.has(userId)) return true;
+  return process.env.NODE_ENV !== "production" && ids.size === 0;
+}
+
+let cachedIds: { list: string; ids: Promise<Set<string>> } | null = null;
+
+/** The user ids of everyone in DEVELOPER_EMAILS. */
+export function developerIds(): Promise<Set<string>> {
+  const list = process.env.DEVELOPER_EMAILS ?? "";
+  if (cachedIds?.list !== list) {
+    const emails = list.split(",").map((e) => e.trim()).filter(Boolean);
+    cachedIds = { list, ids: Promise.all(emails.map((e) => emailId(e))).then((ids) => new Set(ids)) };
+  }
+  return cachedIds.ids;
 }
