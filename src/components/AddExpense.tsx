@@ -4,6 +4,7 @@ import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AddExpenseForm } from "@/app/(app)/add/AddExpenseForm";
+import { ReceiptScanner } from "@/app/(app)/add/ReceiptScanner";
 import { getAddSetupAction } from "@/lib/actions/expenses";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
@@ -149,6 +150,8 @@ function AddExpenseOverlay({
   onSaved: (message: string, ctx: string) => void;
 }) {
   const [ctx, setCtx] = useState(initialCtx);
+  // Type one expense in, or read them from quick-commerce order screenshots.
+  const [mode, setMode] = useState<"manual" | "orders">("manual");
   const cache = useRef(new Map<string, AddSetup>());
   const [setup, setSetup] = useState<AddSetup | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +241,25 @@ function AddExpenseOverlay({
           </div>
         )}
 
+        <div className="grid grid-cols-2 gap-2" role="group" aria-label="How to add">
+          {(
+            [
+              ["manual", "Enter manually"],
+              ["orders", "From order screenshots"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={mode === value}
+              className={mode === value ? "btn-primary" : "btn-secondary"}
+              onClick={() => setMode(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {error ? (
           <div className="alert-error">
             {error === "offline" ? (
@@ -258,6 +280,18 @@ function AddExpenseOverlay({
               <div key={i} className="h-10 animate-pulse rounded-lg bg-ink/5" />
             ))}
           </div>
+        ) : mode === "orders" ? (
+          <ReceiptScanner
+            key={setup.ctx}
+            embedded
+            ctx={setup.ctx}
+            isPersonal={setup.isPersonal}
+            categories={setup.categories}
+            payerOptions={setup.payerOptions}
+            splitOptions={setup.splitOptions}
+            defaultPayer={setup.defaultPayer}
+            onSaved={(message) => onSaved(`${message.replace(/\.$/, "")} to ${setup.name}.`, setup.ctx)}
+          />
         ) : (
           <AddExpenseForm
             key={setup.ctx}
@@ -282,13 +316,6 @@ function AddExpenseOverlay({
           />
         )}
 
-        <p className="text-xs text-muted">
-          Have a receipt?{" "}
-          <Link href={`/add?ctx=${encodeURIComponent(ctx)}`} className="underline" onClick={onClose}>
-            Scan it on the full Add Expense page
-          </Link>
-          .
-        </p>
       </div>
     </div>
   );

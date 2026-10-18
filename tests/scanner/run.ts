@@ -4,6 +4,8 @@
 import { deriveKey, openResponse, sealRequest } from "../../src/lib/scanner/envelope";
 import { scanToLines, type ScanResult } from "../../src/lib/scanner/lines";
 import { parseReceipt } from "../../src/lib/receipt/parse";
+import { categorize } from "../../src/lib/receipt/categorize";
+import { cleanOrderItem, repeatedRows } from "../../src/lib/receipt/quickCommerce";
 import { isDeveloper } from "../../src/lib/features";
 import { emailId } from "../../src/lib/piiCrypto";
 
@@ -104,6 +106,48 @@ const twoPages = scanToLines({
   ],
 });
 check("pages in order", JSON.stringify(twoPages) === JSON.stringify(["Page one", "Page two"]), JSON.stringify(twoPages));
+
+// Quick-commerce order lines, as read from a real Instamart screenshot.
+const order = parseReceipt(["2 x Sprite Zero Delivered ₹54.0", "1x [Combo] Coca-Cola Diet Coke Can 80.0", "1 x Eveready AAA Battery | Pack of 4 43.0", "Grand Total 177"].join("\n"));
+const cleaned = order.items.map((it) => ({ ...cleanOrderItem(it.description), amount: it.amount }));
+check(
+  "order lines: quantity and status taken off the name",
+  JSON.stringify(cleaned) ===
+    JSON.stringify([
+      { description: "Sprite Zero", qty: 2, amount: 54 },
+      { description: "[Combo] Coca-Cola Diet Coke Can", qty: 1, amount: 80 },
+      // The receipt parser reads a number just before the price as a column,
+      // so "Pack of 4" loses its 4; the amount is still right.
+      { description: "Eveready AAA Battery | Pack of", qty: 1, amount: 43 },
+    ]),
+  JSON.stringify(cleaned),
+);
+check("order lines add up to the total", cleaned.reduce((s, it) => s + it.amount, 0) === order.detectedTotal);
+check("a name without a quantity is kept", JSON.stringify(cleanOrderItem("Amul Taaza Milk 1L")) === JSON.stringify({ description: "Amul Taaza Milk 1L", qty: null }));
+check("Qty prefix", JSON.stringify(cleanOrderItem("Qty 3 Bananas")) === JSON.stringify({ description: "Bananas", qty: 3 }));
+check("a name that is only a status is not emptied", cleanOrderItem("Delivered").description === "Delivered");
+
+// Categories match whole words: "ola" is Ola, not Coca-Cola; "rice" is not "price".
+const categories: [string, string][] = [
+  ["[Combo] Coca-Cola Diet Coke Can", "Groceries"], ["Ola ride", "Transport"], ["USB cable", "Shopping"],
+  ["Basmati Rice 5kg", "Groceries"], ["Price drop", "Other"], ["Eggs 12", "Groceries"], ["Flat rent October", "Housing"],
+  ["Current account fee", "Other"], ["Business lunch", "Dining Out"], ["Bus ticket", "Transport"], ["Corn Flakes", "Groceries"],
+  ["Sprite Zero", "Groceries"], ["Spare parts", "Other"],
+];
+const wrong = categories.filter(([d, want]) => categorize(d) !== want).map(([d]) => `${d} -> ${categorize(d)}`);
+check("categories match whole words", wrong.length === 0, wrong.join("; "));
+
+// Overlapping screenshots: the overlap is read twice.
+check(
+  "rows repeated from an earlier screenshot",
+  JSON.stringify(repeatedRows([["Milk", "Bread", "Handling fee"], ["Handling fee", "Eggs"]], ["Milk", "Bread", "Handling fee", "Handling fee", "Eggs"])) ===
+    JSON.stringify([false, false, false, true, false]),
+);
+check(
+  "two of the same item on one screenshot are both kept",
+  JSON.stringify(repeatedRows([["Milk", "Milk"], ["Milk"]], ["Milk", "Milk", "Milk"])) === JSON.stringify([false, false, true]),
+);
+check("one screenshot: nothing repeats", repeatedRows([["A", "B", "a"]], ["A", "B", "a"]).every((r) => !r));
 
 // Who may see the developer pages. Sessions hold user ids, never addresses.
 const env = process.env as Record<string, string | undefined>;

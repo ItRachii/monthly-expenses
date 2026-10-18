@@ -1,6 +1,9 @@
 // Maps a free-text item description to one of the app's standard categories via
-// keyword matching. Deliberately conservative — anything unrecognized falls back
-// to "Other", and the user can change it in the review screen.
+// keyword matching. Deliberately conservative: anything unrecognized falls back
+// to "Other", and the user can change it in the review screen. Keywords match
+// at the start of a word, and short ones (under 5 letters) only as the whole
+// word or its plural, so "ola" is Ola but not Coca-Cola, and "rice" is not
+// "price".
 
 const RULES: { category: string; keywords: string[] }[] = [
   {
@@ -8,10 +11,11 @@ const RULES: { category: string; keywords: string[] }[] = [
     keywords: [
       "milk", "bread", "egg", "rice", "atta", "flour", "dal", "pulse", "sugar",
       "salt", "oil", "ghee", "butter", "cheese", "paneer", "curd", "yogurt",
-      "vegetable", "veg", "fruit", "onion", "potato", "tomato", "banana",
+      "vegetable", "veg", "veggie", "fruit", "onion", "potato", "tomato", "banana",
       "apple", "biscuit", "maggi", "noodle", "snack", "grocery", "kirana",
-      "masala", "spice", "tea", "coffee bean", "flak", "cereal", "juice",
-      "water bottle", "soft drink", "chocolate", "chips",
+      "masala", "spice", "tea", "coffee bean", "flakes", "cereal", "juice",
+      "water bottle", "soft drink", "cola", "coke", "pepsi", "sprite", "soda",
+      "chocolate", "chips",
     ],
   },
   {
@@ -33,7 +37,7 @@ const RULES: { category: string; keywords: string[] }[] = [
     category: "Healthcare",
     keywords: [
       "pharma", "medicine", "tablet", "capsule", "syrup", "doctor", "clinic",
-      "hospital", "lab", "diagnostic", "dental", "apollo", "pharmacy", "med ",
+      "hospital", "lab", "diagnostic", "dental", "apollo", "pharmacy", "med",
     ],
   },
   {
@@ -85,13 +89,22 @@ const RULES: { category: string; keywords: string[] }[] = [
   },
 ];
 
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const MATCHERS = RULES.map((rule) => ({
+  category: rule.category,
+  patterns: rule.keywords.map((kw) => {
+    const k = kw.trim();
+    const end = k.length < 5 ? "(?:e?s)?(?![a-z0-9])" : "";
+    return new RegExp(`(?:^|[^a-z0-9])${escape(k)}${end}`);
+  }),
+}));
+
 /** Returns the best-guess category for an item description (default "Other"). */
 export function categorize(description: string): string {
-  const text = ` ${description.toLowerCase()} `;
-  for (const rule of RULES) {
-    for (const kw of rule.keywords) {
-      if (text.includes(kw)) return rule.category;
-    }
+  const text = description.toLowerCase();
+  for (const rule of MATCHERS) {
+    if (rule.patterns.some((re) => re.test(text))) return rule.category;
   }
   return "Other";
 }
