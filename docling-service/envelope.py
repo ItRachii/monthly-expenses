@@ -5,7 +5,7 @@ whatever passes through. Every request and response body is therefore
 sealed with AES-256-GCM under a key only the app and this scanner hold;
 the tunnel relays ciphertext it cannot read or alter.
 
-Protocol "ledger-scan-v1" (the app's side lives in the app's code):
+Protocol "ledger-scan-v1" (the app's side is src/lib/scanner/envelope.ts):
 - Both ends derive the AES key from the shared DOCLING_SECRET with
   HKDF-SHA256 (info "ledger-scan-v1 aes-256-gcm"); the secret itself never
   travels.

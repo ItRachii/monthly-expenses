@@ -137,5 +137,35 @@ def scan(data: bytes) -> dict:
     return {
         "pages": [{"page": no, "width": round(s.width, 1), "height": round(s.height, 1)} for no, s in sorted(pages.items())],
         "items": items,
+        "cells": ocr_cells(result, pages),
         "ms": round((time.monotonic() - started) * 1000),
     }
+
+
+def ocr_cells(result, pages: dict) -> list[dict]:
+    """The OCR's own text pieces, each with its box. Docling's text items are
+    layout blocks that can run several receipt rows together ("Item 54.0
+    Fee 9.0 Total 63"); these smaller pieces keep each row's name and price
+    apart, so the app can rebuild the rows from their positions."""
+    cells, seen = [], set()
+    for page in result.pages:
+        layout = page.predictions.layout if page.predictions else None
+        size = pages.get(page.page_no) or page.size
+        for cluster in layout.clusters if layout else []:
+            for cell in cluster.cells:
+                key = (page.page_no, cell.index)
+                text = cell.text.strip()
+                if key in seen or not text:
+                    continue
+                seen.add(key)
+                box = cell.rect.to_bounding_box()
+                if size:
+                    box = box.to_top_left_origin(size.height)
+                cells.append(
+                    {
+                        "text": text,
+                        "page": page.page_no,
+                        "box": [round(box.l, 1), round(box.t, 1), round(box.r, 1), round(box.b, 1)],
+                    }
+                )
+    return cells

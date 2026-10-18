@@ -107,9 +107,12 @@ cryptography`) and the same secret:
     DOCLING_SECRET=<secret> python test_client.py order.jpg https://<your-domain>
 
 It prints how many pieces of text were found and each one in order. The
-scanner returns every piece with its position (`box`: left, top, right,
-bottom), whether it sat inside a picture region, and how long the scan
-took. Errors: 401 not sealed with the secret (or replayed, or clock more
+scanner returns Docling's text blocks (`items`) with their position
+(`box`: left, top, right, bottom) and whether they sat inside a picture
+region, the OCR's smaller pieces (`cells`, same boxes), and how long the
+scan took. A block can run several receipt rows together, so the app
+rebuilds rows from `cells`, where each name and price stays separate.
+Errors: 401 not sealed with the secret (or replayed, or clock more
 than 5 minutes off), 413 too large, 415 not PNG/JPEG/WebP/PDF, 422 no
 text found.
 
@@ -122,3 +125,7 @@ Project → Settings → Environment Variables, for Production and Preview:
 
 Keep the laptop clock on automatic time: requests more than 5 minutes
 off are refused.
+
+The app checks the scanner (`/health`) each time the receipt scanner is
+opened. If the laptop, Docker or ngrok is off, it says scanning is not
+available and to come back later.
