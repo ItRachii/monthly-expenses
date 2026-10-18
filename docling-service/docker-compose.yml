@@ -1,0 +1,35 @@
+# Start:  docker compose up -d --build
+# Logs:   docker compose logs -f
+# Stop:   docker compose down
+services:
+  scanner:
+    build: .
+    image: ledger-scanner
+    container_name: ledger-scanner
+    # Only what the scanner reads, taken from .env. Not the whole file: it
+    # also holds the ngrok token, which the container has no use for.
+    environment:
+      DOCLING_SECRET: ${DOCLING_SECRET:?Set DOCLING_SECRET in .env}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      MAX_PAGES: ${MAX_PAGES:-10}
+    # Only reachable from this laptop; ngrok forwards the outside world to it.
+    # Port 8787 so it stays clear of n8n on 5678.
+    ports:
+      - "127.0.0.1:8787:8787"
+    restart: unless-stopped
+    # Docling needs about 1.7 GB while scanning; this caps it well above that.
+    mem_limit: 4g
+
+  # Docling's own server with its web page, for trying files by hand. The
+  # app does not use it, and it is not started with the scanner: run
+  # docling-ui.bat, or docker compose --profile ui up -d docling-ui
+  # Only reachable from this laptop; never point ngrok at port 5001.
+  docling-ui:
+    profiles: ["ui"]
+    image: quay.io/docling-project/docling-serve-cpu:v1.36.0
+    container_name: docling-ui
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "1"
+    ports:
+      - "127.0.0.1:5001:5001"
+    mem_limit: 4g

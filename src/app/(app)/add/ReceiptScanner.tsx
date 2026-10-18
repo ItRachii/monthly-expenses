@@ -2,9 +2,9 @@
 
 import { CameraIcon, TrashIcon, XIcon } from "@/components/Icons";
 import { FileDropzone } from "@/components/FileDropzone";
-import { useEffect, useId, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ocrImages, type OcrProgress } from "@/lib/ocr";
+import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
 import { addReceiptAction } from "@/lib/actions/receipts";
 import { CategorySelect } from "@/components/CategorySelect";
@@ -26,6 +26,11 @@ interface EditItem {
 }
 
 type Phase = "pick" | "reading" | "review";
+
+// The scanner runs on the owner's laptop, so it can be off.
+type Service = "checking" | "up" | "down";
+
+const SERVICE_DOWN = "The scanning service is not available right now. Please come back later.";
 
 const numeric = (v: string) => v === "" || /^\d*\.?\d*$/.test(v);
 
@@ -66,7 +71,8 @@ export function ReceiptScanner({
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("pick");
   const [files, setFiles] = useState<File[]>([]);
-  const [progress, setProgress] = useState<OcrProgress | null>(null);
+  const [progress, setProgress] = useState<{ file: number; files: number } | null>(null);
+  const [service, setService] = useState<Service>("checking");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -77,6 +83,22 @@ export function ReceiptScanner({
   const [payer, setPayer] = useState(defaultPayer);
   const uid = useId();
   const [split, setSplit] = useState(SPLIT_EQUAL);
+
+  const checkService = useCallback(async () => {
+    setService("checking");
+    try {
+      const res = await fetch("/api/scan", { cache: "no-store" });
+      const body = res.ok ? ((await res.json()) as { available?: boolean }) : null;
+      setService(body?.available ? "up" : "down");
+    } catch {
+      setService("down");
+    }
+  }, []);
+
+  // Ask once each time the scanner is opened, before anything is picked.
+  useEffect(() => {
+    if (open) void checkService();
+  }, [open, checkService]);
 
   function reset() {
     setPhase("pick");
@@ -108,29 +130,51 @@ export function ReceiptScanner({
     setError(null);
     setMessage(null);
     setPhase("reading");
-    setProgress({ file: 1, files: files.length, progress: 0 });
+    const texts: string[] = [];
     try {
-      const text = await ocrImages(files, setProgress);
-      const parsed = parseReceipt(text);
-      setMerchant(parsed.merchant);
-      if (parsed.purchasedOn) setPurchasedOn(parsed.purchasedOn);
-      setItems(
-        parsed.items.map((it) => ({
-          description: it.description,
-          category: it.category,
-          qty: it.qty != null ? String(it.qty) : "",
-          amount: it.amount.toFixed(2),
-          gstRate: it.gstRate != null ? String(it.gstRate) : "",
-          gstAmount: it.gstAmount != null ? it.gstAmount.toFixed(2) : "",
-        })),
-      );
-      setPhase("review");
-      if (parsed.items.length === 0)
-        setError("Couldn't read any line items — add them manually below, or try a clearer photo.");
+      for (let i = 0; i < files.length; i++) {
+        setProgress({ file: i + 1, files: files.length });
+        const image = await prepareImage(files[i]);
+        const res = await fetch("/api/scan", {
+          method: "POST",
+          headers: { "Content-Type": image.type || "application/octet-stream" },
+          body: image,
+        });
+        const body = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
+        if (res.ok && typeof body.text === "string") {
+          texts.push(body.text);
+          continue;
+        }
+        if (body.error === "no-text") continue; // nothing readable on this one; try the rest
+        setPhase("pick");
+        if (body.error === "unsupported")
+          setError(`Image ${i + 1} is in a format that can't be read. Use JPG, PNG or WebP.`);
+        else if (body.error === "too-large") setError(`Image ${i + 1} is too large. Try a smaller photo or a screenshot.`);
+        else if (body.error === "rate-limited") setError("That's a lot of scans in a short time. Wait a few minutes and try again.");
+        else setService("down");
+        return;
+      }
     } catch {
       setPhase("pick");
-      setError("Scanning failed. Check your connection (the OCR engine loads once) and try again.");
+      setError("Scanning failed. Check your connection and try again.");
+      return;
     }
+    const parsed = parseReceipt(texts.join("\n"));
+    setMerchant(parsed.merchant);
+    if (parsed.purchasedOn) setPurchasedOn(parsed.purchasedOn);
+    setItems(
+      parsed.items.map((it) => ({
+        description: it.description,
+        category: it.category,
+        qty: it.qty != null ? String(it.qty) : "",
+        amount: it.amount.toFixed(2),
+        gstRate: it.gstRate != null ? String(it.gstRate) : "",
+        gstAmount: it.gstAmount != null ? it.gstAmount.toFixed(2) : "",
+      })),
+    );
+    setPhase("review");
+    if (parsed.items.length === 0)
+      setError("Couldn't read any line items. Add them manually below, or try a clearer photo.");
   }
 
   function patch(i: number, p: Partial<EditItem>) {
@@ -221,14 +265,27 @@ export function ReceiptScanner({
         </button>
       </div>
       <p className="text-xs text-muted">
-        Reads the receipt on your device — the image is never uploaded. Review
-        everything before saving; line items are added as individual expenses
-        grouped under this receipt.
+        The image is sent encrypted to the Ledger scanner, read, and not
+        stored. Review everything before saving; line items are added as
+        individual expenses grouped under this receipt.
       </p>
 
       {error ? <div className="alert-error">{error}</div> : null}
 
-      {phase === "pick" ? (
+      {phase === "pick" && service === "checking" ? (
+        <div className="text-sm text-muted">Checking the scanning service…</div>
+      ) : null}
+
+      {phase === "pick" && service === "down" ? (
+        <div className="space-y-3">
+          <div className="alert-error">{SERVICE_DOWN}</div>
+          <button type="button" className="btn-secondary w-full" onClick={() => void checkService()}>
+            Try again
+          </button>
+        </div>
+      ) : null}
+
+      {phase === "pick" && service === "up" ? (
         <div className="space-y-3">
           {/* No `capture`: the gallery or file picker, or drag images in. */}
           <FileDropzone
@@ -236,7 +293,7 @@ export function ReceiptScanner({
             accept="image/*"
             multiple
             action="to add receipt images"
-            hint="JPG, PNG or HEIC. Several at once. Read on this device, never uploaded."
+            hint="JPG, PNG or WebP. Several at once."
             onFiles={addImages}
             onReject={(fs) => setError(`${fs.length === 1 ? `${fs[0].name} is` : `${fs.length} files are`} not an image.`)}
           />
@@ -293,12 +350,10 @@ export function ReceiptScanner({
             <div
               // scaleX, not width: the bar moves on the GPU with no relayout.
               className="h-full w-full origin-left bg-primary transition-transform duration-200 ease-linear"
-              style={{ transform: `scaleX(${progress?.progress ?? 0})` }}
+              style={{ transform: `scaleX(${progress ? (progress.file - 1) / progress.files : 0})` }}
             />
           </div>
-          <div className="text-xs text-muted">
-            First run downloads the OCR engine (~a few MB); later scans are instant.
-          </div>
+          <div className="text-xs text-muted">Each image takes about 10 to 30 seconds.</div>
         </div>
       ) : null}
 
