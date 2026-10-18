@@ -1,11 +1,13 @@
 "use client";
 
-import { CameraIcon, TrashIcon, XIcon } from "@/components/Icons";
+import { CameraIcon, XIcon } from "@/components/Icons";
 import { FileDropzone } from "@/components/FileDropzone";
 import { useCallback, useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
+import { categorize } from "@/lib/receipt/categorize";
+import { ORDER_APPS, OTHER_APP, cleanOrderItem, repeatedRows } from "@/lib/receipt/quickCommerce";
 import { addReceiptAction } from "@/lib/actions/receipts";
 import { CategorySelect } from "@/components/CategorySelect";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
@@ -23,7 +25,28 @@ interface EditItem {
   amount: string;
   gstRate: string;
   gstAmount: string;
+  /** Ticked to be added; unticked rows are left out. */
+  include: boolean;
+  /** Read again from an overlapping screenshot: starts unticked. */
+  repeat?: boolean;
 }
+
+// The app last scanned from, so the next order defaults to it.
+const APP_KEY = "ledger.lastOrderApp";
+const readApp = () => {
+  try {
+    return window.localStorage.getItem(APP_KEY);
+  } catch {
+    return null;
+  }
+};
+const writeApp = (app: string) => {
+  try {
+    window.localStorage.setItem(APP_KEY, app);
+  } catch {
+    // Storage unavailable: the choice just won't be remembered.
+  }
+};
 
 type Phase = "pick" | "reading" | "review";
 
@@ -59,6 +82,8 @@ export function ReceiptScanner({
   payerOptions,
   splitOptions,
   defaultPayer,
+  embedded = false,
+  onSaved,
 }: {
   ctx: string;
   isPersonal: boolean;
@@ -66,9 +91,14 @@ export function ReceiptScanner({
   payerOptions: Opt[];
   splitOptions: Opt[];
   defaultPayer: string;
+  /** Inside the Add Expense overlay: always open, no card or close button of its own. */
+  embedded?: boolean;
+  /** Called with a confirmation after saving, instead of showing it here. */
+  onSaved?: (message: string) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
+  const [app, setApp] = useState<string>(OTHER_APP);
   const [phase, setPhase] = useState<Phase>("pick");
   const [files, setFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState<{ file: number; files: number } | null>(null);
@@ -93,6 +123,11 @@ export function ReceiptScanner({
     } catch {
       setService("down");
     }
+  }, []);
+
+  useEffect(() => {
+    const last = readApp();
+    if (last && (last === OTHER_APP || (ORDER_APPS as readonly string[]).includes(last))) setApp(last);
   }, []);
 
   // Ask once each time the scanner is opened, before anything is picked.
@@ -160,17 +195,30 @@ export function ReceiptScanner({
       return;
     }
     const parsed = parseReceipt(texts.join("\n"));
-    setMerchant(parsed.merchant);
+    const repeats = repeatedRows(
+      texts.map((t) => parseReceipt(t).items.map((it) => it.description)),
+      parsed.items.map((it) => it.description),
+    );
+    const fromApp = app !== OTHER_APP;
+    // The app is a better merchant name than whatever heads the screenshot.
+    setMerchant(fromApp ? app : parsed.merchant);
     if (parsed.purchasedOn) setPurchasedOn(parsed.purchasedOn);
     setItems(
-      parsed.items.map((it) => ({
-        description: it.description,
-        category: it.category,
-        qty: it.qty != null ? String(it.qty) : "",
-        amount: it.amount.toFixed(2),
-        gstRate: it.gstRate != null ? String(it.gstRate) : "",
-        gstAmount: it.gstAmount != null ? it.gstAmount.toFixed(2) : "",
-      })),
+      parsed.items.map((it, n) => {
+        const order = fromApp ? cleanOrderItem(it.description) : null;
+        const description = order?.description ?? it.description;
+        const qty = order?.qty ?? it.qty;
+        return {
+          description,
+          category: order ? categorize(description) : it.category,
+          qty: qty != null ? String(qty) : "",
+          amount: it.amount.toFixed(2),
+          gstRate: it.gstRate != null ? String(it.gstRate) : "",
+          gstAmount: it.gstAmount != null ? it.gstAmount.toFixed(2) : "",
+          include: !repeats[n],
+          repeat: repeats[n],
+        };
+      }),
     );
     setPhase("review");
     if (parsed.items.length === 0)
@@ -183,18 +231,17 @@ export function ReceiptScanner({
   function addRow() {
     setItems((prev) => [
       ...prev,
-      { description: "", category: categories[0] ?? "Other", qty: "", amount: "", gstRate: "", gstAmount: "" },
+      { description: "", category: categories[0] ?? "Other", qty: "", amount: "", gstRate: "", gstAmount: "", include: true },
     ]);
   }
-  function removeRow(i: number) {
-    setItems((prev) => prev.filter((_, idx) => idx !== i));
-  }
 
-  const total = items.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+  const chosen = items.filter((it) => it.include);
+  const total = chosen.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+  const allChosen = items.length > 0 && chosen.length === items.length;
 
   function save() {
     setError(null);
-    const payloadItems = items.map((it) => ({
+    const payloadItems = chosen.map((it) => ({
       description: it.description.trim(),
       category: it.category.trim(),
       amount: parseFloat(it.amount),
@@ -202,7 +249,7 @@ export function ReceiptScanner({
       gstAmount: it.gstAmount.trim() === "" ? null : parseFloat(it.gstAmount),
     }));
     if (payloadItems.length === 0) {
-      setError("Add at least one line item.");
+      setError("Tick at least one item to add.");
       return;
     }
     for (const it of payloadItems) {
@@ -225,10 +272,14 @@ export function ReceiptScanner({
         items: payloadItems,
       });
       if (res.ok) {
-        setMessage(`Added ${res.count} item${res.count === 1 ? "" : "s"} from ${merchant.trim() || "the receipt"}.`);
+        const done = `Added ${res.count} item${res.count === 1 ? "" : "s"} from ${merchant.trim() || "the receipt"}.`;
         reset();
-        setOpen(false);
         router.refresh();
+        if (onSaved) onSaved(done);
+        else {
+          setMessage(done);
+          setOpen(false);
+        }
       } else {
         setError(res.error ?? "Something went wrong.");
       }
@@ -247,27 +298,29 @@ export function ReceiptScanner({
   }
 
   return (
-    <div className="card space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="section-title flex items-center gap-2">
-          <CameraIcon /> Scan a receipt
-        </h2>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="Close"
-          onClick={() => {
-            reset();
-            setOpen(false);
-          }}
-        >
-          <XIcon />
-        </button>
-      </div>
+    <div className={embedded ? "space-y-4" : "card space-y-4"}>
+      {embedded ? null : (
+        <div className="flex items-center justify-between">
+          <h2 className="section-title flex items-center gap-2">
+            <CameraIcon /> Scan a receipt
+          </h2>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Close"
+            onClick={() => {
+              reset();
+              setOpen(false);
+            }}
+          >
+            <XIcon />
+          </button>
+        </div>
+      )}
       <p className="text-xs text-muted">
-        The image is sent encrypted to the Ledger scanner, read, and not
-        stored. Review everything before saving; line items are added as
-        individual expenses grouped under this receipt.
+        {embedded
+          ? "Add one or more screenshots of the same order. They are sent encrypted to the Ledger scanner, read, and not stored. Then tick the items to add: each becomes an expense, grouped under this order."
+          : "The image is sent encrypted to the Ledger scanner, read, and not stored. Review everything before saving; line items are added as individual expenses grouped under this receipt."}
       </p>
 
       {error ? <div className="alert-error">{error}</div> : null}
@@ -287,9 +340,26 @@ export function ReceiptScanner({
 
       {phase === "pick" && service === "up" ? (
         <div className="space-y-3">
+          <div>
+            <label htmlFor={`${uid}-app`} className="label">Ordered from</label>
+            <select
+              id={`${uid}-app`}
+              className="select"
+              value={app}
+              onChange={(e) => {
+                setApp(e.target.value);
+                writeApp(e.target.value);
+              }}
+            >
+              {ORDER_APPS.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+              <option value={OTHER_APP}>Another shop or receipt</option>
+            </select>
+          </div>
           {/* No `capture`: the gallery or file picker, or drag images in. */}
           <FileDropzone
-            label="Choose receipt images"
+            label={embedded ? "Choose order screenshots" : "Choose receipt images"}
             accept="image/*"
             multiple
             action="to add receipt images"
@@ -401,17 +471,32 @@ export function ReceiptScanner({
             <table className="data-table min-w-[640px]">
               <thead>
                 <tr>
+                  <th className="w-8">
+                    <input
+                      type="checkbox"
+                      aria-label={allChosen ? "Leave out every item" : "Add every item"}
+                      checked={allChosen}
+                      onChange={(e) => setItems((prev) => prev.map((it) => ({ ...it, include: e.target.checked })))}
+                    />
+                  </th>
                   <th>Item</th>
                   <th>Category</th>
                   <th className="text-right">GST %</th>
                   <th className="text-right">GST ₹</th>
                   <th className="text-right">Amount ₹</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((it, i) => (
-                  <tr key={i}>
+                  <tr key={i} className={it.include ? undefined : "opacity-50"}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Add ${it.description || `item ${i + 1}`}`}
+                        checked={it.include}
+                        onChange={(e) => patch(i, { include: e.target.checked })}
+                      />
+                    </td>
                     <td className="min-w-[10rem]">
                       <input
                         className="input"
@@ -419,6 +504,9 @@ export function ReceiptScanner({
                         placeholder="Item"
                         onChange={(e) => patch(i, { description: e.target.value })}
                       />
+                      {it.repeat ? (
+                        <div className="mt-1 text-xs text-muted">Also in an earlier screenshot, so left out. Tick it if you bought it twice.</div>
+                      ) : null}
                     </td>
                     <td className="min-w-[9rem]">
                       <CategorySelect
@@ -454,22 +542,12 @@ export function ReceiptScanner({
                         onChange={(e) => numeric(e.target.value) && patch(i, { amount: e.target.value })}
                       />
                     </td>
-                    <td className="text-right">
-                      <button
-                        type="button"
-                        className="icon-btn text-negative hover:text-negative"
-                        aria-label="Remove item"
-                        onClick={() => removeRow(i)}
-                      >
-                        <TrashIcon />
-                      </button>
-                    </td>
                   </tr>
                 ))}
                 {items.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="text-center text-muted">
-                      No items yet — add them manually.
+                      No items yet. Add them manually.
                     </td>
                   </tr>
                 ) : null}
@@ -482,14 +560,14 @@ export function ReceiptScanner({
               + Add item
             </button>
             <div className="text-sm">
-              <span className="text-muted">Receipt total: </span>
+              <span className="text-muted">{chosen.length} of {items.length} ticked: </span>
               <strong>{formatINR(total)}</strong>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn-primary" disabled={pending} onClick={save}>
-              {pending ? "Saving…" : `Save ${items.length} item${items.length === 1 ? "" : "s"}`}
+            <button type="button" className="btn-primary" disabled={pending || chosen.length === 0} onClick={save}>
+              {pending ? "Saving…" : `Add ${chosen.length} expense${chosen.length === 1 ? "" : "s"}`}
             </button>
             <button type="button" className="btn-secondary" disabled={pending} onClick={reset}>
               Rescan
