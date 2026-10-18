@@ -233,8 +233,9 @@ export async function getGroupMembers(groupId: string): Promise<MemberDTO[]> {
   });
 }
 
+/** A member of a group that has not been deleted. */
 export async function isGroupMember(groupId: string, userEmail: string): Promise<boolean> {
-  const m = await prisma.groupMember.findFirst({ where: { groupId, email: userEmail } });
+  const m = await prisma.groupMember.findFirst({ where: { groupId, email: userEmail, group: { active: 1 } } });
   return m !== null;
 }
 
@@ -355,16 +356,22 @@ export async function respondToInvite(
   accept: boolean,
   userEmail: string,
 ): Promise<void> {
-  const invite = await prisma.groupInvite.findUnique({ where: { id: inviteId } });
-  if (!invite || invite.invitedEmail !== userEmail) return;
+  // Only a pending invite to a live group: an invite already answered must
+  // not work again, or a member an admin removed could rejoin with it.
+  const invite = await prisma.groupInvite.findFirst({
+    where: { id: inviteId, invitedEmail: userEmail, status: "pending", group: { active: 1 } },
+  });
+  if (!invite) return;
 
-  await prisma.groupInvite.update({
-    where: { id: inviteId },
+  // Conditional on still pending, so two answers at once count once.
+  const answered = await prisma.groupInvite.updateMany({
+    where: { id: inviteId, status: "pending" },
     data: {
       status: accept ? "accepted" : "declined",
       respondedAt: new Date(),
     },
   });
+  if (answered.count === 0) return;
 
   if (accept) {
     const already = await prisma.groupMember.findFirst({
