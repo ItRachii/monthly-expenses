@@ -83,6 +83,8 @@ for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
 )
 set "NGROK_AUTH="
 if defined NGROK_AUTHTOKEN set "NGROK_AUTH=--authtoken %NGROK_AUTHTOKEN%"
+if defined NGROK_AUTHTOKEN echo Using the ngrok account from NGROK_AUTHTOKEN in .env
+if not defined NGROK_AUTHTOKEN echo No NGROK_AUTHTOKEN in .env, so ngrok uses the account in its default config
 if defined NGROK_URL set "NGROK_URL=%NGROK_URL:https://=%"
 if defined NGROK_URL goto static
 echo No NGROK_URL in .env, so ngrok picks a new random address each time.
