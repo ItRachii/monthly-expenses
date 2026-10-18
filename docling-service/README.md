@@ -36,7 +36,8 @@ derived from `DOCLING_SECRET`, see `envelope.py`):
    `docker compose up -d`), stops at the first step that fails, waits
    until the scanner reports healthy, then starts ngrok for port 8787 in
    a new window. Set `NGROK_URL` in `.env` to your static ngrok domain so
-   the address stays the same. Double-click it or run
+   the address stays the same, and `NGROK_AUTHTOKEN` when that domain
+   belongs to a different ngrok account from the one n8n uses. Double-click it or run
    `.\run-scanner.bat`.
 
 4. Check it is up (it needs about a minute after start to load models):

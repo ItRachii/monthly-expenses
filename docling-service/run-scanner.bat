@@ -73,19 +73,26 @@ if errorlevel 1 (
   goto finish
 )
 rem NGROK_URL in .env is your static ngrok domain, so the address Vercel
-rem uses stays the same on every start.
+rem uses stays the same on every start. NGROK_AUTHTOKEN, if set, logs this
+rem ngrok in with a different account from the one n8n uses.
 set "NGROK_URL="
-for /f "usebackq tokens=1,* delims==" %%a in (".env") do if /i "%%a"=="NGROK_URL" set "NGROK_URL=%%b"
+set "NGROK_AUTHTOKEN="
+for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
+  if /i "%%a"=="NGROK_URL" set "NGROK_URL=%%b"
+  if /i "%%a"=="NGROK_AUTHTOKEN" set "NGROK_AUTHTOKEN=%%b"
+)
+set "NGROK_AUTH="
+if defined NGROK_AUTHTOKEN set "NGROK_AUTH=--authtoken %NGROK_AUTHTOKEN%"
 if defined NGROK_URL set "NGROK_URL=%NGROK_URL:https://=%"
 if defined NGROK_URL goto static
 echo No NGROK_URL in .env, so ngrok picks a new random address each time.
 echo Copy the https address from the ngrok window into Vercel as DOCLING_URL, every time.
-start "ngrok scanner" cmd /k ngrok http 8787
+start "ngrok scanner" cmd /k ngrok http %NGROK_AUTH% 8787
 goto done
 
 :static
 echo Address for Vercel DOCLING_URL: https://%NGROK_URL%
-start "ngrok scanner" cmd /k ngrok http --url=%NGROK_URL% 8787
+start "ngrok scanner" cmd /k ngrok http %NGROK_AUTH% --url=%NGROK_URL% 8787
 
 :done
 echo Keep the ngrok window open: closing it takes the scanner offline for the app.
