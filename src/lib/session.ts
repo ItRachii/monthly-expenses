@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { ownEmail, registerUserIfNeeded, syncUserImage } from "@/lib/users";
 import { wireKey } from "@/lib/wire";
+import { recordVisit } from "@/lib/activity";
 
 export interface CurrentUser {
   /** The user id stored in every table (see src/lib/piiCrypto.ts), not the address. */
@@ -23,6 +24,7 @@ export const requireUser = cache(async (): Promise<CurrentUser> => {
   const email = session.user.email;
   const name = session.user.name ?? "User";
   const appUser = await registerUserIfNeeded(email, name);
+  await recordVisit(email);
   const image = session.user.image ?? null;
   if (appUser) await syncUserImage(email, appUser.image, image);
   return { email, name, image, appUser };

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { isDeveloper } from "@/lib/features";
@@ -13,7 +14,8 @@ export default async function DevScanPage() {
     <div className="space-y-4">
       <h1>Scan inspector</h1>
       <p className="text-sm text-muted">
-        Developer view. Runs one image through the real scanner and parser and shows each step. Nothing is saved.
+        Developer view. Runs one image through the real scanner and parser and shows each step. Nothing is saved.{" "}
+        <Link href="/dev/metrics" className="text-primary-light hover:underline">Product metrics</Link>
       </p>
       <ScanInspector />
     </div>

@@ -345,3 +345,14 @@ model GstPending {
   @@index([expenseId], map: "gst_pending_expense_idx")
   @@map("gst_pending")
 }
+
+// Days on which a user opened the app (India time), for the developer
+// metrics page. See db/2026_10_user_activity.sql.
+model UserActivityDay {
+  userId String   @map("user_id")
+  day    DateTime @db.Date
+
+  @@id([userId, day])
+  @@index([day], map: "user_activity_days_day_idx")
+  @@map("user_activity_days")
+}
