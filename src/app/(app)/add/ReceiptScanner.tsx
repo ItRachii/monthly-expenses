@@ -65,8 +65,6 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 interface EditBill {
   charges: { label: string; amount: string }[];
   total: string;
-  /** "Item Total" printed on the bill, to point at a missed item. */
-  itemTotal: number | null;
 }
 
 // Identity for de-duping picks across the camera and gallery inputs.
@@ -225,7 +223,6 @@ export function ReceiptScanner({
       setBill({
         charges: read.charges.map((c) => ({ label: c.label, amount: c.amount.toFixed(2) })),
         total: read.orderTotal != null ? read.orderTotal.toFixed(2) : "",
-        itemTotal: read.itemTotal,
       });
     } else setBill(null);
     // The app is a better merchant name than whatever heads the screenshot.
@@ -616,12 +613,8 @@ export function ReceiptScanner({
                         onChange={(e) => numeric(e.target.value) && patch(i, { amount: e.target.value })}
                       />
                       {shares.has(it) && shares.get(it) !== 0 ? (
-                        <div className="mt-1 text-right text-xs text-muted">
-                          <div className="whitespace-nowrap">
-                            {shares.get(it)! > 0 ? "+" : "-"}
-                            {formatINR(Math.abs(shares.get(it)!))} charges
-                          </div>
-                          <div className="whitespace-nowrap font-semibold text-ink">= {formatINR(finalAmount(it))}</div>
+                        <div className="mt-1 whitespace-nowrap text-right text-xs text-muted">
+                          <span className="font-semibold text-ink">{formatINR(finalAmount(it))}</span> with charges
                         </div>
                       ) : null}
                     </td>
@@ -652,10 +645,7 @@ export function ReceiptScanner({
             <div className="space-y-3 rounded-lg border border-ink/10 p-3">
               <div>
                 <div className="text-sm font-semibold">Bill summary</div>
-                <p className="text-xs text-muted">
-                  Charges on top of the items, as on the bill. A discount is a negative amount. Once everything adds up to the
-                  order total, the charges are shared over the items by price.
-                </p>
+                <p className="text-xs text-muted">Charges on top of the items, as on the bill. A discount is a negative amount.</p>
               </div>
               {bill.charges.map((c, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -702,22 +692,18 @@ export function ReceiptScanner({
                   onChange={(e) => numeric(e.target.value) && setBill((b) => (b ? { ...b, total: e.target.value } : b))}
                 />
               </div>
-              <div
-                role="status"
-                className={check.status === "matched" ? "alert-success" : check.status === "mismatch" ? "alert-error" : "alert-warning"}
-              >
-                Items {formatINR(check.items)} + charges {formatINR(check.charges)} = {formatINR(round2(check.items + check.charges))}
-                {check.status === "matched"
-                  ? `. Matches the order total of ${formatINR(check.total)}.`
-                  : check.status === "mismatch"
-                    ? `, which is ${formatINR(Math.abs(check.diff))} ${check.diff > 0 ? "short of" : "over"} the order total of ${formatINR(check.total)}. ${
-                        check.diff > 0 ? "An item or charge may be missing or misread." : "An item or charge may be read twice or misread."
+              {/* The sum itself stays out of sight: only whether it matches, and what to fix if not. */}
+              {check.status === "matched" ? (
+                <div role="status" className="text-sm text-positive">Matches the order total.</div>
+              ) : (
+                <div role="status" className={check.status === "mismatch" ? "alert-error" : "alert-warning"}>
+                  {check.status === "mismatch"
+                    ? `Doesn't match the order total: ${formatINR(Math.abs(check.diff))} ${
+                        check.diff > 0 ? "is missing. An item or charge may not have been read." : "too much. An item or charge may be read twice."
                       }`
-                    : ". Enter the order total from the bill to check it."}
-                {bill.itemTotal != null && Math.abs(bill.itemTotal - check.items) > 1
-                  ? ` The bill's item total is ${formatINR(bill.itemTotal)}.`
-                  : ""}
-              </div>
+                    : "Enter the order total from the bill."}
+                </div>
+              )}
             </div>
           ) : null}
 
