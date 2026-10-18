@@ -94,6 +94,25 @@ need a paid plan or a random ngrok URL. If your ngrok version rejects
 this file, check its agent configuration docs: the format has changed
 between versions.
 
+## Docling's own web page (optional)
+
+To try files by hand in a browser, `docling-ui.bat` starts docling-serve,
+Docling's official server, with its web page at http://127.0.0.1:5001/ui
+and opens it. Without the script:
+
+    docker compose --profile ui up -d docling-ui
+    docker compose --profile ui stop docling-ui
+
+- Ledger does not use it, and the scanner does not start it.
+- It is a separate image of about 4.4 GB to download (7.5 GB on disk) and
+  uses about 1.5 GB of memory while it reads.
+- It runs Docling with its own default settings, so what it shows can
+  differ from what Ledger gets. Its Markdown, for one, runs a receipt's
+  rows together, which the app avoids by rebuilding rows from the OCR
+  pieces. `test_client.py` (below) shows exactly what the app receives.
+- It is only reachable from this laptop. Never point ngrok at port 5001:
+  the page has no login, so anyone with the address could use it.
+
 ## Test a scan
 
 Requests must be encrypted, so a plain `curl` upload gets 401. The test

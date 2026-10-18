@@ -14,3 +14,17 @@ services:
     restart: unless-stopped
     # Docling needs about 1.7 GB while scanning; this caps it well above that.
     mem_limit: 4g
+
+  # Docling's own server with its web page, for trying files by hand. The
+  # app does not use it, and it is not started with the scanner: run
+  # docling-ui.bat, or docker compose --profile ui up -d docling-ui
+  # Only reachable from this laptop; never point ngrok at port 5001.
+  docling-ui:
+    profiles: ["ui"]
+    image: quay.io/docling-project/docling-serve-cpu:v1.36.0
+    container_name: docling-ui
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "1"
+    ports:
+      - "127.0.0.1:5001:5001"
+    mem_limit: 4g
