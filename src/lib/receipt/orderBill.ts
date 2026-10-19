@@ -65,51 +65,97 @@ export function isBillLine(text: string): boolean {
   );
 }
 
+/** Which part of an order screenshot a row belongs to. */
+export type RowPart =
+  | "before-items" // above the items heading: order number, status, ETA
+  | "items-heading"
+  | "product"
+  | "bill-wording" // reads like a fee, discount or total, so not a product
+  | "order-heading" // "Completed | 4 items, ₹177"
+  | "bill-heading"
+  | "bill"; // inside the bill section
+
 /**
- * One screenshot's product lines. When the screen has a bill section, nothing
- * from its header down is a product (Swiggy's "Item Bill ₹206" included), and
- * when it marks where the items start, nothing above that is either. Without
- * those headers, bill lines are told apart by their wording.
+ * Sorts one screenshot's rows into its parts. When the screen has a bill
+ * section, nothing from its heading down is a product (Swiggy's "Item Bill
+ * ₹206" included), and when it marks where the items start, nothing above
+ * that is either. Without those headings, bill rows are told apart by their
+ * wording.
  */
-export function orderProducts(text: string): string {
+export function orderRows(text: string): { line: string; part: RowPart }[] {
   const lines = text.split(/\r?\n/);
   const bill = lines.findIndex((l) => BILL_HEADER.test(l.trim()));
   const head = lines.findIndex((l) => ITEMS_HEADER.test(l.trim()));
-  const from = head !== -1 && (bill === -1 || head < bill) ? head + 1 : 0;
-  return lines
-    .slice(from, bill === -1 ? undefined : bill)
-    .filter((l) => !isBillLine(l) && !ORDER_META.test(l))
+  const from = head !== -1 && (bill === -1 || head < bill) ? head : -1;
+  return lines.map((line, i): { line: string; part: RowPart } => {
+    if (i === bill) return { line, part: "bill-heading" };
+    if (bill !== -1 && i > bill) return { line, part: "bill" };
+    if (i === from) return { line, part: "items-heading" };
+    if (i < from) return { line, part: "before-items" };
+    if (isBillLine(line)) return { line, part: "bill-wording" };
+    if (ORDER_META.test(line)) return { line, part: "order-heading" };
+    return { line, part: "product" };
+  });
+}
+
+/** One screenshot's product rows, as text for the receipt parser. */
+export function orderProducts(text: string): string {
+  return orderRows(text)
+    .filter((r) => r.part === "product")
+    .map((r) => r.line)
     .join("\n");
 }
 
+/** What a row of the bill came to. */
+export type BillReading =
+  | { kind: "item-total" | "order-total" | "total"; amount: number }
+  | { kind: "charge" | "discount"; amount: number; label: string }
+  | { kind: "waived" | "info" | "after-total" | "not-bill" | "no-amount" };
+
 /**
- * Reads the bill summary out of an order's text, given as one screenshot's
- * text or a list of them. Inside a bill section (below its header, up to the
- * total) any rupee amount is a charge whatever it is called, and a negative
- * one is a discount; elsewhere a line has to read like a fee or discount.
+ * How each row of one screenshot reads as part of a bill. Inside a bill
+ * section (below its heading, up to the total) any rupee amount is a charge
+ * whatever it is called, and a negative one is a discount; elsewhere a row
+ * has to read like a fee or discount.
  */
+export function billRows(screen: string): { line: string; reading: BillReading }[] {
+  let inBill = false;
+  let totalSeen = false;
+  return screen.split(/\r?\n/).map((raw) => {
+    const line = raw.trim();
+    const read = (reading: BillReading) => ({ line: raw, reading });
+    if (BILL_HEADER.test(line)) inBill = true;
+    if (!line) return read({ kind: "no-amount" });
+    if (INFO.test(line)) return read({ kind: "info" });
+    const amount = lastAmount(line);
+    if (amount == null) return read({ kind: "no-amount" });
+    const label = line.replace(AMOUNTS, " ").replace(/\s+/g, " ").replace(/[:\s|-]+$/, "").trim();
+    if (ITEM_TOTAL.test(line)) return read({ kind: "item-total", amount: Math.abs(amount) });
+    if (ORDER_TOTAL.test(line)) {
+      inBill = false;
+      totalSeen = true;
+      return read({ kind: "order-total", amount: Math.abs(amount) });
+    }
+    if (DISCOUNT.test(line) || NEGATIVE.test(line)) return read({ kind: "discount", amount: -Math.abs(amount), label: label || "Discount" });
+    if (CHARGE.test(line) || (inBill && RUPEES.test(line)))
+      return read(WAIVED.test(line) ? { kind: "waived" } : { kind: "charge", amount, label: label || "Charge" });
+    if (/\btotal\b/i.test(line)) return read({ kind: "total", amount: Math.abs(amount) });
+    return read({ kind: totalSeen ? "after-total" : "not-bill" });
+  });
+}
+
+/** Reads the bill summary out of an order's text: one screenshot's, or a list of them. */
 export function readOrderBill(text: string | string[]): OrderBill {
   const charges: Charge[] = [];
   let itemTotal: number | null = null;
   let orderTotal: number | null = null;
   let plainTotal: number | null = null;
   for (const screen of Array.isArray(text) ? text : [text]) {
-    let inBill = false;
-    for (const raw of screen.split(/\r?\n/)) {
-      const line = raw.trim();
-      if (BILL_HEADER.test(line)) inBill = true;
-      if (!line || INFO.test(line)) continue;
-      const amount = lastAmount(line);
-      if (amount == null) continue;
-      const label = line.replace(AMOUNTS, " ").replace(/\s+/g, " ").replace(/[:\s|-]+$/, "").trim();
-      if (ITEM_TOTAL.test(line)) itemTotal = Math.abs(amount);
-      else if (ORDER_TOTAL.test(line)) {
-        orderTotal = Math.abs(amount);
-        inBill = false;
-      } else if (DISCOUNT.test(line) || NEGATIVE.test(line)) charges.push({ label: label || "Discount", amount: -Math.abs(amount) });
-      else if (CHARGE.test(line) || (inBill && RUPEES.test(line))) {
-        if (!WAIVED.test(line)) charges.push({ label: label || "Charge", amount });
-      } else if (/\btotal\b/i.test(line)) plainTotal = Math.abs(amount);
+    for (const { reading: r } of billRows(screen)) {
+      if (r.kind === "item-total") itemTotal = r.amount;
+      else if (r.kind === "order-total") orderTotal = r.amount;
+      else if (r.kind === "total") plainTotal = r.amount;
+      else if (r.kind === "charge" || r.kind === "discount") charges.push({ label: r.label, amount: r.amount });
     }
   }
   // Overlapping screenshots repeat the bill summary: count each charge once.
@@ -158,4 +204,17 @@ export function distribute(amounts: number[], extra: number): number[] {
     left -= 1;
   }
   return floors.map((p) => p / 100);
+}
+
+/**
+ * Checks the order adds up and, once it does, how much of the charges (or
+ * whatever the total says beyond the items) each item carries.
+ */
+export function settleOrder(
+  prices: number[],
+  charges: number[],
+  orderTotal: number | null,
+): { check: Reconciliation; shares: number[] | null } {
+  const check = reconcile(prices, charges, orderTotal);
+  return { check, shares: check.status === "matched" ? distribute(prices, round2(check.total - check.items)) : null };
 }

@@ -6,9 +6,9 @@ import { useCallback, useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
-import { categorize } from "@/lib/receipt/categorize";
-import { ORDER_APPS, OTHER_APP, cleanOrderItem, repeatedRows } from "@/lib/receipt/quickCommerce";
-import { distribute, orderProducts, readOrderBill, reconcile } from "@/lib/receipt/orderBill";
+import { ORDER_APPS, OTHER_APP, repeatedRows } from "@/lib/receipt/quickCommerce";
+import { settleOrder } from "@/lib/receipt/orderBill";
+import { readOrder } from "@/lib/receipt/readOrder";
 import { addReceiptAction } from "@/lib/actions/receipts";
 import { CategorySelect } from "@/components/CategorySelect";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
@@ -208,45 +208,55 @@ export function ReceiptScanner({
       return;
     }
     const fromApp = app !== OTHER_APP;
-    // An order's bill summary (fees, discounts, totals) is read on its own;
-    // the items come from the rest of each screenshot, so a fee or "Item
-    // Bill" is never taken for a product and no tax line is counted twice.
-    const productText = (t: string) => (fromApp ? orderProducts(t) : t);
     const whole = parseReceipt(texts.join("\n"));
-    const parsed = fromApp ? parseReceipt(texts.map(productText).join("\n")) : whole;
-    const repeats = repeatedRows(
-      texts.map((t) => parseReceipt(productText(t)).items.map((it) => it.description)),
-      parsed.items.map((it) => it.description),
-    );
-    if (fromApp) {
-      const read = readOrderBill(texts);
-      setBill({
-        charges: read.charges.map((c) => ({ label: c.label, amount: c.amount.toFixed(2) })),
-        total: read.orderTotal != null ? read.orderTotal.toFixed(2) : "",
-      });
-    } else setBill(null);
     // The app is a better merchant name than whatever heads the screenshot.
     setMerchant(fromApp ? app : whole.merchant);
     if (whole.purchasedOn) setPurchasedOn(whole.purchasedOn);
-    setItems(
-      parsed.items.map((it, n) => {
-        const order = fromApp ? cleanOrderItem(it.description) : null;
-        const description = order?.description ?? it.description;
-        const qty = order?.qty ?? it.qty;
-        return {
-          description,
-          category: order ? categorize(description) : it.category,
-          qty: qty != null ? String(qty) : "",
+    let found: number;
+    if (fromApp) {
+      // An order's bill summary (fees, discounts, totals) is read on its own;
+      // the items come from the rest of each screenshot, so a fee or "Item
+      // Bill" is never taken for a product and no tax line is counted twice.
+      const order = readOrder(texts);
+      setBill({
+        charges: order.bill.charges.map((c) => ({ label: c.label, amount: c.amount.toFixed(2) })),
+        total: order.bill.orderTotal != null ? order.bill.orderTotal.toFixed(2) : "",
+      });
+      setItems(
+        order.items.map((it) => ({
+          description: it.description,
+          category: it.category,
+          qty: it.qty != null ? String(it.qty) : "",
+          amount: it.amount.toFixed(2),
+          gstRate: "",
+          gstAmount: "",
+          include: !it.repeat,
+          repeat: it.repeat,
+        })),
+      );
+      found = order.items.length;
+    } else {
+      setBill(null);
+      const repeats = repeatedRows(
+        texts.map((t) => parseReceipt(t).items.map((it) => it.description)),
+        whole.items.map((it) => it.description),
+      );
+      setItems(
+        whole.items.map((it, n) => ({
+          description: it.description,
+          category: it.category,
+          qty: it.qty != null ? String(it.qty) : "",
           amount: it.amount.toFixed(2),
           gstRate: it.gstRate != null ? String(it.gstRate) : "",
           gstAmount: it.gstAmount != null ? it.gstAmount.toFixed(2) : "",
           include: !repeats[n],
           repeat: repeats[n],
-        };
-      }),
-    );
+        })),
+      );
+      found = whole.items.length;
+    }
     setPhase("review");
-    if (parsed.items.length === 0)
+    if (found === 0)
       setError("Couldn't read any line items. Add them manually below, or try a clearer photo.");
   }
 
@@ -265,20 +275,18 @@ export function ReceiptScanner({
   // screenshots is not part of it unless ticked again.
   const inOrder = items.filter((it) => !(it.repeat && !it.include));
   const prices = inOrder.map((it) => parseFloat(it.amount) || 0);
-  const check = bill
-    ? reconcile(
+  const settled = bill
+    ? settleOrder(
         prices,
         bill.charges.map((c) => parseFloat(c.amount) || 0),
         bill.total.trim() === "" ? null : parseFloat(bill.total),
       )
     : null;
+  const check = settled?.check ?? null;
   // Once items + charges = the order total, the charges (or whatever the
   // total says beyond the items) are shared over the items by price.
   const shares = new Map<EditItem, number>();
-  if (check?.status === "matched") {
-    const split = distribute(prices, round2(check.total - check.items));
-    inOrder.forEach((it, k) => shares.set(it, split[k]));
-  }
+  settled?.shares?.forEach((share, k) => shares.set(inOrder[k], share));
   const finalAmount = (it: EditItem) => round2((parseFloat(it.amount) || 0) + (shares.get(it) ?? 0));
   const orderBlocked = check !== null && check.status !== "matched";
 

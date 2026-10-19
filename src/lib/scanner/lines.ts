@@ -45,14 +45,14 @@ export function unstrikePrice(text: string): string {
 /**
  * Order screens print the original price struck out just below the price
  * paid (Zepto: "₹106" over "₹120"). OCR keeps both, and the lower one lands
- * on the item name's second line, where it reads as another item. Drops a
+ * on the item name's second line, where it reads as another item. Finds each
  * price piece sitting straight under another price piece, in the same
- * column, touching it and no larger. Prices of separate items are a line
- * or more apart, so they stay.
+ * column, touching it and no larger, and the price it sits under. Prices of
+ * separate items are a line or more apart, so they are not matched.
  */
-export function dropStruckPrices(pieces: ScanItem[]): ScanItem[] {
+export function struckPrices(pieces: ScanItem[]): Map<ScanItem, ScanItem> {
   const prices = pieces.filter((p) => PRICE_PIECE.test(p.text.trim()));
-  const struck = new Set<ScanItem>();
+  const struck = new Map<ScanItem, ScanItem>();
   for (const low of prices) {
     const [l, t, r, b] = low.box;
     const h = b - t;
@@ -62,11 +62,17 @@ export function dropStruckPrices(pieces: ScanItem[]): ScanItem[] {
       const overlap = Math.min(r, hr) - Math.max(l, hl);
       const gap = t - hb;
       if (overlap > 0.5 * Math.min(r - l, hr - hl) && gap > -0.25 * h && gap < 0.5 * h && h <= (hb - ht) * 1.1) {
-        struck.add(low);
+        struck.set(low, high);
         break;
       }
     }
   }
+  return struck;
+}
+
+/** The pieces without the struck-out prices (see struckPrices). */
+export function dropStruckPrices(pieces: ScanItem[]): ScanItem[] {
+  const struck = struckPrices(pieces);
   return pieces.filter((p) => !struck.has(p));
 }
 

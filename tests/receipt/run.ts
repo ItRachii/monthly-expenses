@@ -3,6 +3,8 @@
 // `npm run test:receipt`.
 import { distribute, isBillLine, orderProducts, readOrderBill, reconcile } from "../../src/lib/receipt/orderBill";
 import { parseReceipt } from "../../src/lib/receipt/parse";
+import { readOrder } from "../../src/lib/receipt/readOrder";
+import { settleOrder } from "../../src/lib/receipt/orderBill";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -92,6 +94,23 @@ const sw = reconcile(swiggyItems, swiggyBill.charges.map((c) => c.amount), swigg
 check("Swiggy: adds up within a rupee", sw.status === "matched" && "diff" in sw && sw.diff === -0.4, JSON.stringify(sw));
 const swShares = distribute(swiggyItems, 177 - 206);
 check("Swiggy: items with shares come to what was paid", sum(swiggyItems.map((a, i) => a + swShares[i])) === 177, JSON.stringify(swShares));
+
+// The whole order as the scan screen and the inspector read it.
+const whole = readOrder([swiggy]);
+check(
+  "Swiggy: items cleaned, with quantities",
+  same(whole.items.map((it) => [it.description, it.qty, it.amount, it.repeat]), [
+    ["Sprite Zero", 2, 54, false],
+    ["[Combo] Coca-Cola Diet Coke Can", 1, 80, false],
+    ["Eveready Carbon Zinc AAA Battery | Pack of", 1, 72, false],
+  ]),
+  JSON.stringify(whole.items),
+);
+const settled = settleOrder(whole.items.map((it) => it.amount), whole.bill.charges.map((c) => c.amount), whole.bill.orderTotal);
+check("Swiggy: settled to what was paid", settled.check.status === "matched" && same(settled.shares, [-7.6, -11.26, -10.14]), JSON.stringify(settled));
+check("no total: nothing shared", settleOrder([10], [], null).shares === null);
+const overlap = readOrder(["ITEM DETAILS\nMilk ₹30\nBread ₹40", "Bread ₹40\nEggs ₹70\nBill Details\nGrand Total ₹140"]);
+check("overlap repeat marked", same(overlap.items.map((it) => it.repeat), [false, false, true, false]) && overlap.bill.orderTotal === 140);
 
 // Inside a bill box a fee with an unusual name still counts; the order ID after the total does not.
 const odd = readOrderBill(["Bill Details", "Item Total ₹100", "Rain Surcharge ₹20", "Late night ₹15", "Grand Total ₹135", "Order ID 12345"].join("\n"));

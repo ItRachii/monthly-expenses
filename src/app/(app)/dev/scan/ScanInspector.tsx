@@ -4,8 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { FileDropzone } from "@/components/FileDropzone";
 import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
-import type { ScanItem, ScanResult } from "@/lib/scanner/lines";
+import { struckPrices, unstrikePrice, type ScanItem, type ScanResult } from "@/lib/scanner/lines";
 import type { ParsedReceipt } from "@/lib/receipt/types";
+import { ORDER_APPS, OTHER_APP } from "@/lib/receipt/quickCommerce";
+import { billRows, orderRows, settleOrder, type BillReading, type RowPart } from "@/lib/receipt/orderBill";
+import { readOrder } from "@/lib/receipt/readOrder";
 import { formatINR } from "@/lib/format";
 
 interface Health {
@@ -21,10 +24,73 @@ interface Run {
   text: string;
   result: ScanResult & { ms?: number };
   parsed: ParsedReceipt;
+  /** The app picked, or OTHER_APP for a plain receipt. */
+  app: string;
+}
+
+// What each part of an order screenshot means for the reading.
+const PART: Record<RowPart, string> = {
+  "before-items": "Above the items heading: skipped",
+  "items-heading": "Items heading: products start below",
+  product: "Product row",
+  "bill-wording": "Reads like a fee, discount or total: not a product",
+  "order-heading": "Order heading (\"4 items\"): skipped",
+  "bill-heading": "Bill heading: the bill starts here",
+  bill: "Bill section",
+};
+
+function reading(r: BillReading): string {
+  switch (r.kind) {
+    case "item-total":
+      return `Item total ${formatINR(r.amount)} (a check, not added)`;
+    case "order-total":
+      return `Order total ${formatINR(r.amount)}`;
+    case "total":
+      return `Total ${formatINR(r.amount)} (used if no order total)`;
+    case "charge":
+      return `Charge +${formatINR(r.amount)}`;
+    case "discount":
+      return `Discount ${formatINR(r.amount)}`;
+    case "waived":
+      return "Fee waived (FREE): not charged";
+    case "info":
+      return "Savings note: ignored";
+    case "after-total":
+      return "Below the total: ignored";
+    default:
+      return "";
+  }
+}
+
+/** The order reading of one screenshot, with every step kept for display. */
+function orderView(run: Run) {
+  const pieces = run.result.cells?.length ? run.result.cells : run.result.items;
+  const struck = struckPrices(pieces);
+  const merged = pieces.filter((p) => !struck.has(p) && unstrikePrice(p.text) !== p.text);
+  const parts = orderRows(run.text);
+  const bills = billRows(run.text);
+  const order = readOrder([run.text]);
+  const inOrder = order.items.filter((it) => !it.repeat);
+  const prices = inOrder.map((it) => it.amount);
+  const settled = settleOrder(prices, order.bill.charges.map((c) => c.amount), order.bill.orderTotal);
+  const share = new Map(inOrder.map((it, k) => [it, settled.shares?.[k] ?? 0]));
+  return { struck, merged, parts, bills, order, settled, share, itemsSum: prices.reduce((a, b) => a + b, 0) };
 }
 
 /** The boxes the scanner returned, drawn over the image that was sent. */
-function Overlay({ run, showCells, showBlocks }: { run: Run; showCells: boolean; showBlocks: boolean }) {
+function Overlay({
+  run,
+  showCells,
+  showBlocks,
+  struck = [],
+  merged = [],
+}: {
+  run: Run;
+  showCells: boolean;
+  showBlocks: boolean;
+  struck?: ScanItem[];
+  merged?: ScanItem[];
+}) {
   const page = run.result.pages[0];
   if (!page) return null;
   const rect = (it: ScanItem, i: number, cls: string) => {
@@ -38,6 +104,8 @@ function Overlay({ run, showCells, showBlocks }: { run: Run; showCells: boolean;
       <svg viewBox={`0 0 ${page.width} ${page.height}`} className="absolute inset-0 h-full w-full" preserveAspectRatio="none">
         {showBlocks ? run.result.items.filter((it) => it.page === page.page).map((it, i) => rect(it, i, "stroke-ink/50 [stroke-dasharray:6_4] [stroke-width:1.5]")) : null}
         {showCells ? (run.result.cells ?? []).filter((it) => it.page === page.page).map((it, i) => rect(it, i, "stroke-primary [stroke-width:2]")) : null}
+        {struck.map((it, i) => rect(it, i, "stroke-negative [stroke-width:4]"))}
+        {merged.map((it, i) => rect(it, i, "stroke-warning [stroke-width:4]"))}
       </svg>
     </div>
   );
@@ -51,6 +119,7 @@ export function ScanInspector() {
   const [run, setRun] = useState<Run | null>(null);
   const [showCells, setShowCells] = useState(true);
   const [showBlocks, setShowBlocks] = useState(false);
+  const [app, setApp] = useState<string>(OTHER_APP);
 
   const check = useCallback(async () => {
     setHealth(null);
@@ -80,7 +149,8 @@ export function ScanInspector() {
     try {
       const image = await prepareImage(file);
       const t0 = performance.now();
-      const res = await fetch("/api/scan?debug=1", {
+      // An order is scanned as the scan screen does it, struck prices left out.
+      const res = await fetch(app !== OTHER_APP ? "/api/scan?debug=1&order=1" : "/api/scan?debug=1", {
         method: "POST",
         headers: { "Content-Type": image.type || "application/octet-stream" },
         body: image,
@@ -99,6 +169,7 @@ export function ScanInspector() {
         text: body.text,
         result: body.debug,
         parsed: parseReceipt(body.text),
+        app,
       });
     } catch (e) {
       setError(`Scan failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -110,6 +181,7 @@ export function ScanInspector() {
   const itemSum = run ? run.parsed.items.reduce((s, it) => s + it.amount, 0) : 0;
   const total = run?.parsed.detectedTotal ?? null;
   const rows = run ? run.text.split("\n") : [];
+  const ov = run && run.app !== OTHER_APP ? orderView(run) : null;
 
   return (
     <div className="space-y-4">
@@ -141,6 +213,25 @@ export function ScanInspector() {
           onReject={() => setError("That is not an image.")}
         />
         {file ? <div className="text-sm">{file.name}</div> : null}
+        <label className="block space-y-1 text-sm">
+          <span>Ordered from</span>
+          <select
+            className="input"
+            value={app}
+            onChange={(e) => {
+              setApp(e.target.value);
+              setRun(null);
+            }}
+          >
+            <option value={OTHER_APP}>A receipt (not an order)</option>
+            {ORDER_APPS.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+          <span className="block text-xs text-muted">An app reads the image as an order screenshot, exactly like Add Expense.</span>
+        </label>
         <button type="button" className="btn-primary w-full" disabled={!file || busy} onClick={() => void scan()}>
           {busy ? "Scanning…" : "Scan"}
         </button>
@@ -174,7 +265,13 @@ export function ScanInspector() {
                 <span className="text-muted">Layout blocks</span> (dashed)
               </label>
             </div>
-            <Overlay run={run} showCells={showCells} showBlocks={showBlocks} />
+            {ov ? (
+              <div className="flex flex-wrap gap-4 text-xs">
+                <span className="text-negative">Red: struck-out price left out</span>
+                <span className="text-warning">Amber: two prices read as one, the price paid kept</span>
+              </div>
+            ) : null}
+            <Overlay run={run} showCells={showCells} showBlocks={showBlocks} struck={ov ? [...ov.struck.keys()] : []} merged={ov?.merged ?? []} />
           </div>
 
           <div className="card space-y-2">
@@ -189,6 +286,7 @@ export function ScanInspector() {
             </ol>
           </div>
 
+          {ov ? <OrderSections ov={ov} /> : (
           <div className="card space-y-3">
             <h2 className="section-title">6. What the parser made</h2>
             <table className="data-table">
@@ -230,12 +328,145 @@ export function ScanInspector() {
             </div>
           </div>
 
+          )}
+
           <details className="card">
-            <summary className="cursor-pointer text-sm font-semibold">7. Raw scanner result (JSON)</summary>
+            <summary className="cursor-pointer text-sm font-semibold">Raw scanner result (JSON)</summary>
             <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(run.result, null, 2)}</pre>
           </details>
         </>
       ) : null}
     </div>
+  );
+}
+
+/** How an order screenshot was read: struck prices, each row's part, the result. */
+function OrderSections({ ov }: { ov: ReturnType<typeof orderView> }) {
+  const { check, shares } = ov.settled;
+  const bill = ov.order.bill;
+  // A product row with a price is an item; one without is a detail line ("1 pc (250 ml)").
+  const became = (line: string) => {
+    const it = ov.order.items.find((x) => line.trim().startsWith(x.read));
+    return it ? `Item: ${it.description}, ${formatINR(it.amount)}` : "No price: not an item";
+  };
+  return (
+    <>
+      <div className="card space-y-2">
+        <h2 className="section-title">6. Struck-out prices</h2>
+        <p className="text-sm text-muted">
+          OCR can&apos;t see a strike line. A struck price shows up as a price piece just under the price paid (same column,
+          touching, no larger), or as two prices run into one number because the strike took both ₹ signs.
+        </p>
+        {ov.struck.size === 0 && ov.merged.length === 0 ? (
+          <div className="text-sm text-muted">None on this screenshot.</div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr><th>OCR read</th><th>What was done</th></tr>
+            </thead>
+            <tbody>
+              {[...ov.struck].map(([low, high], i) => (
+                <tr key={`s${i}`}>
+                  <td className="font-mono text-negative">{low.text}</td>
+                  <td>Left out: sits under {high.text}, the price paid</td>
+                </tr>
+              ))}
+              {ov.merged.map((p, i) => (
+                <tr key={`m${i}`}>
+                  <td className="font-mono text-warning">{p.text}</td>
+                  <td>Read as struck {p.text.trim().slice(0, p.text.trim().length - unstrikePrice(p.text).length)}, paid {unstrikePrice(p.text)}: kept {unstrikePrice(p.text)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="card space-y-2">
+        <h2 className="section-title">7. How each row was read</h2>
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr><th>#</th><th>Row</th><th>Part of the screen</th><th>What it became</th></tr>
+            </thead>
+            <tbody>
+              {ov.parts.map((r, i) => (
+                <tr key={i} className={r.part === "product" ? "" : "text-muted"}>
+                  <td>{i + 1}</td>
+                  <td className="font-mono text-xs">{r.line}</td>
+                  <td>{PART[r.part]}</td>
+                  <td>{r.part === "product" ? became(r.line) : reading(ov.bills[i].reading)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card space-y-3">
+        <h2 className="section-title">8. The order, as Add Expense shows it</h2>
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr><th>Parser read</th><th>Item</th><th>Qty</th><th>Category</th><th>Price</th><th>Share of charges</th><th>Expense</th></tr>
+            </thead>
+            <tbody>
+              {ov.order.items.length === 0 ? (
+                <tr><td colSpan={7} className="text-muted">No items</td></tr>
+              ) : (
+                ov.order.items.map((it, i) => {
+                  const share = ov.share.get(it) ?? 0;
+                  return (
+                    <tr key={i} className={it.repeat ? "text-muted" : ""}>
+                      <td className="font-mono text-xs">{it.read}</td>
+                      <td>{it.description}{it.repeat ? " (repeat, unticked)" : ""}</td>
+                      <td>{it.qty ?? ""}</td>
+                      <td>{it.category}</td>
+                      <td>{formatINR(it.amount)}</td>
+                      <td>{it.repeat || !shares ? "" : formatINR(share)}</td>
+                      <td>{it.repeat || !shares ? "" : formatINR(it.amount + share)}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        <table className="data-table">
+          <tbody>
+            <tr>
+              <td>Items add up to</td>
+              <td>
+                {formatINR(ov.itemsSum)}
+                {bill.itemTotal != null
+                  ? Math.abs(ov.itemsSum - bill.itemTotal) <= 1
+                    ? `, same as the bill's item total`
+                    : `, the bill's item total says ${formatINR(bill.itemTotal)}: an item is missed or extra`
+                  : ", no item total on the bill"}
+              </td>
+            </tr>
+            {bill.charges.map((c, i) => (
+              <tr key={i}><td>{c.label}</td><td>{c.amount < 0 ? formatINR(c.amount) : `+${formatINR(c.amount)}`}</td></tr>
+            ))}
+            <tr><td>Order total</td><td>{bill.orderTotal != null ? formatINR(bill.orderTotal) : "not found"}</td></tr>
+          </tbody>
+        </table>
+        {check.status === "matched" ? (
+          <div className="alert-success">
+            Matches: items {formatINR(check.items)} and charges {formatINR(check.charges)} come to{" "}
+            {formatINR(check.items + check.charges)}, the order total is {formatINR(check.total)}
+            {check.diff !== 0 ? ` (${formatINR(check.diff)} rounding, inside the ₹1 allowed)` : ""}. The items carry{" "}
+            {formatINR(check.total - check.items)} between them, by price. Save is allowed.
+          </div>
+        ) : check.status === "mismatch" ? (
+          <div className="alert-error">
+            Doesn&apos;t match: items {formatINR(check.items)} and charges {formatINR(check.charges)} come to{" "}
+            {formatINR(check.items + check.charges)}, the order total is {formatINR(check.total)}, off by {formatINR(check.diff)}. Save is blocked until fixed.
+          </div>
+        ) : (
+          <div className="alert-warning">No order total found: the user has to type it in before saving.</div>
+        )}
+      </div>
+    </>
   );
 }
