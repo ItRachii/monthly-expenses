@@ -58,8 +58,11 @@ async function checkHealth(url: string): Promise<boolean> {
   }
 }
 
-/** Reads one image (PNG, JPEG, WebP or PDF) and returns its text lines. */
-export async function scanFile(data: Uint8Array): Promise<ScanOutcome> {
+/**
+ * Reads one image (PNG, JPEG, WebP or PDF) and returns its text lines;
+ * `order` for a quick-commerce order screenshot (see scanToLines).
+ */
+export async function scanFile(data: Uint8Array, opts: { order?: boolean } = {}): Promise<ScanOutcome> {
   const cfg = config();
   if (!cfg) return { ok: false, reason: "unavailable" };
   const sealed = sealRequest(cfg.key, data);
@@ -92,7 +95,7 @@ export async function scanFile(data: Uint8Array): Promise<ScanOutcome> {
   try {
     const plain = openResponse(cfg.key, Buffer.from(await res.arrayBuffer()), replyNonce, sealed.nonce);
     const result = JSON.parse(plain.toString("utf8")) as ScanResult & { ms?: number };
-    return { ok: true, lines: scanToLines(result), result };
+    return { ok: true, lines: scanToLines(result, opts), result };
   } catch {
     console.error("Scanner reply could not be decrypted or read.");
     return { ok: false, reason: "unavailable" };

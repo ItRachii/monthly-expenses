@@ -2,10 +2,11 @@
 // `npm run test:scanner`. The encryption vectors were made with the
 // scanner's own docling-service/envelope.py, so both sides must agree.
 import { deriveKey, openResponse, sealRequest } from "../../src/lib/scanner/envelope";
-import { scanToLines, type ScanResult } from "../../src/lib/scanner/lines";
+import { dropStruckPrices, scanToLines, unstrikePrice, type ScanResult } from "../../src/lib/scanner/lines";
 import { parseReceipt } from "../../src/lib/receipt/parse";
 import { categorize } from "../../src/lib/receipt/categorize";
 import { cleanOrderItem, repeatedRows } from "../../src/lib/receipt/quickCommerce";
+import { orderProducts, readOrderBill, reconcile } from "../../src/lib/receipt/orderBill";
 import { isDeveloper } from "../../src/lib/features";
 import { emailId } from "../../src/lib/piiCrypto";
 
@@ -106,6 +107,88 @@ const twoPages = scanToLines({
   ],
 });
 check("pages in order", JSON.stringify(twoPages) === JSON.stringify(["Page one", "Page two"]), JSON.stringify(twoPages));
+
+// A real Zepto order, as RapidOCR (the scanner's OCR) reads it. The water's
+// original ₹120 is struck out under the ₹106 paid and comes back as a bare
+// "120" on the name's second line; the bill's "₹188 ₹174" and "₹228 ₹174"
+// come back as "188174" and "228174".
+const zeptoCells: [string, number, number, number, number][] = [
+    ["9:19", 57, 42, 114, 71],
+    ["23", 605, 45, 645, 71],
+    ["<", 37, 142, 65, 176],
+    ["Order #SOOJRBIWE82003", 98, 133, 369, 155],
+    ["Get Help", 579, 143, 675, 173],
+    ["3 items", 95, 158, 174, 185],
+    ["Arrived in", 585, 236, 685, 262],
+    ["Delivered", 107, 250, 275, 288],
+    ["49 MINS", 550, 272, 669, 302],
+    ["3 items in order", 40, 362, 234, 391],
+    ["Nandini Toned Fresh Milk | Pouch", 143, 424, 518, 454],
+    ["₹48", 617, 424, 673, 456],
+    ["1 pack (500 ml)  2 units", 143, 459, 389, 485],
+    ["Zyro by Karan Aujla | Zero Sugar Tonic", 144, 547, 567, 576],
+    ["₹106", 605, 546, 672, 577],
+    ["Water (250ml)", 141, 572, 313, 606],
+    ["120", 615, 578, 672, 606],
+    ["1 pc (250 ml)2 units", 142, 607, 365, 636],
+    ["Kinley Soda | Refreshing Carbonated", 141, 689, 555, 722],
+    ["₹20", 617, 692, 671, 721],
+    ["Drink", 143, 719, 211, 747],
+    ["1 pc (750 ml)1 unit", 141, 750, 351, 781],
+    ["日", 28, 863, 62, 897],
+    ["Bill Summary", 66, 859, 271, 900],
+    ["Item Total", 27, 932, 132, 958],
+    ["188174", 578, 930, 685, 956],
+    ["Delivery Fee", 27, 983, 155, 1012],
+    ["30 FREE", 574, 983, 685, 1009],
+    ["Handling Fee", 26, 1035, 163, 1063],
+    ["10 FREE", 577, 1035, 685, 1061],
+    ["Total Bill", 26, 1119, 142, 1149],
+    ["228174", 554, 1116, 686, 1149],
+    ["Download Invoice / Credit Note", 343, 1240, 653, 1267],
+    ["Order Details", 28, 1362, 220, 1393],
+    ["1", 86, 1420, 113, 1435],
+    ["Rate Order", 110, 1478, 271, 1510],
+    ["Order Again", 431, 1476, 610, 1514]
+];
+const zepto: ScanResult = {
+  pages: [{ page: 1, width: 712, height: 1600 }],
+  items: [],
+  cells: zeptoCells.map(([text, l, t, r, b]) => ({ text, page: 1, box: [l, t, r, b] })),
+};
+const zeptoLines = scanToLines(zepto, { order: true });
+const zeptoItems = parseReceipt(orderProducts(zeptoLines.join("\n"))).items.map((it) => [it.description, it.amount]);
+check(
+  "Zepto: struck-out price is not an item",
+  JSON.stringify(zeptoItems) ===
+    JSON.stringify([["Nandini Toned Fresh Milk | Pouch", 48], ["Zyro by Karan Aujla | Zero Sugar Tonic", 106], ["Kinley Soda | Refreshing Carbonated", 20]]),
+  JSON.stringify(zeptoItems),
+);
+const zeptoBill = readOrderBill(zeptoLines.join("\n"));
+check("Zepto: struck totals read as the price paid", zeptoBill.itemTotal === 174 && zeptoBill.orderTotal === 174 && zeptoBill.charges.length === 0, JSON.stringify(zeptoBill));
+check("Zepto: adds up", reconcile(zeptoItems.map((it) => it[1] as number), [], zeptoBill.orderTotal).status === "matched");
+check("receipts keep every price", scanToLines(zepto).some((l) => l.endsWith(" 120")));
+check(
+  "struck pairs",
+  ["188174", "228174", "3025", "12099"].map(unstrikePrice).join() === "174,174,25,99" &&
+    ["1299", "2026", "1200", "₹1299", "54.0", "213456789012"].every((t) => unstrikePrice(t) === t),
+);
+// Prices of separate items, a line or more apart, are all kept.
+const separate = dropStruckPrices([
+  { text: "₹54.0", page: 1, box: [900, 610, 1010, 650] },
+  { text: "80.0", page: 1, box: [920, 708, 1010, 750] },
+]);
+check("prices of separate items kept", separate.length === 2, JSON.stringify(separate));
+const bigger = dropStruckPrices([
+  { text: "₹54", page: 1, box: [900, 610, 1010, 640] },
+  { text: "₹80", page: 1, box: [900, 642, 1010, 690] },
+]);
+check("a larger price below is not a struck one", bigger.length === 2);
+const twoColumns = dropStruckPrices([
+  { text: "₹54", page: 1, box: [900, 610, 1010, 650] },
+  { text: "₹20", page: 1, box: [400, 651, 480, 690] },
+]);
+check("a price in another column is kept", twoColumns.length === 2);
 
 // Quick-commerce order lines, as read from a real Instamart screenshot.
 const order = parseReceipt(["2 x Sprite Zero Delivered ₹54.0", "1x [Combo] Coca-Cola Diet Coke Can 80.0", "1 x Eveready AAA Battery | Pack of 4 43.0", "Grand Total 177"].join("\n"));
