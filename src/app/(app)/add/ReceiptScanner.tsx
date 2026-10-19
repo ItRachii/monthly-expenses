@@ -8,7 +8,7 @@ import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
 import { categorize } from "@/lib/receipt/categorize";
 import { ORDER_APPS, OTHER_APP, cleanOrderItem, repeatedRows } from "@/lib/receipt/quickCommerce";
-import { distribute, isBillLine, readOrderBill, reconcile } from "@/lib/receipt/orderBill";
+import { distribute, orderProducts, readOrderBill, reconcile } from "@/lib/receipt/orderBill";
 import { addReceiptAction } from "@/lib/actions/receipts";
 import { CategorySelect } from "@/components/CategorySelect";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
@@ -209,17 +209,17 @@ export function ReceiptScanner({
     }
     const fromApp = app !== OTHER_APP;
     // An order's bill summary (fees, discounts, totals) is read on its own;
-    // the items come from the rest, so a fee is never taken for a product
-    // and no tax line is folded into the item prices twice.
-    const productText = (t: string) => (fromApp ? t.split("\n").filter((l) => !isBillLine(l)).join("\n") : t);
+    // the items come from the rest of each screenshot, so a fee or "Item
+    // Bill" is never taken for a product and no tax line is counted twice.
+    const productText = (t: string) => (fromApp ? orderProducts(t) : t);
     const whole = parseReceipt(texts.join("\n"));
-    const parsed = fromApp ? parseReceipt(productText(texts.join("\n"))) : whole;
+    const parsed = fromApp ? parseReceipt(texts.map(productText).join("\n")) : whole;
     const repeats = repeatedRows(
       texts.map((t) => parseReceipt(productText(t)).items.map((it) => it.description)),
       parsed.items.map((it) => it.description),
     );
     if (fromApp) {
-      const read = readOrderBill(texts.join("\n"));
+      const read = readOrderBill(texts);
       setBill({
         charges: read.charges.map((c) => ({ label: c.label, amount: c.amount.toFixed(2) })),
         total: read.orderTotal != null ? read.orderTotal.toFixed(2) : "",
