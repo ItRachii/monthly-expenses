@@ -39,8 +39,10 @@ const RUPEES = /(?:₹|rs\.?\s*)\d/i;
 // Where an order screen's sections start. Swiggy boxes its items under
 // "ITEM DETAILS" and its bill under "TOTAL ORDER BILL DETAILS"; others say
 // "Bill details", "Bill summary", "Payment details", "Price details".
-const ITEMS_HEADER = /^(?:item\s*details|items?\s+in\s+(?:this|your)\s+order)\b/i;
-const BILL_HEADER = /^(?:total\s+)?(?:order\s+)?(?:bill|payment|price)\s*(?:details|summary)\b/i;
+// Zepto says "3 items in order". OCR may read the icon before a heading as a
+// stray symbol, hence the leading non-letters.
+const ITEMS_HEADER = /^[^a-z0-9]*(?:item\s*details|(?:\d+\s+)?items?\s+in\s+(?:this\s+|your\s+)?order)\b/i;
+const BILL_HEADER = /^[^a-z0-9]*(?:total\s+)?(?:order\s+)?(?:bill|payment|price)\s*(?:details|summary)\b/i;
 // The order's own heading, not a product: "Completed | 4 items, ₹177", "3 items • Ulsoor".
 const ORDER_META = /\b\d+\s*items?\b/i;
 

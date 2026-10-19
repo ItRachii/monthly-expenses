@@ -7,6 +7,8 @@ import { isDeveloper } from "@/lib/features";
 // POST /api/scan: one image as the raw request body; returns its text.
 // POST /api/scan?debug=1, for developers only (DEVELOPER_EMAILS): also the
 // scanner's full result, for the scan inspector at /dev/scan.
+// POST /api/scan?order=1: the image is a quick-commerce order screenshot, so
+// struck-out original prices are left out of the text.
 // The scanner is a Docling service on the owner's laptop (docling-service/),
 // so it can be off: the client checks first and says so plainly.
 
@@ -60,7 +62,8 @@ export async function POST(req: Request) {
   const session = await auth();
   const email = session?.user?.email;
   if (!email) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
-  const debug = new URL(req.url).searchParams.get("debug") === "1" && (await isDeveloper(email));
+  const params = new URL(req.url).searchParams;
+  const debug = params.get("debug") === "1" && (await isDeveloper(email));
 
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BYTES)
     return NextResponse.json({ error: "too-large" }, { status: 413 });
@@ -70,7 +73,7 @@ export async function POST(req: Request) {
   if (!isImage(data)) return NextResponse.json({ error: "unsupported" }, { status: 415, headers: noStore });
   if (overBudget(email)) return NextResponse.json({ error: "rate-limited" }, { status: 429, headers: noStore });
 
-  const out = await scanFile(data);
+  const out = await scanFile(data, { order: params.get("order") === "1" });
   if (out.ok)
     return NextResponse.json(
       { text: out.lines.join("\n"), ...(debug ? { debug: out.result } : {}) },

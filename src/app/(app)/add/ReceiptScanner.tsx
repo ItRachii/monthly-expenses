@@ -183,7 +183,7 @@ export function ReceiptScanner({
       for (let i = 0; i < files.length; i++) {
         setProgress({ file: i + 1, files: files.length });
         const image = await prepareImage(files[i]);
-        const res = await fetch("/api/scan", {
+        const res = await fetch(app !== OTHER_APP ? "/api/scan?order=1" : "/api/scan", {
           method: "POST",
           headers: { "Content-Type": image.type || "application/octet-stream" },
           body: image,
