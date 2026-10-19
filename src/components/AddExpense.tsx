@@ -209,7 +209,10 @@ function AddExpenseOverlay({
         role="dialog"
         aria-modal="true"
         aria-label="Add expense"
-        className="sheet card max-h-[92dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-b-none md:max-w-xl md:rounded-xl"
+        className={`sheet card max-h-[92dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-b-none md:rounded-xl ${
+          // Order screenshots list many items with a category and price each: give them room.
+          mode === "orders" ? "md:max-w-4xl" : "md:max-w-xl"
+        }`}
         style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between gap-3">

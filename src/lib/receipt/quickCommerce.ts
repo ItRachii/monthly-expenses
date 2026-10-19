@@ -16,8 +16,9 @@ export const ORDER_APPS = [
 /** Not one of the apps above: the merchant is whatever the screenshot says. */
 export const OTHER_APP = "Other";
 
-// "2 x Item", "2x Item", "2 × Item", "Qty 2 Item".
-const LEADING_QTY = /^(?:qty\s*)?(\d{1,3})\s*[x×*]\s+|^qty\s*(\d{1,3})\s+/i;
+// "2 x Item", "2x Item", "1x[Combo] Item" (OCR often drops the space), "2 × Item",
+// "Qty 2 Item". Not "4x4 Cable": a digit straight after the x is part of the name.
+const LEADING_QTY = /^(?:qty\s*)?(\d{1,3})\s*[x×*]\s*(?=[^\d\s])|^qty\s*(\d{1,3})\s+/i;
 // Status words these apps print after an item's name.
 const TRAILING_STATUS = /\s+(?:delivered|refunded|replaced|cancelled|canceled|out of stock|unavailable)$/i;
 

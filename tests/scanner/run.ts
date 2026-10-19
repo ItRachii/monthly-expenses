@@ -124,6 +124,8 @@ check(
 );
 check("order lines add up to the total", cleaned.reduce((s, it) => s + it.amount, 0) === order.detectedTotal);
 check("a name without a quantity is kept", JSON.stringify(cleanOrderItem("Amul Taaza Milk 1L")) === JSON.stringify({ description: "Amul Taaza Milk 1L", qty: null }));
+check("no space after the x", JSON.stringify(cleanOrderItem("1x[Combo] Coca-Cola Diet Coke Can")) === JSON.stringify({ description: "[Combo] Coca-Cola Diet Coke Can", qty: 1 }));
+check("a size in the name is not a quantity", JSON.stringify(cleanOrderItem("4x4 Cable")) === JSON.stringify({ description: "4x4 Cable", qty: null }));
 check("Qty prefix", JSON.stringify(cleanOrderItem("Qty 3 Bananas")) === JSON.stringify({ description: "Bananas", qty: 3 }));
 check("a name that is only a status is not emptied", cleanOrderItem("Delivered").description === "Delivered");
 
