@@ -8,6 +8,7 @@ import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
 import { categorize } from "@/lib/receipt/categorize";
 import { ORDER_APPS, OTHER_APP, cleanOrderItem, repeatedRows } from "@/lib/receipt/quickCommerce";
+import { distribute, isBillLine, readOrderBill, reconcile } from "@/lib/receipt/orderBill";
 import { addReceiptAction } from "@/lib/actions/receipts";
 import { CategorySelect } from "@/components/CategorySelect";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
@@ -56,6 +57,15 @@ type Service = "checking" | "up" | "down";
 const SERVICE_DOWN = "The scanning service is not available right now. Please come back later.";
 
 const numeric = (v: string) => v === "" || /^\d*\.?\d*$/.test(v);
+// Charges can be negative: a discount.
+const signed = (v: string) => v === "" || /^-?\d*\.?\d*$/.test(v);
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+/** An order's bill summary as edited on the review screen. */
+interface EditBill {
+  charges: { label: string; amount: string }[];
+  total: string;
+}
 
 // Identity for de-duping picks across the camera and gallery inputs.
 const fileKey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`;
@@ -110,6 +120,8 @@ export function ReceiptScanner({
   const [merchant, setMerchant] = useState("");
   const [purchasedOn, setPurchasedOn] = useState(todayISO());
   const [items, setItems] = useState<EditItem[]>([]);
+  // Quick-commerce orders only: the charges and total under the items.
+  const [bill, setBill] = useState<EditBill | null>(null);
   const [payer, setPayer] = useState(defaultPayer);
   const uid = useId();
   const [split, setSplit] = useState(SPLIT_EQUAL);
@@ -139,6 +151,7 @@ export function ReceiptScanner({
     setPhase("pick");
     setFiles([]);
     setItems([]);
+    setBill(null);
     setProgress(null);
     setError(null);
   }
@@ -194,15 +207,27 @@ export function ReceiptScanner({
       setError("Scanning failed. Check your connection and try again.");
       return;
     }
-    const parsed = parseReceipt(texts.join("\n"));
+    const fromApp = app !== OTHER_APP;
+    // An order's bill summary (fees, discounts, totals) is read on its own;
+    // the items come from the rest, so a fee is never taken for a product
+    // and no tax line is folded into the item prices twice.
+    const productText = (t: string) => (fromApp ? t.split("\n").filter((l) => !isBillLine(l)).join("\n") : t);
+    const whole = parseReceipt(texts.join("\n"));
+    const parsed = fromApp ? parseReceipt(productText(texts.join("\n"))) : whole;
     const repeats = repeatedRows(
-      texts.map((t) => parseReceipt(t).items.map((it) => it.description)),
+      texts.map((t) => parseReceipt(productText(t)).items.map((it) => it.description)),
       parsed.items.map((it) => it.description),
     );
-    const fromApp = app !== OTHER_APP;
+    if (fromApp) {
+      const read = readOrderBill(texts.join("\n"));
+      setBill({
+        charges: read.charges.map((c) => ({ label: c.label, amount: c.amount.toFixed(2) })),
+        total: read.orderTotal != null ? read.orderTotal.toFixed(2) : "",
+      });
+    } else setBill(null);
     // The app is a better merchant name than whatever heads the screenshot.
-    setMerchant(fromApp ? app : parsed.merchant);
-    if (parsed.purchasedOn) setPurchasedOn(parsed.purchasedOn);
+    setMerchant(fromApp ? app : whole.merchant);
+    if (whole.purchasedOn) setPurchasedOn(whole.purchasedOn);
     setItems(
       parsed.items.map((it, n) => {
         const order = fromApp ? cleanOrderItem(it.description) : null;
@@ -235,16 +260,46 @@ export function ReceiptScanner({
     ]);
   }
 
+  // The order is every item on it, ticked or not (unticking one is "don't
+  // add this", not "it wasn't bought"); a row read twice from overlapping
+  // screenshots is not part of it unless ticked again.
+  const inOrder = items.filter((it) => !(it.repeat && !it.include));
+  const prices = inOrder.map((it) => parseFloat(it.amount) || 0);
+  const check = bill
+    ? reconcile(
+        prices,
+        bill.charges.map((c) => parseFloat(c.amount) || 0),
+        bill.total.trim() === "" ? null : parseFloat(bill.total),
+      )
+    : null;
+  // Once items + charges = the order total, the charges (or whatever the
+  // total says beyond the items) are shared over the items by price.
+  const shares = new Map<EditItem, number>();
+  if (check?.status === "matched") {
+    const split = distribute(prices, round2(check.total - check.items));
+    inOrder.forEach((it, k) => shares.set(it, split[k]));
+  }
+  const finalAmount = (it: EditItem) => round2((parseFloat(it.amount) || 0) + (shares.get(it) ?? 0));
+  const orderBlocked = check !== null && check.status !== "matched";
+
   const chosen = items.filter((it) => it.include);
-  const total = chosen.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+  const total = chosen.reduce((s, it) => s + finalAmount(it), 0);
   const allChosen = items.length > 0 && chosen.length === items.length;
+
+  function patchCharge(i: number, p: Partial<EditBill["charges"][number]>) {
+    setBill((b) => (b ? { ...b, charges: b.charges.map((c, k) => (k === i ? { ...c, ...p } : c)) } : b));
+  }
 
   function save() {
     setError(null);
+    if (orderBlocked) {
+      setError("The items and charges don't add up to the order total yet. Fix them in the bill summary first.");
+      return;
+    }
     const payloadItems = chosen.map((it) => ({
       description: it.description.trim(),
       category: it.category.trim(),
-      amount: parseFloat(it.amount),
+      amount: finalAmount(it),
       gstRate: it.gstRate.trim() === "" ? null : parseFloat(it.gstRate),
       gstAmount: it.gstAmount.trim() === "" ? null : parseFloat(it.gstAmount),
     }));
@@ -468,7 +523,7 @@ export function ReceiptScanner({
           ) : null}
 
           <div className="overflow-x-auto">
-            <table className="data-table min-w-[640px]">
+            <table className={`data-table ${bill ? "" : "min-w-[640px]"}`}>
               <thead>
                 <tr>
                   <th className="w-8">
@@ -480,10 +535,14 @@ export function ReceiptScanner({
                     />
                   </th>
                   <th>Item</th>
-                  <th>Category</th>
-                  <th className="text-right">GST %</th>
-                  <th className="text-right">GST ₹</th>
-                  <th className="text-right">Amount ₹</th>
+                  {bill ? null : <th>Category</th>}
+                  {bill ? null : (
+                    <>
+                      <th className="text-right">GST %</th>
+                      <th className="text-right">GST ₹</th>
+                    </>
+                  )}
+                  <th className="text-right">{bill ? "Price ₹" : "Amount ₹"}</th>
                 </tr>
               </thead>
               <tbody>
@@ -497,7 +556,7 @@ export function ReceiptScanner({
                         onChange={(e) => patch(i, { include: e.target.checked })}
                       />
                     </td>
-                    <td className="min-w-[10rem]">
+                    <td className={bill ? "w-full" : "min-w-[10rem]"}>
                       <input
                         className="input"
                         value={it.description}
@@ -507,14 +566,24 @@ export function ReceiptScanner({
                       {it.repeat ? (
                         <div className="mt-1 text-xs text-muted">Also in an earlier screenshot, so left out. Tick it if you bought it twice.</div>
                       ) : null}
+                      {/* Orders: the category sits under the name, so the price stays on screen on a phone. */}
+                      {bill ? (
+                        <div className="mt-1.5">
+                          <CategorySelect categories={categories} value={it.category} onChange={(c) => patch(i, { category: c })} />
+                        </div>
+                      ) : null}
                     </td>
-                    <td className="min-w-[9rem]">
-                      <CategorySelect
-                        categories={categories}
-                        value={it.category}
-                        onChange={(c) => patch(i, { category: c })}
-                      />
-                    </td>
+                    {bill ? null : (
+                      <td className="min-w-[9rem]">
+                        <CategorySelect
+                          categories={categories}
+                          value={it.category}
+                          onChange={(c) => patch(i, { category: c })}
+                        />
+                      </td>
+                    )}
+                    {bill ? null : (
+                    <>
                     <td className="w-20">
                       <input
                         className="input text-right"
@@ -533,7 +602,9 @@ export function ReceiptScanner({
                         onChange={(e) => numeric(e.target.value) && patch(i, { gstAmount: e.target.value })}
                       />
                     </td>
-                    <td className="w-28">
+                    </>
+                    )}
+                    <td className={bill ? "w-24" : "w-28"}>
                       <input
                         className="input text-right"
                         inputMode="decimal"
@@ -541,12 +612,17 @@ export function ReceiptScanner({
                         placeholder="0.00"
                         onChange={(e) => numeric(e.target.value) && patch(i, { amount: e.target.value })}
                       />
+                      {shares.has(it) && shares.get(it) !== 0 ? (
+                        <div className="mt-1 whitespace-nowrap text-right text-xs text-muted">
+                          <span className="font-semibold text-ink">{formatINR(finalAmount(it))}</span> with charges
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center text-muted">
+                    <td colSpan={bill ? 3 : 6} className="text-center text-muted">
                       No items yet. Add them manually.
                     </td>
                   </tr>
@@ -565,8 +641,74 @@ export function ReceiptScanner({
             </div>
           </div>
 
+          {bill && check ? (
+            <div className="space-y-3 rounded-lg border border-ink/10 p-3">
+              <div>
+                <div className="text-sm font-semibold">Bill summary</div>
+                <p className="text-xs text-muted">Charges on top of the items, as on the bill. A discount is a negative amount.</p>
+              </div>
+              {bill.charges.map((c, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    className="input min-w-0 flex-1"
+                    aria-label={`Charge ${i + 1} name`}
+                    value={c.label}
+                    placeholder="Charge"
+                    onChange={(e) => patchCharge(i, { label: e.target.value })}
+                  />
+                  <input
+                    className="input w-28 text-right"
+                    aria-label={`${c.label || `Charge ${i + 1}`} amount`}
+                    inputMode="decimal"
+                    value={c.amount}
+                    placeholder="0.00"
+                    onChange={(e) => signed(e.target.value) && patchCharge(i, { amount: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={`Remove ${c.label || "charge"}`}
+                    onClick={() => setBill((b) => (b ? { ...b, charges: b.charges.filter((_, k) => k !== i) } : b))}
+                  >
+                    <XIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="btn-secondary px-3 py-1.5 text-sm"
+                onClick={() => setBill((b) => (b ? { ...b, charges: [...b.charges, { label: "", amount: "" }] } : b))}
+              >
+                + Add charge or discount
+              </button>
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor={`${uid}-order-total`} className="text-sm font-semibold">Order total (paid)</label>
+                <input
+                  id={`${uid}-order-total`}
+                  className="input w-32 text-right"
+                  inputMode="decimal"
+                  value={bill.total}
+                  placeholder="0.00"
+                  onChange={(e) => numeric(e.target.value) && setBill((b) => (b ? { ...b, total: e.target.value } : b))}
+                />
+              </div>
+              {/* The sum itself stays out of sight: only whether it matches, and what to fix if not. */}
+              {check.status === "matched" ? (
+                <div role="status" className="text-sm text-positive">Matches the order total.</div>
+              ) : (
+                <div role="status" className={check.status === "mismatch" ? "alert-error" : "alert-warning"}>
+                  {check.status === "mismatch"
+                    ? `Doesn't match the order total: ${formatINR(Math.abs(check.diff))} ${
+                        check.diff > 0 ? "is missing. An item or charge may not have been read." : "too much. An item or charge may be read twice."
+                      }`
+                    : "Enter the order total from the bill."}
+                </div>
+              )}
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn-primary" disabled={pending || chosen.length === 0} onClick={save}>
+            <button type="button" className="btn-primary" disabled={pending || chosen.length === 0 || orderBlocked} onClick={save}>
               {pending ? "Saving…" : `Add ${chosen.length} expense${chosen.length === 1 ? "" : "s"}`}
             </button>
             <button type="button" className="btn-secondary" disabled={pending} onClick={reset}>
