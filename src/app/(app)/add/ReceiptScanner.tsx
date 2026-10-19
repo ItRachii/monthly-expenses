@@ -522,8 +522,73 @@ export function ReceiptScanner({
             </div>
           ) : null}
 
+          {bill ? (
+            // Orders: one line per item (tick, name, category, price) from a
+            // tablet up; on a phone the category drops under the name so the
+            // price keeps its room.
+            <div className="divide-y divide-ink/10 border-y border-ink/10">
+              <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_7rem] items-center gap-x-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted sm:grid-cols-[1.5rem_minmax(0,1fr)_11rem_8.5rem]">
+                <input
+                  type="checkbox"
+                  aria-label={allChosen ? "Leave out every item" : "Add every item"}
+                  checked={allChosen}
+                  onChange={(e) => setItems((prev) => prev.map((it) => ({ ...it, include: e.target.checked })))}
+                />
+                <span>Item</span>
+                <span className="hidden sm:block">Category</span>
+                <span className="text-right">Price ₹</span>
+              </div>
+              {items.map((it, i) => (
+                <div
+                  key={i}
+                  className={`grid grid-cols-[1.5rem_minmax(0,1fr)_7rem] items-center gap-x-3 gap-y-1.5 py-2.5 sm:grid-cols-[1.5rem_minmax(0,1fr)_11rem_8.5rem] ${
+                    it.include ? "" : "opacity-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="col-start-1 row-start-1"
+                    aria-label={`Add ${it.description || `item ${i + 1}`}`}
+                    checked={it.include}
+                    onChange={(e) => patch(i, { include: e.target.checked })}
+                  />
+                  <input
+                    className="input col-start-2 row-start-1"
+                    aria-label={`Item ${i + 1} name`}
+                    value={it.description}
+                    placeholder="Item"
+                    onChange={(e) => patch(i, { description: e.target.value })}
+                  />
+                  <div className="col-start-2 row-start-2 sm:col-start-3 sm:row-start-1">
+                    <CategorySelect categories={categories} value={it.category} onChange={(c) => patch(i, { category: c })} />
+                  </div>
+                  <div className="col-start-3 row-start-1 sm:col-start-4">
+                    <input
+                      className="input text-right tabular-nums"
+                      aria-label={`${it.description || `Item ${i + 1}`} price`}
+                      inputMode="decimal"
+                      value={it.amount}
+                      placeholder="0.00"
+                      onChange={(e) => numeric(e.target.value) && patch(i, { amount: e.target.value })}
+                    />
+                  </div>
+                  {shares.has(it) && shares.get(it) !== 0 ? (
+                    <div className="col-start-3 row-start-2 text-right text-xs text-muted sm:col-start-4">
+                      <span className="font-semibold text-ink">{formatINR(finalAmount(it))}</span> with charges
+                    </div>
+                  ) : null}
+                  {it.repeat ? (
+                    <div className="col-span-2 col-start-2 row-start-3 text-xs text-muted sm:row-start-2">
+                      Also in an earlier screenshot, so left out. Tick it if you bought it twice.
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {items.length === 0 ? <div className="py-3 text-center text-sm text-muted">No items yet. Add them manually.</div> : null}
+            </div>
+          ) : (
           <div className="overflow-x-auto">
-            <table className={`data-table ${bill ? "" : "min-w-[640px]"}`}>
+            <table className="data-table min-w-[640px]">
               <thead>
                 <tr>
                   <th className="w-8">
@@ -535,14 +600,10 @@ export function ReceiptScanner({
                     />
                   </th>
                   <th>Item</th>
-                  {bill ? null : <th>Category</th>}
-                  {bill ? null : (
-                    <>
-                      <th className="text-right">GST %</th>
-                      <th className="text-right">GST ₹</th>
-                    </>
-                  )}
-                  <th className="text-right">{bill ? "Price ₹" : "Amount ₹"}</th>
+                  <th>Category</th>
+                  <th className="text-right">GST %</th>
+                  <th className="text-right">GST ₹</th>
+                  <th className="text-right">Amount ₹</th>
                 </tr>
               </thead>
               <tbody>
@@ -556,7 +617,7 @@ export function ReceiptScanner({
                         onChange={(e) => patch(i, { include: e.target.checked })}
                       />
                     </td>
-                    <td className={bill ? "w-full" : "min-w-[10rem]"}>
+                    <td className="min-w-[10rem]">
                       <input
                         className="input"
                         value={it.description}
@@ -566,24 +627,14 @@ export function ReceiptScanner({
                       {it.repeat ? (
                         <div className="mt-1 text-xs text-muted">Also in an earlier screenshot, so left out. Tick it if you bought it twice.</div>
                       ) : null}
-                      {/* Orders: the category sits under the name, so the price stays on screen on a phone. */}
-                      {bill ? (
-                        <div className="mt-1.5">
-                          <CategorySelect categories={categories} value={it.category} onChange={(c) => patch(i, { category: c })} />
-                        </div>
-                      ) : null}
                     </td>
-                    {bill ? null : (
-                      <td className="min-w-[9rem]">
-                        <CategorySelect
-                          categories={categories}
-                          value={it.category}
-                          onChange={(c) => patch(i, { category: c })}
-                        />
-                      </td>
-                    )}
-                    {bill ? null : (
-                    <>
+                    <td className="min-w-[9rem]">
+                      <CategorySelect
+                        categories={categories}
+                        value={it.category}
+                        onChange={(c) => patch(i, { category: c })}
+                      />
+                    </td>
                     <td className="w-20">
                       <input
                         className="input text-right"
@@ -602,9 +653,7 @@ export function ReceiptScanner({
                         onChange={(e) => numeric(e.target.value) && patch(i, { gstAmount: e.target.value })}
                       />
                     </td>
-                    </>
-                    )}
-                    <td className={bill ? "w-24" : "w-28"}>
+                    <td className="w-28">
                       <input
                         className="input text-right"
                         inputMode="decimal"
@@ -612,17 +661,12 @@ export function ReceiptScanner({
                         placeholder="0.00"
                         onChange={(e) => numeric(e.target.value) && patch(i, { amount: e.target.value })}
                       />
-                      {shares.has(it) && shares.get(it) !== 0 ? (
-                        <div className="mt-1 whitespace-nowrap text-right text-xs text-muted">
-                          <span className="font-semibold text-ink">{formatINR(finalAmount(it))}</span> with charges
-                        </div>
-                      ) : null}
                     </td>
                   </tr>
                 ))}
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={bill ? 3 : 6} className="text-center text-muted">
+                    <td colSpan={6} className="text-center text-muted">
                       No items yet. Add them manually.
                     </td>
                   </tr>
@@ -630,6 +674,7 @@ export function ReceiptScanner({
               </tbody>
             </table>
           </div>
+          )}
 
           <div className="flex items-center justify-between">
             <button type="button" className="btn-secondary px-3 py-1.5 text-sm" onClick={addRow}>
