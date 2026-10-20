@@ -7,11 +7,15 @@ export const ORDER_APPS = [
   "Blinkit",
   "Zepto",
   "Swiggy Instamart",
+  "Swiggy",
   "BigBasket",
   "Flipkart Minutes",
   "Amazon Now",
   "JioMart",
 ] as const;
+
+/** Food delivery, not groceries: every item is a meal out. */
+export const FOOD_APPS: readonly string[] = ["Swiggy"];
 
 /** Not one of the apps above: the merchant is whatever the screenshot says. */
 export const OTHER_APP = "Other";
@@ -19,12 +23,16 @@ export const OTHER_APP = "Other";
 // "2 x Item", "2x Item", "1x[Combo] Item" (OCR often drops the space), "2 × Item",
 // "Qty 2 Item". Not "4x4 Cable": a digit straight after the x is part of the name.
 const LEADING_QTY = /^(?:qty\s*)?(\d{1,3})\s*[x×*]\s*(?=[^\d\s])|^qty\s*(\d{1,3})\s+/i;
+// Swiggy food puts it after: "Chatpata Double Egg Roll x 1".
+const TRAILING_QTY = /\s+[x×]\s*(\d{1,3})$/i;
 // Status words these apps print after an item's name.
 const TRAILING_STATUS = /\s+(?:delivered|refunded|replaced|cancelled|canceled|out of stock|unavailable)$/i;
+// A veg / non-veg mark or other icon OCR read as one stray symbol: "Δ Chatpata ...".
+const LEADING_ICON = /^[^\x00-\x7F]\s+/;
 
 /** An order line's name without the quantity and status around it, and the quantity. */
 export function cleanOrderItem(description: string): { description: string; qty: number | null } {
-  let d = description.trim();
+  let d = description.trim().replace(LEADING_ICON, "");
   let qty: number | null = null;
   const m = d.match(LEADING_QTY);
   if (m) {
@@ -33,6 +41,11 @@ export function cleanOrderItem(description: string): { description: string; qty:
       qty = n;
       d = d.slice(m[0].length);
     }
+  }
+  const t = qty == null ? d.match(TRAILING_QTY) : null;
+  if (t && Number(t[1]) > 0) {
+    qty = Number(t[1]);
+    d = d.slice(0, t.index);
   }
   d = d.replace(TRAILING_STATUS, "").replace(/^[\s|:\-•]+|[\s|:\-•]+$/g, "");
   return { description: d || description.trim(), qty };

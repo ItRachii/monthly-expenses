@@ -6,7 +6,10 @@ import { dropStruckPrices, scanToLines, unstrikePrice, type ScanResult } from ".
 import { parseReceipt } from "../../src/lib/receipt/parse";
 import { categorize } from "../../src/lib/receipt/categorize";
 import { cleanOrderItem, repeatedRows } from "../../src/lib/receipt/quickCommerce";
-import { orderProducts, readOrderBill, reconcile } from "../../src/lib/receipt/orderBill";
+import { orderProducts, readOrderBill, reconcile, settleOrder } from "../../src/lib/receipt/orderBill";
+import { readOrder } from "../../src/lib/receipt/readOrder";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { isDeveloper } from "../../src/lib/features";
 import { emailId } from "../../src/lib/piiCrypto";
 
@@ -189,6 +192,37 @@ const twoColumns = dropStruckPrices([
   { text: "₹20", page: 1, box: [400, 651, 480, 690] },
 ]);
 check("a price in another column is kept", twoColumns.length === 2);
+
+// Five real orders as the scanner (Docling 2.140.0, with its strike check)
+// returned them; addresses and order numbers replaced. Each must come out
+// with the right items and add up to what was paid.
+const orders: [string, string, [string, number | null, number][], number][] = [
+  ["zepto", "Zepto", [["Nandini Toned Fresh Milk | Pouch", null, 48], ["Zyro by Karan Aujla | Zero Sugar Tonic", null, 106], ["Kinley Soda | Refreshing Carbonated", null, 20]], 174],
+  ["zepto2", "Zepto", [["Tata Salt | Free Flowing and lodized", null, 29], ["Daily Good Saunf - Fennel", null, 65], ["Tata Sampann Coriander Powder With", null, 41], ["24 Mantra Organic Sugar", null, 117]], 252],
+  ["swiggy", "Swiggy", [["Chipotle Potato Shots Wrap", 1, 169], ["Chatpata Double Egg Roll", 1, 119], ["Aloo Patty Chipotle Burger Wrap", 1, 149]], 360],
+  ["bigbasket", "BigBasket", [["Onion - Organically Grown", null, 52], ["Zero Sugar Lemon Lime Sparkling .….", null, 60], ["Anti Roach Gel", null, 99]], 188.27],
+  ["blinkit", "Blinkit", [["lok Coca-Cola Diet-Coke Diets & Lights", 1, 297]], 309],
+];
+for (const [file, app, want, paid] of orders) {
+  const scanned = JSON.parse(readFileSync(join(__dirname, "orders", `${file}.json`), "utf8")) as ScanResult;
+  const read = readOrder([scanToLines(scanned, { order: true }).join("\n")], app);
+  const got = read.items.map((it) => [it.description, it.qty, it.amount]);
+  check(`${file}: items`, JSON.stringify(got) === JSON.stringify(want), JSON.stringify(got));
+  const settled = settleOrder(read.items.map((it) => it.amount), read.bill.charges.map((c) => c.amount), read.bill.orderTotal);
+  check(`${file}: adds up to ${paid}`, settled.check.status === "matched" && read.bill.orderTotal === paid, JSON.stringify(settled.check));
+  const final = read.items.map((it, k) => it.amount + (settled.shares?.[k] ?? 0));
+  check(`${file}: expenses come to what was paid`, Math.round(final.reduce((a, b) => a + b, 0) * 100) === Math.round(paid * 100));
+}
+const swiggyFood = readOrder([scanToLines(JSON.parse(readFileSync(join(__dirname, "orders", "swiggy.json"), "utf8")), { order: true }).join("\n")], "Swiggy");
+check("food orders are meals out", swiggyFood.items.every((it) => it.category === "Dining Out"));
+const zepto2 = JSON.parse(readFileSync(join(__dirname, "orders", "zepto2.json"), "utf8")) as ScanResult;
+check(
+  "struck pieces never reach the text",
+  !scanToLines(zepto2).some((l) => /\b(175|423|463)\b/.test(l)) && zepto2.cells!.filter((c) => c.struck).length === 8,
+);
+// A scanner that checked the image is trusted: no layout guessing on top.
+const checked: ScanResult = { ...zepto, strikeCheck: true };
+check("no layout guessing once the scanner checked", scanToLines(checked, { order: true }).some((l) => l.endsWith(" 120")));
 
 // Quick-commerce order lines, as read from a real Instamart screenshot.
 const order = parseReceipt(["2 x Sprite Zero Delivered ₹54.0", "1x [Combo] Coca-Cola Diet Coke Can 80.0", "1 x Eveready AAA Battery | Pack of 4 43.0", "Grand Total 177"].join("\n"));

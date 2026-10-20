@@ -217,7 +217,7 @@ export function ReceiptScanner({
       // An order's bill summary (fees, discounts, totals) is read on its own;
       // the items come from the rest of each screenshot, so a fee or "Item
       // Bill" is never taken for a product and no tax line is counted twice.
-      const order = readOrder(texts);
+      const order = readOrder(texts, app);
       setBill({
         charges: order.bill.charges.map((c) => ({ label: c.label, amount: c.amount.toFixed(2) })),
         total: order.bill.orderTotal != null ? order.bill.orderTotal.toFixed(2) : "",
