@@ -131,6 +131,22 @@ scanner returns Docling's text blocks (`items`) with their position
 region, the OCR's smaller pieces (`cells`, same boxes), and how long the
 scan took. A block can run several receipt rows together, so the app
 rebuilds rows from `cells`, where each name and price stays separate.
+
+Struck-out prices ("~~₹120~~ ₹106" on Zepto, Blinkit, BigBasket and
+Swiggy) are found in the image, not the text: OCR can't see a strike line
+and returns such prices mangled ("Z175") or run into the price paid
+("30日297"). `strike.py` looks for a thin line across the middle of a
+price piece, longer than any character and crossing the gaps between
+them. A piece holding one is split at the line: the struck part comes
+back marked `"struck": true` (the app never reads it) and the rest is
+read again on its own, both with `"from"` set to the piece they came
+from; `"strikeCheck": true` tells the app this was done. Its tests
+(`python test_strike.py`) run in every build, and the build's warm-up
+scan checks a struck price is left out with the real OCR. An older
+scanner image doesn't do this, and the app then guesses struck prices
+from the layout, which misses some: rebuild (`docker compose build`)
+to get it.
+
 Errors: 401 not sealed with the secret (or replayed, or clock more
 than 5 minutes off), 413 too large, 415 not PNG/JPEG/WebP/PDF, 422 no
 text found.

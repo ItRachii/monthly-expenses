@@ -21,7 +21,9 @@ export interface OrderBill {
 
 // Shown for information only: "You saved ₹45" is not taken off the total.
 const INFO = /\b(saved|savings|you save|cashback|mrp total)\b/i;
-const ITEM_TOTAL = /\b(items?\s*total|items?\s*bill|sub\s*-?\s*total)\b/i;
+// BigBasket's "Basket value" comes back from OCR run into its badge
+// ("Basket valuesAvED 34.25 ₹211"), so it has no end boundary.
+const ITEM_TOTAL = /\b(?:items?\s*total|items?\s*bill|sub\s*-?\s*total)\b|\bbasket\s*value/i;
 const ORDER_TOTAL =
   /\b(grand\s*total|to\s*pay|bill\s*total|order\s*total|total\s*(?:amount|paid|bill|payable)|amount\s*(?:paid|payable)|net\s*payable|paid\s*(?:via|using|by))\b/i;
 const DISCOUNT = /\b(discount|coupon|promo|offer|free\s*cash)\b/i;
@@ -41,10 +43,12 @@ const RUPEES = /(?:₹|rs\.?\s*)\d/i;
 // "Bill details", "Bill summary", "Payment details", "Price details".
 // Zepto says "3 items in order". OCR may read the icon before a heading as a
 // stray symbol, hence the leading non-letters.
-const ITEMS_HEADER = /^[^a-z0-9]*(?:item\s*details|(?:\d+\s+)?items?\s+in\s+(?:this\s+|your\s+)?order)\b/i;
+// BigBasket: "Product details 3 products · ₹211"; Blinkit: "1 item in this order".
+const ITEMS_HEADER =
+  /^[^a-z0-9]*(?:item\s*details|product\s*details|(?:\d+\s+)?items?\s+in\s+(?:this\s+|your\s+)?order)\b/i;
 const BILL_HEADER = /^[^a-z0-9]*(?:total\s+)?(?:order\s+)?(?:bill|payment|price)\s*(?:details|summary)\b/i;
 // The order's own heading, not a product: "Completed | 4 items, ₹177", "3 items • Ulsoor".
-const ORDER_META = /\b\d+\s*items?\b/i;
+const ORDER_META = /\b\d+\s*(?:items?|products?)\b/i;
 
 /** The last amount on a line, negative when written "-₹30". */
 function lastAmount(line: string): number | null {
@@ -67,31 +71,46 @@ export function isBillLine(text: string): boolean {
 
 /** Which part of an order screenshot a row belongs to. */
 export type RowPart =
-  | "before-items" // above the items heading: order number, status, ETA
+  | "before-items" // above the items: order number, status, address, ETA
   | "items-heading"
   | "product"
   | "bill-wording" // reads like a fee, discount or total, so not a product
   | "order-heading" // "Completed | 4 items, ₹177"
   | "bill-heading"
+  | "breakdown" // Blinkit's "MRP" and "Product discount" above the item total
   | "bill"; // inside the bill section
 
 /**
  * Sorts one screenshot's rows into its parts. When the screen has a bill
- * section, nothing from its heading down is a product (Swiggy's "Item Bill
- * ₹206" included), and when it marks where the items start, nothing above
- * that is either. Without those headings, bill rows are told apart by their
- * wording.
+ * section, nothing from its heading down is a product (Swiggy Instamart's
+ * "Item Bill ₹206" included), and when it marks where the items start,
+ * nothing above that is either. Two layouts put rows above the bill's item
+ * total that are not charges:
+ * - Swiggy food lists the dishes inside "BILL DETAILS", before "Item
+ *   Total", with nothing priced above it: those rows are the products.
+ * - Blinkit shows how the item total was reached ("MRP ₹300", "Product
+ *   discount -₹3") when the items are already listed above: that is
+ *   already in the item prices, so it is left out.
+ * Without headings, bill rows are told apart by their wording.
  */
 export function orderRows(text: string): { line: string; part: RowPart }[] {
   const lines = text.split(/\r?\n/);
   const bill = lines.findIndex((l) => BILL_HEADER.test(l.trim()));
   const head = lines.findIndex((l) => ITEMS_HEADER.test(l.trim()));
   const from = head !== -1 && (bill === -1 || head < bill) ? head : -1;
+  const itemTotal = bill === -1 ? -1 : lines.findIndex((l, i) => i > bill && ITEM_TOTAL.test(l));
+  const priced = (l: string) => RUPEES.test(l) && !isBillLine(l) && !ORDER_META.test(l);
+  const pricedAbove = lines.slice(from + 1, bill === -1 ? undefined : bill).some(priced);
+  const itemsInBill = from === -1 && itemTotal !== -1 && !pricedAbove && lines.slice(bill + 1, itemTotal).some(priced);
   return lines.map((line, i): { line: string; part: RowPart } => {
     if (i === bill) return { line, part: "bill-heading" };
-    if (bill !== -1 && i > bill) return { line, part: "bill" };
+    if (bill !== -1 && i > bill) {
+      if (itemTotal === -1 || i >= itemTotal) return { line, part: "bill" };
+      if (!itemsInBill) return { line, part: "breakdown" };
+      return { line, part: isBillLine(line) ? "bill-wording" : "product" };
+    }
     if (i === from) return { line, part: "items-heading" };
-    if (i < from) return { line, part: "before-items" };
+    if (i < from || itemsInBill) return { line, part: "before-items" };
     if (isBillLine(line)) return { line, part: "bill-wording" };
     if (ORDER_META.test(line)) return { line, part: "order-heading" };
     return { line, part: "product" };
@@ -110,39 +129,41 @@ export function orderProducts(text: string): string {
 export type BillReading =
   | { kind: "item-total" | "order-total" | "total"; amount: number }
   | { kind: "charge" | "discount"; amount: number; label: string }
-  | { kind: "waived" | "info" | "after-total" | "not-bill" | "no-amount" };
+  | { kind: "waived" | "info" | "after-total" | "breakdown" | "not-bill" | "no-amount" };
 
 /**
  * How each row of one screenshot reads as part of a bill. Inside a bill
  * section (below its heading, up to the total) any rupee amount is a charge
  * whatever it is called, and a negative one is a discount; elsewhere a row
- * has to read like a fee or discount.
+ * has to read like a fee or discount. Nothing after the order total counts
+ * ("Inclusive of all taxes and charges ₹222.52" is the struck-out total).
  */
 export function billRows(screen: string): { line: string; reading: BillReading }[] {
-  let inBill = false;
   let totalSeen = false;
-  return screen.split(/\r?\n/).map((raw) => {
+  return orderRows(screen).map(({ line: raw, part }) => {
     const line = raw.trim();
     const read = (reading: BillReading) => ({ line: raw, reading });
-    if (BILL_HEADER.test(line)) inBill = true;
+    if (part === "product" || part === "before-items" || part === "order-heading") return read({ kind: "not-bill" });
+    if (part === "breakdown") return read({ kind: "breakdown" });
     if (!line) return read({ kind: "no-amount" });
-    if (INFO.test(line)) return read({ kind: "info" });
     const amount = lastAmount(line);
-    if (amount == null) return read({ kind: "no-amount" });
-    const label = line.replace(AMOUNTS, " ").replace(/\s+/g, " ").replace(/[:\s|-]+$/, "").trim();
+    if (amount == null) return read({ kind: INFO.test(line) ? "info" : "no-amount" });
+    if (totalSeen) return read({ kind: "after-total" });
     if (ITEM_TOTAL.test(line)) return read({ kind: "item-total", amount: Math.abs(amount) });
+    if (INFO.test(line)) return read({ kind: "info" });
     if (ORDER_TOTAL.test(line)) {
-      inBill = false;
       totalSeen = true;
       return read({ kind: "order-total", amount: Math.abs(amount) });
     }
-    if (DISCOUNT.test(line) || NEGATIVE.test(line)) return read({ kind: "discount", amount: -Math.abs(amount), label: label || "Discount" });
-    if (CHARGE.test(line) || (inBill && RUPEES.test(line)))
-      return read(WAIVED.test(line) ? { kind: "waived" } : { kind: "charge", amount, label: label || "Charge" });
+    if (DISCOUNT.test(line) || NEGATIVE.test(line)) return read({ kind: "discount", amount: -Math.abs(amount), label: label(line) || "Discount" });
+    if (CHARGE.test(line) || (part === "bill" && RUPEES.test(line)))
+      return read(WAIVED.test(line) ? { kind: "waived" } : { kind: "charge", amount, label: label(line) || "Charge" });
     if (/\btotal\b/i.test(line)) return read({ kind: "total", amount: Math.abs(amount) });
-    return read({ kind: totalSeen ? "after-total" : "not-bill" });
+    return read({ kind: "not-bill" });
   });
 }
+
+const label = (line: string) => line.replace(AMOUNTS, " ").replace(/\s+/g, " ").replace(/[:\s|+-]+$/, "").trim();
 
 /** Reads the bill summary out of an order's text: one screenshot's, or a list of them. */
 export function readOrderBill(text: string | string[]): OrderBill {

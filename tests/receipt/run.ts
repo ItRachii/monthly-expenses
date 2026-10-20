@@ -1,7 +1,7 @@
 // Unit checks for reading a quick-commerce order's bill summary, checking it
 // adds up, and splitting its charges over the items (no network). Run with
 // `npm run test:receipt`.
-import { distribute, isBillLine, orderProducts, readOrderBill, reconcile } from "../../src/lib/receipt/orderBill";
+import { distribute, isBillLine, orderProducts, orderRows, readOrderBill, reconcile } from "../../src/lib/receipt/orderBill";
 import { parseReceipt } from "../../src/lib/receipt/parse";
 import { readOrder } from "../../src/lib/receipt/readOrder";
 import { settleOrder } from "../../src/lib/receipt/orderBill";
@@ -111,6 +111,25 @@ check("Swiggy: settled to what was paid", settled.check.status === "matched" && 
 check("no total: nothing shared", settleOrder([10], [], null).shares === null);
 const overlap = readOrder(["ITEM DETAILS\nMilk ₹30\nBread ₹40", "Bread ₹40\nEggs ₹70\nBill Details\nGrand Total ₹140"]);
 check("overlap repeat marked", same(overlap.items.map((it) => it.repeat), [false, false, true, false]) && overlap.bill.orderTotal === 140);
+
+// Swiggy food: the dishes are inside "BILL DETAILS", above "Item Total".
+const food = orderRows(["Delivered, 3 Items, ₹360", "Faasos", "BILL DETAILS", "Wrap x 1 ₹169", "Maida Paratha", "Roll x 1 ₹119", "Item Total ₹288", "Taxes ₹12", "Bill Total ₹300"].join("\n"));
+check(
+  "items inside the bill box",
+  same(food.map((r) => r.part), ["before-items", "before-items", "bill-heading", "product", "product", "product", "bill", "bill", "bill"]),
+  JSON.stringify(food.map((r) => r.part)),
+);
+check("items inside the bill box are not charges", same(readOrderBill(food.map((r) => r.line).join("\n")).charges.map((c) => c.amount), [12]));
+// Blinkit: items listed above, the bill shows how the item total was reached.
+const mrp = readOrderBill(["1 item in this order", "Coke ₹297", "Bill details", "MRP ₹300", "Product discount -₹3", "Item total ₹297", "Handling charge +₹12", "Bill total ₹309"].join("\n"));
+check("MRP and product discount are not charges", same(mrp.charges, [{ label: "Handling charge", amount: 12 }]) && mrp.itemTotal === 297 && mrp.orderTotal === 309, JSON.stringify(mrp));
+// BigBasket: "Basket value" with its SAVED badge run in, and the struck total under the bill total.
+const bb = readOrderBill(["Bill summary", "Basket valuesAvED 34.25 ₹211", "Handling Charge 7", "Credit availed from bbwallet - ₹29.20", "Bill total ₹188.27", "Inclusive of all Taxes and Charges 222.52"].join("\n"));
+check(
+  "basket value, wallet credit, nothing after the total",
+  bb.itemTotal === 211 && same(bb.charges.map((c) => c.amount), [7, -29.2]) && bb.orderTotal === 188.27,
+  JSON.stringify(bb),
+);
 
 // Inside a bill box a fee with an unusual name still counts; the order ID after the total does not.
 const odd = readOrderBill(["Bill Details", "Item Total ₹100", "Rain Surcharge ₹20", "Late night ₹15", "Grand Total ₹135", "Order ID 12345"].join("\n"));

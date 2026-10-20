@@ -36,13 +36,15 @@ RUN if [ "$DOCLING_VERSION" = latest ]; then spec=docling; else spec="docling==$
 # Runs as a normal user, not root.
 RUN useradd --uid 10001 --no-create-home --home-dir /app --shell /usr/sbin/nologin scanner
 
-# The warm-up scans a sample image: it bakes the models in, and a Docling
-# release that no longer works here fails the build instead of the scans.
+# The strike check's tests run first, then the warm-up scans a sample image:
+# it bakes the models in, and a Docling release that no longer works here
+# (or no longer lets the strike check re-read a crop) fails the build
+# instead of the scans.
 # Ownership is set in this same step: a later step would make Docker copy
 # the models (and, before, all of site-packages) into a new layer, which
 # took minutes on Docker Desktop.
-COPY server.py envelope.py test_client.py warmup.py ./
-RUN python warmup.py && rm -rf warmup.py /tmp/* \
+COPY server.py envelope.py strike.py test_strike.py test_client.py warmup.py ./
+RUN python test_strike.py && python warmup.py && rm -rf warmup.py /tmp/* \
  && chown -R scanner /app /opt/models \
  && chmod -R a+rX /usr/local/lib/python3.11/site-packages/rapidocr
 USER scanner

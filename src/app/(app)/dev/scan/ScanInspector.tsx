@@ -36,6 +36,7 @@ const PART: Record<RowPart, string> = {
   "bill-wording": "Reads like a fee, discount or total: not a product",
   "order-heading": "Order heading (\"4 items\"): skipped",
   "bill-heading": "Bill heading: the bill starts here",
+  breakdown: "How the item total was reached (MRP, product discount): already in the prices",
   bill: "Bill section",
 };
 
@@ -57,6 +58,8 @@ function reading(r: BillReading): string {
       return "Savings note: ignored";
     case "after-total":
       return "Below the total: ignored";
+    case "breakdown":
+      return "Not a charge";
     default:
       return "";
   }
@@ -64,17 +67,35 @@ function reading(r: BillReading): string {
 
 /** The order reading of one screenshot, with every step kept for display. */
 function orderView(run: Run) {
-  const pieces = run.result.cells?.length ? run.result.cells : run.result.items;
-  const struck = struckPrices(pieces);
-  const merged = pieces.filter((p) => !struck.has(p) && unstrikePrice(p.text) !== p.text);
+  const all = run.result.cells?.length ? run.result.cells : run.result.items;
+  // The scanner looked at the image and split each piece holding a struck
+  // price; an older one did not, and the app guesses from the layout.
+  const fromImage = !!run.result.strikeCheck;
+  const split = new Map<string, ScanItem[]>();
+  for (const p of all) if (p.from != null) split.set(p.from, [...(split.get(p.from) ?? []), p]);
+  const pieces = all.filter((p) => !p.struck);
+  const struck = fromImage ? new Map<ScanItem, ScanItem>() : struckPrices(pieces);
+  const merged = fromImage ? [] : pieces.filter((p) => !struck.has(p) && unstrikePrice(p.text) !== p.text);
   const parts = orderRows(run.text);
   const bills = billRows(run.text);
-  const order = readOrder([run.text]);
+  const order = readOrder([run.text], run.app);
   const inOrder = order.items.filter((it) => !it.repeat);
   const prices = inOrder.map((it) => it.amount);
   const settled = settleOrder(prices, order.bill.charges.map((c) => c.amount), order.bill.orderTotal);
   const share = new Map(inOrder.map((it, k) => [it, settled.shares?.[k] ?? 0]));
-  return { struck, merged, parts, bills, order, settled, share, itemsSum: prices.reduce((a, b) => a + b, 0) };
+  return {
+    fromImage,
+    split,
+    imageStruck: all.filter((p) => p.struck),
+    struck,
+    merged,
+    parts,
+    bills,
+    order,
+    settled,
+    share,
+    itemsSum: prices.reduce((a, b) => a + b, 0),
+  };
 }
 
 /** The boxes the scanner returned, drawn over the image that was sent. */
@@ -268,10 +289,18 @@ export function ScanInspector() {
             {ov ? (
               <div className="flex flex-wrap gap-4 text-xs">
                 <span className="text-negative">Red: struck-out price left out</span>
-                <span className="text-warning">Amber: two prices read as one, the price paid kept</span>
+                <span className="text-warning">
+                  {ov.fromImage ? "Amber: what was left of the piece, read again" : "Amber: two prices read as one, the price paid kept"}
+                </span>
               </div>
             ) : null}
-            <Overlay run={run} showCells={showCells} showBlocks={showBlocks} struck={ov ? [...ov.struck.keys()] : []} merged={ov?.merged ?? []} />
+            <Overlay
+              run={run}
+              showCells={showCells}
+              showBlocks={showBlocks}
+              struck={ov ? (ov.fromImage ? ov.imageStruck : [...ov.struck.keys()]) : []}
+              merged={ov ? (ov.fromImage ? [...ov.split.values()].flat().filter((p) => !p.struck) : ov.merged) : []}
+            />
           </div>
 
           <div className="card space-y-2">
@@ -353,32 +382,63 @@ function OrderSections({ ov }: { ov: ReturnType<typeof orderView> }) {
     <>
       <div className="card space-y-2">
         <h2 className="section-title">6. Struck-out prices</h2>
-        <p className="text-sm text-muted">
-          OCR can&apos;t see a strike line. A struck price shows up as a price piece just under the price paid (same column,
-          touching, no larger), or as two prices run into one number because the strike took both ₹ signs.
-        </p>
-        {ov.struck.size === 0 && ov.merged.length === 0 ? (
-          <div className="text-sm text-muted">None on this screenshot.</div>
+        {ov.fromImage ? (
+          <>
+            <p className="text-sm text-muted">
+              Found by the scanner in the image: a thin line across the middle of a price, longer than any character and
+              crossing the gaps between them. OCR can&apos;t see the line, so it mangles struck prices (&quot;Z175&quot;) or runs them
+              into the price paid (&quot;30日297&quot;). Each such piece is split at the line, the struck part is left out and the
+              rest is read again on its own.
+            </p>
+            {ov.split.size === 0 ? (
+              <div className="text-sm text-muted">None on this screenshot.</div>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr><th>OCR read</th><th>Struck out (left out)</th><th>Kept</th></tr>
+                </thead>
+                <tbody>
+                  {[...ov.split].map(([from, ps], i) => (
+                    <tr key={i}>
+                      <td className="font-mono">{from}</td>
+                      <td className="font-mono text-negative">{ps.filter((p) => p.struck).map((p) => p.text).join(", ")}</td>
+                      <td className="font-mono text-warning">{ps.filter((p) => !p.struck).map((p) => p.text).join(", ") || "nothing"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr><th>OCR read</th><th>What was done</th></tr>
-            </thead>
-            <tbody>
-              {[...ov.struck].map(([low, high], i) => (
-                <tr key={`s${i}`}>
-                  <td className="font-mono text-negative">{low.text}</td>
-                  <td>Left out: sits under {high.text}, the price paid</td>
-                </tr>
-              ))}
-              {ov.merged.map((p, i) => (
-                <tr key={`m${i}`}>
-                  <td className="font-mono text-warning">{p.text}</td>
-                  <td>Read as struck {p.text.trim().slice(0, p.text.trim().length - unstrikePrice(p.text).length)}, paid {unstrikePrice(p.text)}: kept {unstrikePrice(p.text)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <p className="text-sm text-muted">
+              This scanner doesn&apos;t look for strike lines (rebuild it to get that), so they are guessed from the layout: a
+              price piece just under the price paid (same column, touching, no larger), or two prices run into one number.
+            </p>
+            {ov.struck.size === 0 && ov.merged.length === 0 ? (
+              <div className="text-sm text-muted">None on this screenshot.</div>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr><th>OCR read</th><th>What was done</th></tr>
+                </thead>
+                <tbody>
+                  {[...ov.struck].map(([low, high], i) => (
+                    <tr key={`s${i}`}>
+                      <td className="font-mono text-negative">{low.text}</td>
+                      <td>Left out: sits under {high.text}, the price paid</td>
+                    </tr>
+                  ))}
+                  {ov.merged.map((p, i) => (
+                    <tr key={`m${i}`}>
+                      <td className="font-mono text-warning">{p.text}</td>
+                      <td>Read as struck {p.text.trim().slice(0, p.text.trim().length - unstrikePrice(p.text).length)}, paid {unstrikePrice(p.text)}: kept {unstrikePrice(p.text)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </div>
 

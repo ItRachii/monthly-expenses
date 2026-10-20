@@ -13,6 +13,10 @@ export interface ScanItem {
   page: number;
   /** [left, top, right, bottom], top-left origin, in page units (pixels for images). */
   box: [number, number, number, number];
+  /** A struck-out price, found by the scanner in the image; never read as text. */
+  struck?: boolean;
+  /** The OCR piece this one was split from, when it held a struck price. */
+  from?: string;
 }
 
 export interface ScanResult {
@@ -21,6 +25,8 @@ export interface ScanResult {
   items: ScanItem[];
   /** The OCR's text pieces, one per word run (older scanners leave it out). */
   cells?: ScanItem[];
+  /** The scanner looked for struck prices in the image (older ones did not). */
+  strikeCheck?: boolean;
 }
 
 // A piece that is only a price: "₹106", "120", "54.0".
@@ -77,14 +83,17 @@ export function dropStruckPrices(pieces: ScanItem[]): ScanItem[] {
 }
 
 /**
- * The scan's text as lines in reading order, page after page. For an order
- * screenshot (`order`), struck-out original prices are left out first.
+ * The scan's text as lines in reading order, page after page. Struck-out
+ * prices are left out: the scanner marks them, having looked at the image.
+ * An older scanner does not, so for an order screenshot (`order`) they are
+ * guessed from the layout instead (struckPrices, unstrikePrice).
  */
 export function scanToLines(result: ScanResult, opts: { order?: boolean } = {}): string[] {
   const heights = new Map(result.pages.map((p) => [p.page, p.height]));
   const byPage = new Map<number, PositionedText[]>();
-  const all = result.cells?.length ? result.cells : result.items;
-  const pieces = opts.order ? dropStruckPrices(all).map((p) => ({ ...p, text: unstrikePrice(p.text) })) : all;
+  const all = (result.cells?.length ? result.cells : result.items).filter((p) => !p.struck);
+  const guess = opts.order && !result.strikeCheck;
+  const pieces = guess ? dropStruckPrices(all).map((p) => ({ ...p, text: unstrikePrice(p.text) })) : all;
   for (const it of pieces) {
     const [l, t, r, b] = it.box;
     const pageHeight = heights.get(it.page) ?? b;
