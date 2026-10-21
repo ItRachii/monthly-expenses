@@ -7,11 +7,10 @@ import { createReceiptWithItems, type NewReceiptItem } from "@/lib/receipts";
 import { canonicalCategoriesFor } from "@/lib/expenses";
 import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
-import { displayNameFor } from "@/lib/users";
+import { nameForOthers } from "@/lib/users";
 import { formatINR } from "@/lib/format";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { emailForKey } from "@/lib/wire";
-import { maskEmail } from "@/lib/pii";
 import { SPLIT_EQUAL } from "@/lib/constants";
 
 export interface ReceiptItemInput {
@@ -114,7 +113,7 @@ export async function addReceiptAction(input: {
   if (groupId) {
     try {
       const actor = await prisma.appUser.findUnique({ where: { email } });
-      const who = displayNameFor(actor, maskEmail(email));
+      const who = await nameForOthers(actor, email);
       await notifyGroup({
         groupId,
         actorEmail: email,

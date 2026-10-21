@@ -15,8 +15,7 @@ import {
 } from "@/lib/cards";
 import { prisma } from "@/lib/prisma";
 import { notifyGroup } from "@/lib/notifications";
-import { displayNameFor } from "@/lib/users";
-import { maskEmail } from "@/lib/pii";
+import { nameForOthers } from "@/lib/users";
 import { formatINR } from "@/lib/format";
 import { deleteLoan, saveLineage, validateLineage } from "@/lib/loans";
 import type { LineagePayload } from "@/lib/statements/lineage";
@@ -99,7 +98,7 @@ async function notifyRemoval(email: string, plan: RemovalPlan) {
   try {
     const u = await prisma.appUser.findUnique({ where: { email } });
     // Stored and shown to other members: never the raw address.
-    const who = displayNameFor(u, maskEmail(email));
+    const who = await nameForOthers(u, email);
     for (const g of plan.groups) {
       await notifyGroup({
         groupId: g.id,

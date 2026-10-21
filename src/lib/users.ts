@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { emailId } from "./piiCrypto";
-import { decryptEmail, encryptEmail } from "./piiStore";
+import { decryptEmail, encryptEmail, maskedEmailFor } from "./piiStore";
 import { ensurePiiMigrated } from "./piiMigration";
 
 // Ported from legacy-streamlit/utils/auth.py (register_user_if_needed) and
@@ -65,6 +65,16 @@ export async function registerUserIfNeeded(email: string, name: string) {
 }
 
 /** "First Last" from the editable profile fields, or the fallback. */
+/**
+ * A person's name for a message other members will read: their name, or
+ * when none is on record their masked address ("go•••@g•••.com"), else
+ * "A member". Never the raw address, and never the user id (maskEmail of
+ * an id, which has no "@", is only "•••").
+ */
+export async function nameForOthers(user: { firstName: string; lastName?: string | null } | null, id: string): Promise<string> {
+  return displayNameFor(user, "") || (await maskedEmailFor(id)) || "A member";
+}
+
 export function displayNameFor(
   user: { firstName: string; lastName?: string | null } | null,
   fallback: string,

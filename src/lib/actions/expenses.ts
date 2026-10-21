@@ -11,14 +11,13 @@ import {
 } from "@/lib/expenses";
 import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
-import { displayNameFor } from "@/lib/users";
+import { nameForOthers } from "@/lib/users";
 import { formatDate, formatINR } from "@/lib/format";
 import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { MAX_AMOUNT, cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { SETTLE_EPS, round2, type Shares } from "@/lib/settlementMath";
 import type { MemberDTO } from "@/lib/groups";
 import { emailForKey } from "@/lib/wire";
-import { maskEmail } from "@/lib/pii";
 import { buildAddSetup, type AddSetup } from "@/lib/addSetup";
 
 export interface ActionResult {
@@ -37,7 +36,7 @@ async function actorName(email: string): Promise<string> {
   const u = await prisma.appUser.findUnique({ where: { email } });
   // Fallback is the masked address — notification messages are stored and
   // shown to other members, so the raw email never lands in them.
-  return displayNameFor(u, maskEmail(email));
+  return nameForOthers(u, email);
 }
 
 function validateExpenseInput(input: {
