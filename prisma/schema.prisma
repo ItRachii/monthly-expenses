@@ -176,6 +176,7 @@ model GroupMember {
   lastVisitedAt DateTime? @map("last_visited_at") @db.Timestamptz(6)
   group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
+  @@unique([groupId, email], map: "group_members_group_email_key")
   @@index([email, lastVisitedAt(sort: Desc)], map: "group_members_email_visit_idx")
   @@map("group_members")
 }

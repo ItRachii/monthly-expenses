@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { displayNameFor } from "./users";
 import { UNNAMED_MEMBER, maskEmail } from "./pii";
@@ -285,6 +286,14 @@ export async function getGroupParticipants(groupId: string): Promise<MemberDTO[]
   });
 }
 
+/**
+ * Holds a group's member list until the transaction ends, for changes that
+ * check it first: joining, leaving, inviting.
+ */
+async function lockMembers(tx: Prisma.TransactionClient, groupId: string): Promise<void> {
+  await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`members:${groupId}`}))`;
+}
+
 export async function removeMember(groupId: string, userEmail: string): Promise<void> {
   await prisma.groupMember.deleteMany({ where: { groupId, email: userEmail } });
 }
@@ -297,7 +306,7 @@ export async function removeMember(groupId: string, userEmail: string): Promise<
  */
 export async function leaveGroup(groupId: string, userEmail: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`members:${groupId}`}))`;
+    await lockMembers(tx, groupId);
     await tx.groupMember.deleteMany({ where: { groupId, email: userEmail } });
     if ((await tx.groupMember.count({ where: { groupId, role: "admin" } })) > 0) return;
     const next = await tx.groupMember.findFirst({ where: { groupId }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }] });
@@ -317,27 +326,32 @@ export async function sendInvite(
 ): Promise<InviteResult> {
   const email = await emailId(invitedEmail);
 
-  const existingMember = await prisma.groupMember.findFirst({
-    where: { groupId, email },
-  });
-  if (existingMember) return "already_member";
+  // Under the group's lock: two admins inviting the same person at once
+  // must not both find no invite and create two.
+  return prisma.$transaction(async (tx) => {
+    await lockMembers(tx, groupId);
+    const existingMember = await tx.groupMember.findFirst({
+      where: { groupId, email },
+    });
+    if (existingMember) return "already_member";
 
-  const existingInvite = await prisma.groupInvite.findFirst({
-    where: { groupId, invitedEmail: email, status: "pending" },
-  });
-  if (existingInvite) return "already_invited";
+    const existingInvite = await tx.groupInvite.findFirst({
+      where: { groupId, invitedEmail: email, status: "pending" },
+    });
+    if (existingInvite) return "already_invited";
 
-  await prisma.groupInvite.create({
-    data: {
-      groupId,
-      invitedEmail: email,
-      invitedEmailEnc: encryptEmail(invitedEmail),
-      invitedBy,
-      status: "pending",
-      createdAt: new Date(),
-    },
+    await tx.groupInvite.create({
+      data: {
+        groupId,
+        invitedEmail: email,
+        invitedEmailEnc: encryptEmail(invitedEmail),
+        invitedBy,
+        status: "pending",
+        createdAt: new Date(),
+      },
+    });
+    return "ok";
   });
-  return "ok";
 }
 
 export async function getPendingInvitesForUser(
@@ -382,6 +396,10 @@ export async function respondToInvite(
   // Answered and joined together: if adding the membership fails, the
   // invite stays pending, so it can still be used.
   await prisma.$transaction(async (tx) => {
+    // Under the group's lock, so two invites accepted at once cannot both
+    // find no membership and add the person twice (equal splits would then
+    // count them twice).
+    await lockMembers(tx, invite.groupId);
     // Conditional on still pending, so two answers at once count once.
     const answered = await tx.groupInvite.updateMany({
       where: { id: inviteId, status: "pending" },
