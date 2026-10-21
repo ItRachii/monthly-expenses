@@ -16,6 +16,9 @@ const RULES: { category: string; keywords: string[] }[] = [
       "masala", "spice", "tea", "coffee bean", "flakes", "cereal", "juice",
       "water bottle", "soft drink", "cola", "coke", "pepsi", "sprite", "soda",
       "chocolate", "chips",
+      "ginger", "garlic", "lemon", "palak", "spinach", "ladies' finger", "ladies finger", "okra", "bhindi",
+      "beetroot", "carrot", "cabbage", "cauliflower", "capsicum", "cucumber", "coriander", "chilli",
+      "peas", "corn", "mushroom", "batter", "tofu", "fennel", "saunf", "namak",
     ],
   },
   {

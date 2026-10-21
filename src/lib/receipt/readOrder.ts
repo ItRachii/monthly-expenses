@@ -7,7 +7,7 @@
 import { parseReceipt } from "./parse";
 import { categorize } from "./categorize";
 import { FOOD_APPS, cleanOrderItem, repeatedRows } from "./quickCommerce";
-import { orderRows, readOrderBill, type OrderBill } from "./orderBill";
+import { TOLERANCE, orderRows, orderedCount, readOrderBill, type OrderBill } from "./orderBill";
 
 // A row that is only the pack size and count: "6 x 330 ml x 1", "1 pack (1 kg) · 1 unit".
 const PACK = /^\d+(?:\.\d+)?\s*(?:[x×]\s*\d+(?:\.\d+)?\s*)?(?:ml|l|ltr|litre|g|gm|gms|kg|pcs?|packs?|units?)\b/i;
@@ -56,4 +56,37 @@ export function readOrder(texts: string[], app?: string): { items: OrderItem[]; 
     };
   });
   return { items, bill: readOrderBill(texts) };
+}
+
+/** Whether the screenshots hold the whole order, as far as the order itself says. */
+export interface Completeness {
+  /** Items the order says it has ("9 products"), if it says. */
+  expected: number | null;
+  /** Item lines read (repeats left out). */
+  found: number;
+  /** Rupees the items come to less than the bill's item total, if they do. */
+  short: number | null;
+  /** No bill total was read: the screenshot with the bill is missing. */
+  noTotal: boolean;
+  /** The order gives a count or an item total to check the items against. */
+  checked: boolean;
+  /** Some of the order was not in the screenshots. */
+  missing: boolean;
+}
+
+/**
+ * Checks the items read against the order's own count and the bill's item
+ * total. The count may be lines ("4 items in order") or units (Instamart's
+ * "4 items" for 2 x Sprite + 2 more), so only fewer than both is missing.
+ */
+export function orderCompleteness(text: string, read: { items: OrderItem[]; bill: OrderBill }): Completeness {
+  const items = read.items.filter((it) => !it.repeat);
+  const expected = orderedCount(text);
+  const units = items.reduce((n, it) => n + (it.qty ?? 1), 0);
+  const sum = Math.round(items.reduce((s, it) => s + it.amount, 0) * 100) / 100;
+  const itemTotal = read.bill.itemTotal;
+  const short = itemTotal != null && itemTotal - sum > TOLERANCE ? Math.round((itemTotal - sum) * 100) / 100 : null;
+  const fewer = expected != null && items.length < expected && units < expected;
+  const noTotal = read.bill.orderTotal == null;
+  return { expected, found: items.length, short, noTotal, checked: expected != null || itemTotal != null, missing: fewer || short != null || noTotal };
 }

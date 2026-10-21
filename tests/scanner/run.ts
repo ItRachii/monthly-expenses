@@ -7,7 +7,9 @@ import { parseReceipt } from "../../src/lib/receipt/parse";
 import { categorize } from "../../src/lib/receipt/categorize";
 import { cleanOrderItem, repeatedRows } from "../../src/lib/receipt/quickCommerce";
 import { orderProducts, readOrderBill, reconcile, settleOrder } from "../../src/lib/receipt/orderBill";
-import { readOrder } from "../../src/lib/receipt/readOrder";
+import { orderCompleteness, readOrder } from "../../src/lib/receipt/readOrder";
+import { stitch, type ShotRow } from "../../src/lib/receipt/stitch";
+import { scanToRows } from "../../src/lib/scanner/lines";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { isDeveloper } from "../../src/lib/features";
@@ -224,6 +226,126 @@ check(
 const checked: ScanResult = { ...zepto, strikeCheck: true };
 check("no layout guessing once the scanner checked", scanToLines(checked, { order: true }).some((l) => l.endsWith(" 120")));
 
+// One long BigBasket order in several screenshots, uploaded in any order
+// (real scans). Each must come out whole: right order, shared rows once.
+const shotOf = (name: string): ShotRow[] =>
+  scanToRows(JSON.parse(readFileSync(join(__dirname, "orders", "multi", `${name}.json`), "utf8")), { order: true });
+const multi = (names: string[]) => {
+  const joined = stitch(names.map(shotOf));
+  const read = readOrder([joined.text], "BigBasket");
+  const settled = settleOrder(read.items.map((it) => it.amount), read.bill.charges.map((c) => c.amount), read.bill.orderTotal);
+  return { joined, read, settled, complete: orderCompleteness(joined.text, read), names };
+};
+const order9 = ["Tomato - Hybrid", "Sweet Potato", "Carrot - Orange", "Potato", "Cabbage", "Pasteurised Toned Milk", "Curd", "Multigrain Bread", "The Laughing Cow Cheese Slices"];
+for (const [label, names] of [
+  ["no overlap, bottom one first", ["bigbasket-a-bottom", "bigbasket-a-top"]],
+  ["overlapping", ["bigbasket-b-top", "bigbasket-b-bottom"]],
+  ["overlapping, bottom one first", ["bigbasket-b-bottom", "bigbasket-b-top"]],
+] as [string, string[]][]) {
+  const m = multi(names);
+  check(`stitch ${label}: top first`, names[m.joined.order[0]].endsWith("top"), JSON.stringify(m.joined.order));
+  check(`stitch ${label}: 9 items once`, JSON.stringify(m.read.items.map((it) => it.description)) === JSON.stringify(order9), JSON.stringify(m.read.items.map((it) => it.description)));
+  check(`stitch ${label}: adds up to 328.04`, m.settled.check.status === "matched" && m.read.bill.orderTotal === 328.04, JSON.stringify(m.settled.check));
+  check(`stitch ${label}: complete`, !m.complete.missing && m.complete.expected === 9, JSON.stringify(m.complete));
+}
+check("overlap found: 4 shared rows", multi(["bigbasket-b-top", "bigbasket-b-bottom"]).joined.joins[0].overlap === 4);
+// 17 items over three screenshots, one item cut at the bottom of the first,
+// the middle screenshot uploaded twice, all shuffled.
+const big = multi(["bigbasket-c-3", "bigbasket-c-2-again", "bigbasket-c-1", "bigbasket-c-2"]);
+check("stitch 17: order 1, 2, 3", JSON.stringify(big.joined.order.map((i) => big.names[i])) === JSON.stringify(["bigbasket-c-1", "bigbasket-c-2-again", "bigbasket-c-3"]), JSON.stringify(big.joined.order));
+check("stitch 17: the repeat left out", big.joined.duplicates.length === 1);
+check("stitch 17: cut item once, 17 items", big.read.items.length === 17 && big.read.items.filter((it) => /Idli Batter/.test(it.description)).length === 1, String(big.read.items.length));
+check("stitch 17: adds up to 1214.76", big.settled.check.status === "matched" && big.read.bill.orderTotal === 1214.76, JSON.stringify(big.settled.check));
+check("stitch 17: complete", !big.complete.missing && big.complete.expected === 17);
+// The middle screenshot never uploaded: flagged, with where.
+const gap = multi(["bigbasket-c-3", "bigbasket-c-1"]);
+check("gap: flagged as missing", gap.complete.missing && gap.complete.found === 11 && gap.complete.expected === 17 && gap.complete.short === 714.5, JSON.stringify(gap.complete));
+check("gap: no overlap where it is", gap.joined.joins.length === 1 && gap.joined.joins[0].overlap === 0);
+check("no bill screenshot: flagged", multi(["bigbasket-c-2", "bigbasket-c-1"]).complete.noTotal);
+check("one screenshot: unchanged text", stitch([shotOf("bigbasket-c-1")]).text === scanToRows(JSON.parse(readFileSync(join(__dirname, "orders", "multi", "bigbasket-c-1.json"), "utf8")), { order: true }).map((r) => r.text).join("\n"));
+
+// The cases combined. Real scans cut into more screenshots, the way a user
+// scrolling a page at a time would take them: the sticky header and footer
+// on each, the order's rows split between them.
+// Header (status bar, "Order delivered", date) above 0.12, footer ("Quick actions") below 0.9.
+const chrome = (r: ShotRow) => r.y < 0.12 || r.y > 0.9;
+const part = (rows: ShotRow[], from: number, to: number) => rows.filter((r) => chrome(r) || (r.y >= from && r.y < to));
+const c1 = shotOf("bigbasket-c-1");
+// Split just above Garlic: a page-at-a-time scroll that shares no rows.
+const garlic = c1.find((r) => /^Garlic/.test(r.text))!;
+const c1Top = part(c1, 0, garlic.y - 0.001);
+const c1Bottom = part(c1, garlic.y - 0.001, 1);
+const readParts = (shots: ShotRow[][], taken?: number[]) => {
+  const joined = stitch(shots, taken);
+  const read = readOrder([joined.text], "BigBasket");
+  const settled = settleOrder(read.items.map((it) => it.amount), read.bill.charges.map((c) => c.amount), read.bill.orderTotal);
+  return { joined, read, settled, complete: orderCompleteness(joined.text, read) };
+};
+const wholeOrder = (m: ReturnType<typeof readParts>) =>
+  m.read.items.length === 17 && m.settled.check.status === "matched" && m.read.bill.orderTotal === 1214.76 && !m.complete.missing;
+// No overlap, overlap, a repeat and a shuffle, all in one upload.
+const mixed = readParts([shotOf("bigbasket-c-3"), c1Bottom, shotOf("bigbasket-c-2-again"), c1Top, shotOf("bigbasket-c-2")]);
+check("mixed: whole order, once", wholeOrder(mixed), `${mixed.read.items.length} items, ${JSON.stringify(mixed.settled.check)}`);
+check("mixed: order top to bottom", JSON.stringify(mixed.joined.order) === JSON.stringify([3, 1, 2, 0]) || JSON.stringify(mixed.joined.order) === JSON.stringify([3, 1, 4, 0]), JSON.stringify(mixed.joined.order));
+check("mixed: one join without overlap, two with", JSON.stringify(mixed.joined.joins.map((j) => j.overlap > 0)) === JSON.stringify([false, true, true]), JSON.stringify(mixed.joined.joins));
+check("mixed: the repeat left out", mixed.joined.duplicates.length === 1);
+// The Garlic row cut at the bottom of the upper screenshot ("Garlic ₹27"
+// for "₹27.60"), the lower one starting with it whole, no other row shared.
+const cutTop = [...c1Top.filter((r) => r.y <= 0.9), { text: "Garlic ₹27", y: garlic.y - 0.002 }, ...c1Top.filter((r) => r.y > 0.9)];
+const cutMix = readParts([c1Bottom, shotOf("bigbasket-c-3"), cutTop, shotOf("bigbasket-c-2")]);
+check(
+  "cut item row at a join without overlap: read once, whole",
+  wholeOrder(cutMix) && cutMix.read.items.filter((it) => it.description.startsWith("Garlic")).map((it) => it.amount).join() === "27.6",
+  `${cutMix.read.items.length} items, ${JSON.stringify(cutMix.settled.check)}`,
+);
+// A part never uploaded, among overlaps and a repeat: flagged.
+const missingMid = readParts([shotOf("bigbasket-c-3"), c1Top, shotOf("bigbasket-c-2"), shotOf("bigbasket-c-2-again")]);
+check("mixed gap: flagged", missingMid.complete.missing && missingMid.complete.found < 17 && missingMid.complete.short != null, JSON.stringify(missingMid.complete));
+// A long order in many small screenshots (more than are tried in every
+// order), shuffled, with a repeat: cut a page at a time, item by item.
+const c2 = shotOf("bigbasket-c-2");
+const names = (rows: ShotRow[]) => rows.filter((r) => !chrome(r) && /₹\d/.test(r.text)).map((r) => r.y);
+const slices = (rows: ShotRow[], every: number) => {
+  const at = names(rows).filter((_, k) => k % every === 0);
+  return at.map((y, k) => part(rows, y - 0.001, (at[k + 1] ?? 1.1) - 0.001));
+};
+const many = [...slices(c1, 3), ...slices(c2, 3), shotOf("bigbasket-c-3")];
+// Shuffled, one repeated; the file times say the order they were taken in.
+const shuffle = [5, 0, 10, 7, 2, 9, 6, 1, 8, 4, 3, 2];
+const shuffled = shuffle.map((k) => many[k]);
+const longOne = readParts(shuffled, shuffle);
+check(`${shuffled.length} screenshots, shuffled, one repeated: whole order once`, wholeOrder(longOne) && longOne.joined.duplicates.length === 1, `${longOne.read.items.length} items, ${JSON.stringify(longOne.settled.check)}, order ${JSON.stringify(longOne.joined.order)}`);
+// Without file times nothing orders the parts that share no rows: the list
+// may come out of order, but every item is there once and the bill adds up.
+const noTimes = readParts(shuffled);
+check("same, without file times: whole order once", wholeOrder(noTimes), `${noTimes.read.items.length} items, ${JSON.stringify(noTimes.settled.check)}`);
+
+// Two sessions' screenshots of the 9-item order together: one top repeated,
+// the two bottoms overlapping each other almost entirely.
+const nine = readParts(["bigbasket-a-bottom", "bigbasket-b-top", "bigbasket-b-bottom", "bigbasket-a-top"].map(shotOf));
+check(
+  "mixed 9: once each, adds up",
+  JSON.stringify(nine.read.items.map((it) => it.description)) === JSON.stringify(order9) && nine.settled.check.status === "matched" && nine.joined.duplicates.length === 1,
+  JSON.stringify({ items: nine.read.items.map((it) => it.description), check: nine.settled.check, dup: nine.joined.duplicates }),
+);
+
+// Made-up parts: a row cut in half at the edge, and a pack size that several items share.
+const rowsAt = (texts: string[], from = 0.1, step = 0.05) => texts.map((text, i) => ({ text, y: from + i * step }));
+const cut = stitch([
+  rowsAt(["Order delivered", "Milk ₹30", "1 X 1 L", "Brown Bread ₹40", "1 X 400 g", "Farm Eggs 12 pcs ₹7"]), // "₹70" cut at the bottom
+  rowsAt(["Order delivered", "Brown Bread ₹40", "1 X 400 g", "Farm Eggs 12 pcs ₹70", "Butter ₹55", "Bill total ₹195"], 0.1, 0.07),
+]);
+check(
+  "half-cut row at the edge kept once, as read in full",
+  (cut.text.match(/Eggs/g) ?? []).length === 1 && /Eggs 12 pcs ₹70/.test(cut.text) && (cut.text.match(/Bread/g) ?? []).length === 1,
+  JSON.stringify(cut.text),
+);
+const generic = stitch([
+  rowsAt(["Milk ₹30", "1 X 1 L"]),
+  rowsAt(["1 X 1 L", "Juice ₹99", "1 X 1 L"]),
+]);
+check("a shared pack size alone is not an overlap", generic.joins[0].overlap === 0);
+
 // Quick-commerce order lines, as read from a real Instamart screenshot.
 const order = parseReceipt(["2 x Sprite Zero Delivered ₹54.0", "1x [Combo] Coca-Cola Diet Coke Can 80.0", "1 x Eveready AAA Battery | Pack of 4 43.0", "Grand Total 177"].join("\n"));
 const cleaned = order.items.map((it) => ({ ...cleanOrderItem(it.description), amount: it.amount }));
@@ -252,6 +374,8 @@ const categories: [string, string][] = [
   ["Basmati Rice 5kg", "Groceries"], ["Price drop", "Other"], ["Eggs 12", "Groceries"], ["Flat rent October", "Housing"],
   ["Current account fee", "Other"], ["Business lunch", "Dining Out"], ["Bus ticket", "Transport"], ["Corn Flakes", "Groceries"],
   ["Sprite Zero", "Groceries"], ["Spare parts", "Other"],
+  ["Ginger - Organically Grown", "Groceries"], ["Premium Ladies' Fingers", "Groceries"], ["Palak - Cleaned, Without Roots", "Groceries"],
+  ["Frozen - Green Peas", "Groceries"], ["Minute Fresh Idli Batter", "Groceries"], ["Color Shine Mini Nail Paint Kit", "Other"],
 ];
 const wrong = categories.filter(([d, want]) => categorize(d) !== want).map(([d]) => `${d} -> ${categorize(d)}`);
 check("categories match whole words", wrong.length === 0, wrong.join("; "));

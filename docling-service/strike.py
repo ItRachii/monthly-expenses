@@ -66,6 +66,10 @@ def find_strike(gray: np.ndarray) -> tuple[int, int] | None:
             hits[y] = best
     if not hits:
         return None
+    # A drawn line has at least one pixel row with no break at all. Glyph
+    # strokes that only line up ("44": two crossbars a pixel apart) do not.
+    if not any(r[1] - r[0] + 1 >= need for y in hits for r in _runs(ink[y], max_gap=0)):
+        return None
     # The line is thin: adjacent rows only, a small share of the band.
     if len(hits) > max(3, 0.25 * h) or len(hits) > 0.6 * len(band):
         return None

@@ -2,17 +2,42 @@
 
 import { CameraIcon, XIcon } from "@/components/Icons";
 import { FileDropzone } from "@/components/FileDropzone";
-import { useCallback, useEffect, useId, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
 import { ORDER_APPS, OTHER_APP, repeatedRows } from "@/lib/receipt/quickCommerce";
 import { settleOrder } from "@/lib/receipt/orderBill";
-import { readOrder } from "@/lib/receipt/readOrder";
+import { orderCompleteness, readOrder, type Completeness } from "@/lib/receipt/readOrder";
+import { stitch, type ShotRow, type Stitched } from "@/lib/receipt/stitch";
 import { addReceiptAction } from "@/lib/actions/receipts";
 import { CategorySelect } from "@/components/CategorySelect";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR, todayISO } from "@/lib/format";
+
+/** What seems to be missing from the order's screenshots, with a way to add them. */
+function MissingParts({ stitched, onAdd }: { stitched: Stitched & { complete: Completeness }; onAdd: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
+  const { expected, found, short, noTotal } = stitched.complete;
+  const lines: string[] = [];
+  if (expected != null && found < expected) lines.push(`The order lists ${expected} items, but ${found} were found in your screenshots.`);
+  if (short != null) lines.push(`The items come to ${formatINR(short)} less than the bill's item total.`);
+  if (noTotal) lines.push("The bill total isn't in these screenshots.");
+  const gap = stitched.joins.find((j) => j.overlap === 0);
+  if (gap && (short != null || (expected != null && found < expected)))
+    lines.push(`Part of the list seems to be missing between screenshot ${gap.from + 1} and ${gap.to + 1}.`);
+  return (
+    <div className="alert-warning space-y-2" data-missing>
+      {lines.map((l) => (
+        <div key={l}>{l}</div>
+      ))}
+      <div>Add the missing screenshots, in any order, and they&apos;ll be read together with these.</div>
+      <label className="btn-secondary cursor-pointer">
+        Add screenshots
+        <input type="file" accept="image/*" multiple className="sr-only" aria-label="Add the missing screenshots" onChange={onAdd} />
+      </label>
+    </div>
+  );
+}
 
 interface Opt {
   value: string;
@@ -111,6 +136,9 @@ export function ReceiptScanner({
   const [app, setApp] = useState<string>(OTHER_APP);
   const [phase, setPhase] = useState<Phase>("pick");
   const [files, setFiles] = useState<File[]>([]);
+  // Each image's scan, kept so adding a missing screenshot reads only that one.
+  const scans = useRef(new Map<string, { text: string; rows: ShotRow[] }>());
+  const [stitched, setStitched] = useState<(Stitched & { complete: Completeness }) | null>(null);
   const [progress, setProgress] = useState<{ file: number; files: number } | null>(null);
   const [service, setService] = useState<Service>("checking");
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +178,8 @@ export function ReceiptScanner({
   function reset() {
     setPhase("pick");
     setFiles([]);
+    scans.current.clear();
+    setStitched(null);
     setItems([]);
     setBill(null);
     setProgress(null);
@@ -173,24 +203,50 @@ export function ReceiptScanner({
     });
   }
 
-  async function extract() {
-    if (files.length === 0) return;
+  /** Screenshots picked after reading, to fill a gap: read with the ones already read. */
+  function addMissing(e: React.ChangeEvent<HTMLInputElement>) {
+    const incoming = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    const seen = new Set(files.map(fileKey));
+    const next = [...files, ...incoming.filter((f) => !seen.has(fileKey(f)))];
+    if (next.length === files.length) return;
+    setFiles(next);
+    void extract(next);
+  }
+
+  async function extract(list: File[] = files) {
+    if (list.length === 0) return;
     setError(null);
     setMessage(null);
     setPhase("reading");
     const texts: string[] = [];
+    const shots: ShotRow[][] = [];
+    const fileOf: number[] = []; // shots[k] came from list[fileOf[k]]
+    const toRead = list.filter((f) => !scans.current.has(fileKey(f))).length;
+    let read = 0;
     try {
-      for (let i = 0; i < files.length; i++) {
-        setProgress({ file: i + 1, files: files.length });
-        const image = await prepareImage(files[i]);
+      for (let i = 0; i < list.length; i++) {
+        const known = scans.current.get(fileKey(list[i]));
+        if (known) {
+          texts.push(known.text);
+          shots.push(known.rows);
+          fileOf.push(i);
+          continue;
+        }
+        setProgress({ file: ++read, files: toRead });
+        const image = await prepareImage(list[i]);
         const res = await fetch(app !== OTHER_APP ? "/api/scan?order=1" : "/api/scan", {
           method: "POST",
           headers: { "Content-Type": image.type || "application/octet-stream" },
           body: image,
         });
-        const body = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
+        const body = (await res.json().catch(() => ({}))) as { text?: string; rows?: ShotRow[]; error?: string };
         if (res.ok && typeof body.text === "string") {
+          const rows = body.rows ?? body.text.split("\n").map((text, k, all) => ({ text, y: k / all.length }));
+          scans.current.set(fileKey(list[i]), { text: body.text, rows });
           texts.push(body.text);
+          shots.push(rows);
+          fileOf.push(i);
           continue;
         }
         if (body.error === "no-text") continue; // nothing readable on this one; try the rest
@@ -214,10 +270,21 @@ export function ReceiptScanner({
     if (whole.purchasedOn) setPurchasedOn(whole.purchasedOn);
     let found: number;
     if (fromApp) {
-      // An order's bill summary (fees, discounts, totals) is read on its own;
-      // the items come from the rest of each screenshot, so a fee or "Item
-      // Bill" is never taken for a product and no tax line is counted twice.
-      const order = readOrder(texts, app);
+      // Screenshots of one long order, in any order: put back together, each
+      // shared row once. The bill summary (fees, discounts, totals) is read
+      // on its own and the items from the rest, so a fee or "Item Bill" is
+      // never taken for a product and no tax line is counted twice.
+      // File times break ties: people screenshot a long page top to bottom.
+      const joined = stitch(shots, fileOf.map((i) => list[i].lastModified));
+      const order = readOrder([joined.text], app);
+      const file = (k: number) => fileOf[k];
+      setStitched({
+        ...joined,
+        order: joined.order.map(file),
+        duplicates: joined.duplicates.map(file),
+        joins: joined.joins.map((j) => ({ ...j, from: file(j.from), to: file(j.to) })),
+        complete: orderCompleteness(joined.text, order),
+      });
       setBill({
         charges: order.bill.charges.map((c) => ({ label: c.label, amount: c.amount.toFixed(2) })),
         total: order.bill.orderTotal != null ? order.bill.orderTotal.toFixed(2) : "",
@@ -237,6 +304,7 @@ export function ReceiptScanner({
       found = order.items.length;
     } else {
       setBill(null);
+      setStitched(null);
       const repeats = repeatedRows(
         texts.map((t) => parseReceipt(t).items.map((it) => it.description)),
         whole.items.map((it) => it.description),
@@ -426,7 +494,7 @@ export function ReceiptScanner({
             accept="image/*"
             multiple
             action="to add receipt images"
-            hint="JPG, PNG or WebP. Several at once."
+            hint={embedded ? "JPG, PNG or WebP. A long order can be several screenshots, in any order." : "JPG, PNG or WebP. Several at once."}
             onFiles={addImages}
             onReject={(fs) => setError(`${fs.length === 1 ? `${fs[0].name} is` : `${fs.length} files are`} not an image.`)}
           />
@@ -507,6 +575,30 @@ export function ReceiptScanner({
               />
             </div>
           </div>
+
+          {stitched && files.length > 1 ? (
+            <div className="text-sm text-muted" data-stitched>
+              Read {stitched.order.length} screenshots as one order, top to bottom:{" "}
+              {stitched.order.map((i) => i + 1).join(", ")}. Rows shared between them are counted once.
+              {stitched.duplicates.length > 0
+                ? ` Screenshot ${stitched.duplicates.map((i) => i + 1).join(", ")} repeats another one and was left out.`
+                : ""}
+            </div>
+          ) : null}
+
+          {stitched?.complete.missing ? <MissingParts stitched={stitched} onAdd={addMissing} /> : null}
+          {stitched && !stitched.complete.missing && !stitched.complete.checked && stitched.joins.some((j) => j.overlap === 0) ? (
+            // Nothing on the order to check the items against, and two
+            // screenshots that share no row: they may or may not meet.
+            <div className="text-sm text-muted" data-unsure>
+              Check nothing is missing between screenshot{" "}
+              {stitched.joins
+                .filter((j) => j.overlap === 0)
+                .map((j) => `${j.from + 1} and ${j.to + 1}`)
+                .join(", ")}
+              : they share no rows, and this order shows no item count or item total to check against.
+            </div>
+          ) : null}
 
           {!isPersonal ? (
             <div className="grid gap-3 sm:grid-cols-2">

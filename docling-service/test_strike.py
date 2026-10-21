@@ -74,6 +74,16 @@ d.text((10, 8), "Basket", fill=0, font=FONT)
 d.text((160, 8), "34.25", fill=40, font=FONT)
 check("badge left alone", find_strike(np.asarray(img)) is None)
 
+# "44" in a phone number: two crossbars level with each other, a pixel
+# apart. They line up like a strike but never make one unbroken line.
+img = Image.new("L", (120, 60), 255)
+d = ImageDraw.Draw(img)
+for x0 in (10, 52):
+    d.line([(x0 + 28, 8), (x0 + 28, 52)], fill=0, width=5)  # stem
+    d.line([(x0 + 28, 8), (x0 + 6, 33)], fill=0, width=5)  # diagonal, meeting the bar inside the glyph
+    d.rectangle([(x0, 36), (x0 + 40, 40)], fill=0)  # crossbar, ending a pixel before the next
+check("level crossbars a pixel apart are not a strike", find_strike(np.asarray(img)) is None)
+
 check("blank piece", find_strike(np.full((40, 120), 255, np.uint8)) is None)
 
 if failures:

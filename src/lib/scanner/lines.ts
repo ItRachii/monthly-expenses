@@ -6,7 +6,7 @@
 // they are only the fallback for a scanner that sends no cells. Pure, so it
 // runs anywhere and is unit-testable.
 
-import { itemsToLines, type PositionedText } from "../statements/lines";
+import { itemsToRows, type PositionedText } from "../statements/lines";
 
 export interface ScanItem {
   text: string;
@@ -89,6 +89,18 @@ export function dropStruckPrices(pieces: ScanItem[]): ScanItem[] {
  * guessed from the layout instead (struckPrices, unstrikePrice).
  */
 export function scanToLines(result: ScanResult, opts: { order?: boolean } = {}): string[] {
+  return scanToRows(result, opts).map((r) => r.text);
+}
+
+/** A rebuilt row and where it sits: `y` is its top, as a share of the page height (0 top, 1 bottom). */
+export interface ScanRow {
+  text: string;
+  page: number;
+  y: number;
+}
+
+/** The rows of scanToLines, each with its position on the page. */
+export function scanToRows(result: ScanResult, opts: { order?: boolean } = {}): ScanRow[] {
   const heights = new Map(result.pages.map((p) => [p.page, p.height]));
   const byPage = new Map<number, PositionedText[]>();
   const all = (result.cells?.length ? result.cells : result.items).filter((p) => !p.struck);
@@ -110,5 +122,12 @@ export function scanToLines(result: ScanResult, opts: { order?: boolean } = {}):
   }
   return Array.from(byPage.keys())
     .sort((a, b) => a - b)
-    .flatMap((page) => itemsToLines(byPage.get(page)!));
+    .flatMap((page) => {
+      const height = heights.get(page) ?? 1;
+      return itemsToRows(byPage.get(page)!).map((r) => ({
+        text: r.text,
+        page,
+        y: Math.min(1, Math.max(0, (height - r.y - r.h) / height)),
+      }));
+    });
 }
