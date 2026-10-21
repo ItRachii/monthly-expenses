@@ -31,7 +31,9 @@ export function CardStatements({ cards, loans }: { cards: CardView[]; loans: Loa
   const [cardId, setCardId] = useState<string>(ALL);
   const [month, setMonth] = useState<string>(ALL);
 
-  const shownCards = cards.filter((c) => cardId === ALL || c.id === cardId);
+  // A picked card that is gone (just removed) falls back to all cards.
+  const cardOk = cardId === ALL || cards.some((c) => c.id === cardId) ? cardId : ALL;
+  const shownCards = cards.filter((c) => cardOk === ALL || c.id === cardOk);
   // Months across the cards on show, newest first.
   const months = useMemo(
     () => Array.from(new Set(shownCards.flatMap((c) => c.statements.map((s) => s.period)))).sort((a, b) => b.localeCompare(a)),
@@ -39,9 +41,10 @@ export function CardStatements({ cards, loans }: { cards: CardView[]; loans: Loa
   );
   const monthOk = month === ALL || months.includes(month) ? month : ALL;
   const statementsOf = (c: CardView) => c.statements.filter((s) => monthOk === ALL || s.period === monthOk);
-  // Every card with a statement in the month, and under All months also a
-  // card with none left (its last one removed), so it can still be removed.
-  const blocks = shownCards.filter((c) => statementsOf(c).length > 0 || (monthOk === ALL && c.statements.length === 0));
+  // Under All months every card, one with no statements left (its last one
+  // removed) too, so it can still be removed; a picked month, only the
+  // cards with a statement in it.
+  const blocks = shownCards.filter((c) => monthOk === ALL || statementsOf(c).length > 0);
 
   if (cards.length === 0 && loans.length === 0) {
     return (
@@ -64,8 +67,8 @@ export function CardStatements({ cards, loans }: { cards: CardView[]; loans: Loa
             <div className="flex flex-wrap gap-2" role="group" aria-label="Cards">
               <button
                 type="button"
-                aria-pressed={cardId === ALL}
-                className={`chip-btn ${cardId === ALL ? "border-primary/40 bg-primary/10" : ""}`}
+                aria-pressed={cardOk === ALL}
+                className={`chip-btn ${cardOk === ALL ? "border-primary/40 bg-primary/10" : ""}`}
                 onClick={() => setCardId(ALL)}
               >
                 All cards
