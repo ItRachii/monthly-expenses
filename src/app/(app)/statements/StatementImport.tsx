@@ -277,7 +277,12 @@ export function StatementImport({
     const mine = readNo.current;
     setError(null);
     startSaveSummary(async () => {
-      const res = await saveStatementSummaryAction(summaryInput, lineage ?? undefined);
+      // Thrown (a dropped connection, a database error) is a failure like
+      // any other: said here, not a crashed page. It saves all or nothing.
+      const res = await saveStatementSummaryAction(summaryInput, lineage ?? undefined).catch(() => ({
+        ok: false as const,
+        error: "Could not save the summary, so nothing was saved. Try again.",
+      }));
       router.refresh();
       if (mine !== readNo.current) return;
       if (!res.ok) {
@@ -330,7 +335,7 @@ export function StatementImport({
       const check = await checkStatementDuplicatesAction({
         rows: batch.map((r) => payloadOf(r, categories[r.id] ?? r.category, occ)),
         card: parsed ? cardOf(parsed) : undefined,
-      });
+      }).catch(() => ({ ok: false as const, error: "Could not check these rows against your expenses, so nothing was added. Try again." }));
       if (mine !== readNo.current) return;
       if (!check.ok) {
         setError(check.error);
