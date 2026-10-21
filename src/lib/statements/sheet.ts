@@ -31,17 +31,29 @@ export type Grid = CellValue[][];
 // ---- CSV --------------------------------------------------------------
 
 /**
- * How often `ch` separates fields: outside quotes only, so the commas in
- * "SWIGGY, BANGALORE, IN" or "1,23,456.00" do not make a semicolon file
- * look comma separated. A doubled quote inside a field toggles twice and
- * changes nothing.
+ * How often `ch` separates fields if it is the separator: outside quoted
+ * fields only, so the commas in "SWIGGY, BANGALORE, IN" or "1,23,456.00" do
+ * not make a semicolon file look comma separated. As in parseCsv, a quote
+ * opens a quoted field only at the start of one (an inch mark in
+ * `TV 55" LED` is just a character), and a doubled one inside is a quote
+ * character.
  */
 function countUnquoted(text: string, ch: string): number {
   let n = 0;
   let quoted = false;
-  for (const c of text) {
-    if (c === '"') quoted = !quoted;
-    else if (c === ch && !quoted) n++;
+  let fieldStart = true;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') i++;
+      else if (c === '"') quoted = false;
+      continue;
+    }
+    if (c === '"' && fieldStart) quoted = true;
+    else if (c === ch) n++;
+    // Right after any of the separators being weighed, or a line break: a
+    // quote there opens a field whichever of them the file uses.
+    fieldStart = c === "," || c === ";" || c === "\t" || c === "\n" || c === "\r";
   }
   return n;
 }

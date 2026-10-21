@@ -456,6 +456,14 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("dates: impossible days are not dates", ["31/02/2026", "30/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].every((t) => day(t) === null), JSON.stringify(["31/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].map(day)));
   check("dates: real ones still are", day("29/02/2028") === "2028-02-29" && day("31/12/2026") === "2026-12-31" && day("30/04/2026") === "2026-04-30" && day("12-Aug-26") === "2026-08-12" && day("12 Aug 2026") === "2026-08-12", JSON.stringify(["29/02/2028", "31/12/2026", "30/04/2026", "12-Aug-26", "12 Aug 2026"].map(day)));
 
+  // A quote in the middle of a field (an inch mark) is a character, not the start of a quoted field.
+  const inch = parseSheet([parseCsv('Date;Description;Amount\n01/08/2026;TV 55" LED;35000\n02/08/2026;"SWIGGY, BANGALORE, IN";"1,23,456.00"\n')]).rows;
+  check("csv: an inch mark does not change the separator", inch.length === 2 && inch[0].description === 'TV 55" LED' && inch[1].total === 123456, JSON.stringify(inch.map((r) => [r.description, r.total])));
+  const inchTab = parseCsv('Date\tDescription\tAmount\n01/08/2026\tMonitor 27" 4K\t"21,999.00"\n02/08/2026\t"Tea, coffee"\t20\n');
+  const inchComma = parseCsv('Date,Description,Amount\n01/08/2026,"Rack; 2 shelves; steel",500\n02/08/2026,TV 55" LED,35000\n');
+  check("csv: a comma file with quoted semicolons and an inch mark", inchComma[1].length === 3 && inchComma[2].length === 3 && inchComma[2][1] === 'TV 55" LED', JSON.stringify(inchComma));
+  check("csv: tabs with an inch mark", inchTab[1].length === 3 && inchTab[2].length === 3 && inchTab[1][1] === 'Monitor 27" 4K', JSON.stringify(inchTab));
+
   // A row whose date is no real day is listed as not read; the rows after it are still read.
   const badDay = parseSheet([parseCsv("Date,Description,Amount\n18/07/2026,SWIGGY BANGALORE,350.00\n31/02/2026,ZOMATO DELHI,120.00\n19/07/2026,BLINKIT GURGAON,99.00\n20/07/2026,UBER INDIA,250.00\n")]);
   check("sheet: an impossible date does not end the table", JSON.stringify(badDay.rows.map((r) => r.date)) === JSON.stringify(["2026-07-18", "2026-07-19", "2026-07-20"]), JSON.stringify(badDay.rows.map((r) => [r.date, r.description])));
