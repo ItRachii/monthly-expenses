@@ -456,6 +456,12 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("dates: impossible days are not dates", ["31/02/2026", "30/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].every((t) => day(t) === null), JSON.stringify(["31/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].map(day)));
   check("dates: real ones still are", day("29/02/2028") === "2028-02-29" && day("31/12/2026") === "2026-12-31" && day("30/04/2026") === "2026-04-30" && day("12-Aug-26") === "2026-08-12" && day("12 Aug 2026") === "2026-08-12", JSON.stringify(["29/02/2028", "31/12/2026", "30/04/2026", "12-Aug-26", "12 Aug 2026"].map(day)));
 
+  // A traced GST charge's name is part of its import key: its month keeps the
+  // locale's spelling ("Sept" on Node) so charges imported before still match.
+  const septName = gstLineageName({ instalmentNo: 3, loanLast4: "1234", period: "2026-09" });
+  const localeSept = new Date(Date.UTC(2026, 8, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
+  check("lineage: GST names keep the month spelling they were saved with", septName === `GST on EMI #3 interest (loan …1234, ${localeSept})`, septName);
+
   // A phone number is ten digits on their own, not the tail of a longer reference.
   const longRef = redactLine("08/07/2026 IGST-VPS2607987654321098 0 110.25");
   check("redact: a long reference stays one token, not a reference plus [phone]", longRef === "08/07/2026 IGST-VPS[ref] 0 110.25", longRef);

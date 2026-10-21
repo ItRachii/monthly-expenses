@@ -139,12 +139,17 @@ function close(a: number, b: number, tolerance: number): boolean {
   return b > 0 && Math.abs(a - b) / b <= tolerance;
 }
 
-/** "Aug 2026" for "2026-08", as the rest of the app prints it. */
-export { monthLabel };
-
-/** The expense name of a GST charge traced to an instalment. */
+/**
+ * The expense name of a GST charge traced to an instalment. Its month is
+ * spelled by the locale's formatter, as it always was, not monthLabel: the
+ * name is part of the row's import key, so a different spelling ("Sep" for
+ * the "Sept" already saved) would stop a re-read statement matching the
+ * GST charges imported from it, and add them again.
+ */
 export function gstLineageName(inst: { instalmentNo: number | null; loanLast4: string | null; period: string }): string {
-  return `GST on EMI${inst.instalmentNo ? ` #${inst.instalmentNo}` : ""} interest (loan …${inst.loanLast4 ?? "?"}, ${monthLabel(inst.period)})`;
+  const [y, m] = inst.period.split("-").map(Number);
+  const month = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
+  return `GST on EMI${inst.instalmentNo ? ` #${inst.instalmentNo}` : ""} interest (loan …${inst.loanLast4 ?? "?"}, ${month})`;
 }
 
 /** YYYY-MM of a date moved back by n months. */

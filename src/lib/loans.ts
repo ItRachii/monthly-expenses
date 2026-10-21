@@ -3,9 +3,9 @@
 
 import { createHmac } from "crypto";
 import { inTransaction, prisma, type Db } from "./prisma";
-import { formatDate, formatINR, shortDate } from "./format";
+import { formatDate, formatINR, monthLabel, shortDate } from "./format";
 import { piiSecret } from "./piiCrypto";
-import { gstLineageName, monthLabel, type KnownInstalment, type LineagePayload } from "./statements/lineage";
+import { gstLineageName, type KnownInstalment, type LineagePayload } from "./statements/lineage";
 
 /**
  * The salt the browser uses to key loan numbers for this user. Derived from
