@@ -150,6 +150,13 @@ check("the Milk Bread row is Milk Bread, not Milk", milk.find((it) => it.row ===
 const across = readOrder(["ITEM DETAILS\nMilk ₹30\nBread ₹40", "Bread ₹40\nEggs ₹70\nBill Details\nGrand Total ₹140"]).items;
 check("rows count on across screenshots", JSON.stringify(across.map((it) => it.row)) === JSON.stringify([0, 1, 2, 3]), JSON.stringify(across.map((it) => [it.read, it.row])));
 
+// An item's row is the one with its price, not an unpriced row above that
+// starts with the same words.
+const rowsOf = (lines: string[], app?: string) => readOrder([lines.join("\n")], app).items.map((it) => [it.description, it.qty, it.row]);
+check("a heading starting with an item's name is not its row", JSON.stringify(rowsOf(["2 items in this order", "Tea Time Specials", "Tea ₹20", "Coffee ₹50", "Bill details", "Item total ₹70", "Grand total ₹70"])) === JSON.stringify([["Tea", null, 1], ["Coffee", null, 2]]), JSON.stringify(rowsOf(["2 items in this order", "Tea Time Specials", "Tea ₹20", "Coffee ₹50", "Bill details", "Item total ₹70", "Grand total ₹70"])));
+check("the dish's priced row gives its quantity (Swiggy)", JSON.stringify(rowsOf(["ITEM DETAILS", "Paneer Butter Masala", "Paneer Butter Masala x 1 ₹250", "Bill details", "Item total ₹250", "Grand total ₹250"], "Swiggy")) === JSON.stringify([["Paneer Butter Masala", 1, 1]]));
+check("a replaced item's priced row is its row", JSON.stringify(rowsOf(["2 items in this order", "Amul Butter 100 g", "Replaced with", "Amul Butter 100 g ₹56", "Bread ₹40", "Bill details", "Item total ₹96", "Grand total ₹96"]).map((r) => r[2])) === JSON.stringify([2, 3]));
+
 if (failures) {
   console.error(`${failures} check(s) failed`);
   process.exit(1);

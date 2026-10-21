@@ -51,8 +51,20 @@ export function readOrder(texts: string[], app?: string): { items: OrderItem[]; 
   // ("Coca-Cola Diet-Coke" / "6 x 330 ml x 1 ₹297"): the name is the row above.
   const flat = rows.flat();
   let at = 0;
+  // An item's row is the one its price is on: the first row from here that
+  // starts with its name, unless a row just below also does and carries a
+  // price ("Tea Time Specials" / "Tea ₹20", "Paneer Butter Masala" /
+  // "Paneer Butter Masala x 1 ₹250", a replaced item listed twice).
+  const priced = (r: string) => parseReceipt(r).items.length > 0;
   const rowOf = parsed.items.map((it) => {
-    const row = flat.findIndex((r, i) => i >= at && r.startsWith(it.description));
+    const first = flat.findIndex((r, i) => i >= at && r.startsWith(it.description));
+    let row = first;
+    if (first !== -1 && !priced(flat[first]))
+      for (let i = first + 1; i <= first + 3 && i < flat.length; i++)
+        if (flat[i].startsWith(it.description) && priced(flat[i])) {
+          row = i;
+          break;
+        }
     if (row !== -1) at = row + 1;
     return row;
   });
