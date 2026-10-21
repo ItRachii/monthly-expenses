@@ -64,7 +64,6 @@ export async function registerUserIfNeeded(email: string, name: string) {
   }
 }
 
-/** "First Last" from the editable profile fields, or the fallback. */
 /**
  * A person's name for a message other members will read: their name, or
  * when none is on record their masked address ("go•••@g•••.com"), else
@@ -75,6 +74,7 @@ export async function nameForOthers(user: { firstName: string; lastName?: string
   return displayNameFor(user, "") || (await maskedEmailFor(id)) || "A member";
 }
 
+/** "First Last" from the editable profile fields, or the fallback. */
 export function displayNameFor(
   user: { firstName: string; lastName?: string | null } | null,
   fallback: string,
