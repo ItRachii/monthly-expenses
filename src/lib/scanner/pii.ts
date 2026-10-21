@@ -71,14 +71,17 @@ const addressScore = (text: string) =>
 
 /** Finds the personal details (and the order numbers that look like them) among a scan's pieces. */
 export function findPii(result: ScanResult): Map<ScanItem, Tag> {
-  const pieces = (result.cells?.length ? result.cells : result.items).filter((p) => !p.struck);
+  const all = result.cells?.length ? result.cells : result.items;
+  const pieces = all.filter((p) => !p.struck);
   const rows = rowsOf(pieces);
   const tags = new Map<ScanItem, Tag>();
   const isPhoneRow = new Set<number>();
+  const orderNearRow = (i: number) =>
+    ORDER_LABEL.test(rows[i].text) || near(rows, i).some((o) => ORDER_LABEL.test(o.text) && !PHONE.test(o.text));
 
   rows.forEach((r, i) => {
     const around = near(rows, i);
-    const orderNear = ORDER_LABEL.test(r.text) || around.some((o) => ORDER_LABEL.test(o.text) && !PHONE.test(o.text));
+    const orderNear = orderNearRow(i);
     for (const c of r.cells) {
       if (EMAIL.test(c.text)) {
         tags.set(c, { kind: "email", why: c.text.includes(".") ? "email address" : "UPI id (name@bank)" });
@@ -107,6 +110,37 @@ export function findPii(result: ScanResult): Map<ScanItem, Tag> {
       }
     }
   });
+
+  // A piece the scanner split at a strike line is judged as it was first
+  // read: a line wrongly seen through "9123456780" leaves "91234" struck and
+  // "56780" kept, neither a phone number on its own. Every part of a split
+  // piece takes the tag the whole would get, and the struck part, never
+  // read otherwise, takes its sibling's.
+  const splits: ScanItem[][] = [];
+  const midOf = (p: ScanItem) => (p.box[1] + p.box[3]) / 2;
+  for (const p of all) {
+    if (p.from == null) continue;
+    const group = splits.find(([first]) => first.page === p.page && first.from === p.from && midOf(p) >= first.box[1] && midOf(p) <= first.box[3]);
+    if (group) group.push(p);
+    else splits.push([p]);
+  }
+  for (const parts of splits) {
+    const whole = parts[0].from!;
+    let tag = parts.map((p) => tags.get(p)).find((t) => t != null) ?? null;
+    if (!tag && EMAIL.test(whole)) tag = { kind: "email", why: "email address, split at a line the scanner took for a strike" };
+    const phone = tag ? null : whole.match(PHONE);
+    const ref = whole.match(REFERENCE);
+    if (phone && !(ref && ref[0].includes(phone[1].replace(/[\s-]/g, "")))) {
+      const kept = parts.find((p) => !p.struck);
+      const at = rows.findIndex((r) => (kept ? r.cells.includes(kept) : r.page === parts[0].page && midOf(parts[0]) >= r.top && midOf(parts[0]) <= r.bottom));
+      tag =
+        at >= 0 && orderNearRow(at)
+          ? { kind: "order-id", why: "10 digits next to an order label, split at a line the scanner took for a strike" }
+          : { kind: "phone", why: "10 digits starting 6 to 9, split at a line the scanner took for a strike" };
+      if (tag.kind === "phone" && at >= 0) isPhoneRow.add(at);
+    }
+    if (tag) for (const p of parts) tags.set(p, tag);
+  }
 
   // Addresses: rows that read like one (two signs: a place word, a city, a
   // PIN, a comma list) or one sign next to an address label or another
@@ -165,7 +199,11 @@ export function withoutPii(result: ScanResult, keep = false): ScanResult {
       ? list.map((p) => {
           const t = tags.get(p);
           if (!t) return p;
-          return t.kind === "order-id" ? { ...p, ref: t } : { ...p, text: mask(p.text), from: p.from != null ? mask(p.from) : undefined, pii: t };
+          if (t.kind === "order-id") return { ...p, ref: t };
+          // A later part of a split piece shows nothing: its first two
+          // characters are already the middle of the detail.
+          const later = p.from != null && !p.from.startsWith(p.text);
+          return { ...p, text: later ? p.text.replace(/[\p{L}\p{N}]/gu, "•") : mask(p.text), from: p.from != null ? mask(p.from) : undefined, pii: t };
         })
       : list.filter((p) => !personal(p));
   // Docling's layout blocks hold the same text: drop (or mask) any that

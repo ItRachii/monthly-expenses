@@ -1,4 +1,4 @@
-import { prisma } from "./prisma";
+import { prisma, type Db } from "./prisma";
 import { formatDate, monthLabel } from "./format";
 import { pendingGstReason } from "./loans";
 import type { Bank, StatementSummary } from "./statements/types";
@@ -148,14 +148,15 @@ export async function listCards(ownerEmail: string): Promise<CardView[]> {
 export async function fileStatementShell(
   ownerEmail: string,
   input: { bank: Bank; last4: string; product: string | null; period: string },
+  db: Db = prisma,
 ): Promise<{ cardId: string; statementId: number }> {
   const product = input.product ? input.product.slice(0, 40) : null;
-  const card = await prisma.card.upsert({
+  const card = await db.card.upsert({
     where: { ownerEmail_bank_last4: { ownerEmail, bank: input.bank, last4: input.last4 } },
     create: { ownerEmail, bank: input.bank, last4: input.last4, product },
     update: product ? { product } : {},
   });
-  const statement = await prisma.cardStatement.upsert({
+  const statement = await db.cardStatement.upsert({
     where: { cardId_period: { cardId: card.id, period: input.period } },
     create: { cardId: card.id, period: input.period },
     update: {},
@@ -165,9 +166,9 @@ export async function fileStatementShell(
 }
 
 /** Files one statement's summary under its card, replacing the same month. */
-export async function saveCardStatement(ownerEmail: string, input: SaveStatementInput): Promise<{ cardId: string; statementId: number }> {
+export async function saveCardStatement(ownerEmail: string, input: SaveStatementInput, db: Db = prisma): Promise<{ cardId: string; statementId: number }> {
   const product = input.product ? input.product.slice(0, 40) : null;
-  const card = await prisma.card.upsert({
+  const card = await db.card.upsert({
     where: { ownerEmail_bank_last4: { ownerEmail, bank: input.bank, last4: input.last4 } },
     create: { ownerEmail, bank: input.bank, last4: input.last4, product },
     update: product ? { product } : {},
@@ -190,7 +191,7 @@ export async function saveCardStatement(ownerEmail: string, input: SaveStatement
     emiTotal: num(input.totals.emi),
     importedAt: new Date(),
   };
-  const statement = await prisma.cardStatement.upsert({
+  const statement = await db.cardStatement.upsert({
     where: { cardId_period: { cardId: card.id, period: input.period } },
     create: { cardId: card.id, period: input.period, ...data },
     update: data,

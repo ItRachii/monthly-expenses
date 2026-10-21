@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { prisma } from "./prisma";
+import { prisma, type Db } from "./prisma";
 import { formatDate } from "./format";
 import { PAYER_MULTIPLE, SPLIT_CUSTOM, canonicalCategory, mergeCategories } from "./constants";
 import { parseShares, type Shares } from "./settlementMath";
@@ -102,8 +102,8 @@ export async function createExpense(data: {
   statementId?: number | null;
   /** Keyed hash of that statement row (see statementDuplicates). */
   importKey?: string | null;
-}): Promise<{ id: number }> {
-  return prisma.expense.create({
+}, db: Db = prisma): Promise<{ id: number }> {
+  return db.expense.create({
     select: { id: true },
     data: {
       date: new Date(`${data.date}T00:00:00.000Z`),

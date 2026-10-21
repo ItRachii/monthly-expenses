@@ -363,22 +363,24 @@ export async function respondToInvite(
   });
   if (!invite) return;
 
-  // Conditional on still pending, so two answers at once count once.
-  const answered = await prisma.groupInvite.updateMany({
-    where: { id: inviteId, status: "pending" },
-    data: {
-      status: accept ? "accepted" : "declined",
-      respondedAt: new Date(),
-    },
-  });
-  if (answered.count === 0) return;
+  // Answered and joined together: if adding the membership fails, the
+  // invite stays pending, so it can still be used.
+  await prisma.$transaction(async (tx) => {
+    // Conditional on still pending, so two answers at once count once.
+    const answered = await tx.groupInvite.updateMany({
+      where: { id: inviteId, status: "pending" },
+      data: {
+        status: accept ? "accepted" : "declined",
+        respondedAt: new Date(),
+      },
+    });
+    if (answered.count === 0 || !accept) return;
 
-  if (accept) {
-    const already = await prisma.groupMember.findFirst({
+    const already = await tx.groupMember.findFirst({
       where: { groupId: invite.groupId, email: userEmail },
     });
     if (!already) {
-      await prisma.groupMember.create({
+      await tx.groupMember.create({
         data: {
           groupId: invite.groupId,
           email: userEmail,
@@ -388,7 +390,7 @@ export async function respondToInvite(
         },
       });
     }
-  }
+  });
 }
 
 export async function getGroupInvites(groupId: string): Promise<GroupInviteDTO[]> {

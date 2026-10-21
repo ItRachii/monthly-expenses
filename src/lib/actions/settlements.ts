@@ -35,6 +35,7 @@ export async function settleAction(input: {
   let settledBy: string;
   let settledTo: string | null = null;
   let remainingAfter: number | null = null;
+  let memberEmails: string[] = [];
 
   if (input.ctx === "personal") {
     ownerEmail = email;
@@ -46,43 +47,43 @@ export async function settleAction(input: {
     // Payer and recipient must both resolve to real participants; otherwise
     // fall back / reject rather than persisting an attacker-supplied string.
     const participants = await getGroupParticipants(input.ctx);
+    memberEmails = participants.map((p) => p.email);
     settledBy = emailForKey(input.ctx, participants, input.settledBy) ?? email;
     settledTo = emailForKey(input.ctx, participants, input.settledTo);
     if (!settledTo)
       return { ok: false, error: "Pick who received the payment." };
     if (settledTo === settledBy)
       return { ok: false, error: "Payer and recipient must be different people." };
-
-    // A payment can never exceed what this payer still owes this recipient —
-    // so a month can only close once the full amount has been recovered.
-    const outstanding = await getOutstandingTransfers(
-      groupId,
-      input.month,
-      participants.map((p) => p.email),
-    );
-    const due = pairAmount(outstanding, settledBy, settledTo);
-    if (due <= SETTLE_EPS)
-      return {
-        ok: false,
-        error: "Nothing is outstanding between these members for this month.",
-      };
-    if (input.amount > due + SETTLE_EPS)
-      return {
-        ok: false,
-        error: `Amount exceeds the outstanding ${formatINR(due)}. Record at most what is still owed.`,
-      };
-    remainingAfter = round2(Math.max(0, due - input.amount));
   }
 
-  const created = await createSettlement({
-    month: input.month,
-    settledBy,
-    settledTo,
-    amount: input.amount,
-    note: note || null,
-    ownerEmail,
-    groupId,
-  });
+  let created: { id: number };
+  if (!groupId || !settledTo) {
+    created = await createSettlement({ month: input.month, settledBy, settledTo, amount: input.amount, note: note || null, ownerEmail, groupId });
+  } else {
+    const gid = groupId;
+    const to = settledTo;
+    // Checked and recorded under a lock on this group's month: two payments
+    // sent at once must not both pass the check and together exceed the debt.
+    const res = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`settle:${gid}:${input.month}`}))`;
+      // A payment can never exceed what this payer still owes this recipient,
+      // so a month can only close once the full amount has been recovered.
+      const outstanding = await getOutstandingTransfers(gid, input.month, memberEmails, tx);
+      const due = pairAmount(outstanding, settledBy, to);
+      if (due <= SETTLE_EPS) return { error: "Nothing is outstanding between these members for this month." };
+      if (input.amount > due + SETTLE_EPS)
+        return { error: `Amount exceeds the outstanding ${formatINR(due)}. Record at most what is still owed.` };
+      remainingAfter = round2(Math.max(0, due - input.amount));
+      return {
+        created: await createSettlement(
+          { month: input.month, settledBy, settledTo: to, amount: input.amount, note: note || null, ownerEmail, groupId: gid },
+          tx,
+        ),
+      };
+    });
+    if ("error" in res) return { ok: false, error: res.error };
+    created = res.created;
+  }
 
   // Notify other group members about the payment. Best-effort.
   if (groupId && settledTo) {
