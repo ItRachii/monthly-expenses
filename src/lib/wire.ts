@@ -23,7 +23,7 @@ import type { MemberDTO } from "./groups";
 import type { ExpenseDTO } from "./expenses";
 import type { SettlementDTO } from "./settlements";
 import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
-import { UNNAMED_MEMBER, labelForUnknown, looksLikeEmail } from "./pii";
+import { UNNAMED_MEMBER, labelForUnknown, looksLikeEmail, maskEmail } from "./pii";
 import { isUserId } from "./piiCrypto";
 
 // AUTH_SECRET is always set in any environment where auth works. The dev
@@ -60,12 +60,15 @@ export interface Wire {
   toKey: (email: string) => string;
 }
 
-/** A member's label for the browser: never an address or a user id. */
+/**
+ * A member's label for the browser: never an address or a user id. A name
+ * that is an address (an invitee's, or a profile named that way) shows
+ * masked; no name at all, as a member whose id matches no one.
+ */
 export function safeLabel(displayName: string, email: string): string {
   if (isUserId(displayName)) return UNNAMED_MEMBER;
-  return displayName && !looksLikeEmail(displayName)
-    ? displayName
-    : labelForUnknown(email);
+  if (looksLikeEmail(displayName)) return maskEmail(displayName);
+  return displayName || labelForUnknown(email);
 }
 
 export function buildWire(scope: string, members: MemberDTO[], selfEmail: string): Wire {
