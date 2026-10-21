@@ -100,6 +100,8 @@ export function ExpenseFeed({
   const [sort, onSort] = useSort<SortKey>({ key: "date", dir: "desc" }, ["date", "amount"]);
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
+  // Why the last delete failed, shown in the dialog it was started from.
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Opened from a notification: highlight what it was about, or show what
   // was deleted crossed out where it was, on that month, filters cleared.
@@ -250,21 +252,43 @@ export function ExpenseFeed({
   const maxDate = rows[0]?.date ?? "";
   const minDate = rows[rows.length - 1]?.date ?? "";
 
+  function closeActions() {
+    setActionsFor(null);
+    setDeleteError(null);
+  }
+
+  /** Deletes one expense; if the server refuses, the sheet stays open and says why. */
   function remove(id: number) {
+    setDeleteError(null);
     startTransition(async () => {
-      await deleteExpenseAction(id);
-      setActionsFor(null);
+      const res = await deleteExpenseAction(id).catch(() => null);
+      if (res?.ok) setActionsFor(null);
+      else setDeleteError(res?.error ?? "Something went wrong.");
       router.refresh();
     });
   }
 
-  /** Deletes the ticked expenses one by one, each with the same checks as a single delete. */
+  /**
+   * Deletes the ticked expenses one by one, each with the same checks as a
+   * single delete. Any the server refuses stay ticked, and the dialog stays
+   * open to say how many and why.
+   */
   function removePicked() {
     const ids = picked.map((r) => r.id);
+    setDeleteError(null);
     startTransition(async () => {
-      for (const id of ids) await deleteExpenseAction(id);
-      setSelected(new Set());
-      setConfirmBulk(false);
+      const failed: number[] = [];
+      let reason: string | null = null;
+      for (const id of ids) {
+        const res = await deleteExpenseAction(id).catch(() => null);
+        if (!res?.ok) {
+          failed.push(id);
+          reason ??= res?.error ?? "Something went wrong.";
+        }
+      }
+      setSelected(new Set(failed));
+      if (failed.length === 0) setConfirmBulk(false);
+      else setDeleteError(`${failed.length} of ${ids.length} could not be deleted. ${reason}`);
       router.refresh();
     });
   }
@@ -475,8 +499,12 @@ export function ExpenseFeed({
           total={pickedTotal}
           grouped={!isPersonal}
           pending={pending}
+          error={deleteError}
           onConfirm={removePicked}
-          onClose={() => setConfirmBulk(false)}
+          onClose={() => {
+            setConfirmBulk(false);
+            setDeleteError(null);
+          }}
         />
       ) : null}
 
@@ -485,12 +513,13 @@ export function ExpenseFeed({
           expense={actionsFor.expense}
           startConfirming={actionsFor.confirm}
           pending={pending}
+          error={deleteError}
           onEdit={() => {
             setEditing(actionsFor.expense);
-            setActionsFor(null);
+            closeActions();
           }}
           onDelete={() => remove(actionsFor.expense.id)}
-          onClose={() => setActionsFor(null)}
+          onClose={closeActions}
         />
       ) : null}
 
@@ -606,6 +635,7 @@ function BulkDeleteDialog({
   total,
   grouped,
   pending,
+  error,
   onConfirm,
   onClose,
 }: {
@@ -613,6 +643,7 @@ function BulkDeleteDialog({
   total: number;
   grouped: boolean;
   pending: boolean;
+  error: string | null;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -639,19 +670,30 @@ function BulkDeleteDialog({
         className="modal-pop card w-full max-w-sm space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* After a partial failure the refused rows that are gone (deleted
+            elsewhere) leave nothing ticked: only the reason and Close remain. */}
         <h2 id="bulk-delete-title" className="section-title">
-          Delete {count} expense{count === 1 ? "" : "s"}?
+          {count > 0 ? `Delete ${count} expense${count === 1 ? "" : "s"}?` : "Nothing left to delete"}
         </h2>
-        <p className="text-sm text-muted">
-          {formatINR(total)} in total. This cannot be undone{grouped ? ", and everyone in the group is told" : ""}.
-        </p>
+        {count > 0 ? (
+          <p className="text-sm text-muted">
+            {formatINR(total)} in total. This cannot be undone{grouped ? ", and everyone in the group is told" : ""}.
+          </p>
+        ) : null}
+        {error ? (
+          <div className="alert-error" role="alert">
+            {error}
+          </div>
+        ) : null}
         <div className="flex justify-end gap-2">
           <button ref={cancel} type="button" className="btn-secondary" onClick={onClose} disabled={pending}>
-            Cancel
+            {count > 0 ? "Cancel" : "Close"}
           </button>
-          <button type="button" className="btn-danger" onClick={onConfirm} disabled={pending}>
-            {pending ? "Deleting…" : `Delete ${count}`}
-          </button>
+          {count > 0 ? (
+            <button type="button" className="btn-danger" onClick={onConfirm} disabled={pending}>
+              {pending ? "Deleting…" : `Delete ${count}`}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -662,12 +704,10 @@ const LONG_PRESS_MS = 450;
 const MOVE_TOLERANCE_PX = 10;
 
 /**
- * One expense row, two layouts:
- * - Phone: the amount paid sits under the item name, your share on the right.
- *   Press and hold (or the keyboard: Enter, Space, the Menu key, Shift+F10)
- *   opens the edit/delete sheet.
- * - Desktop: "X paid" + amount and your share as two aligned columns, with
- *   edit and delete icons at the end of the row. No long press.
+ * One expense row on phones (wider screens use the table): the amount paid
+ * sits under the item name, your share on the right. Press and hold (or the
+ * keyboard: Enter, Space, the Menu key, Shift+F10) opens the edit/delete
+ * sheet.
  */
 function ExpenseRow({
   id,
@@ -810,6 +850,7 @@ function ExpenseActions({
   expense,
   startConfirming = false,
   pending,
+  error,
   onEdit,
   onDelete,
   onClose,
@@ -818,6 +859,8 @@ function ExpenseActions({
   /** Open directly on the delete confirmation (desktop trash icon). */
   startConfirming?: boolean;
   pending: boolean;
+  /** Why the delete failed, if it did. */
+  error: string | null;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -881,6 +924,11 @@ function ExpenseActions({
         {confirming ? (
           <div className="space-y-3 px-3 py-2">
             <p className="text-sm">Delete this expense? This cannot be undone.</p>
+            {error ? (
+              <div className="alert-error" role="alert">
+                {error}
+              </div>
+            ) : null}
             <div className="flex gap-2">
               <button
                 ref={first}

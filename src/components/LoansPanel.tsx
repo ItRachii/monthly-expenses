@@ -36,6 +36,7 @@ function LoanBlock({ loan }: { loan: LoanView }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const paid = loan.instalments.reduce((s, i) => s + i.principal + i.interest + (i.gst ?? 0), 0);
   const pendingGst = loan.instalments.filter((i) => i.gst === null).length;
 
@@ -96,18 +97,32 @@ function LoanBlock({ loan }: { loan: LoanView }) {
               type="button"
               className="btn-danger px-3 py-1 text-xs"
               disabled={pending}
-              onClick={() =>
+              onClick={() => {
+                setError(null);
                 startTransition(async () => {
-                  await deleteLoanAction(loan.loanKey);
+                  const res = await deleteLoanAction(loan.loanKey).catch(() => null);
+                  if (!res?.ok) setError(res?.error ?? "Something went wrong.");
                   router.refresh();
-                })
-              }
+                });
+              }}
             >
               Yes, forget
             </button>
-            <button type="button" className="btn-secondary px-3 py-1 text-xs" onClick={() => setConfirm(false)}>
+            <button
+              type="button"
+              className="btn-secondary px-3 py-1 text-xs"
+              onClick={() => {
+                setConfirm(false);
+                setError(null);
+              }}
+            >
               Cancel
             </button>
+            {error ? (
+              <div className="alert-error basis-full" role="alert">
+                {error}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
