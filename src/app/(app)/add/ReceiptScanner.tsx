@@ -6,10 +6,10 @@ import { useCallback, useEffect, useId, useRef, useState, useTransition } from "
 import { useRouter } from "next/navigation";
 import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
-import { ORDER_APPS, OTHER_APP, repeatedRows } from "@/lib/receipt/quickCommerce";
+import { ORDER_APPS, OTHER_APP } from "@/lib/receipt/quickCommerce";
 import { settleOrder } from "@/lib/receipt/orderBill";
-import { orderCompleteness, readOrder, type Completeness } from "@/lib/receipt/readOrder";
-import { stitch, type ShotRow, type Stitched } from "@/lib/receipt/stitch";
+import { readOrderShots, readReceiptShots, type Completeness } from "@/lib/receipt/readOrder";
+import type { ShotRow, Stitched } from "@/lib/receipt/stitch";
 import { addReceiptAction } from "@/lib/actions/receipts";
 import { CategorySelect } from "@/components/CategorySelect";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
@@ -275,15 +275,15 @@ export function ReceiptScanner({
       // on its own and the items from the rest, so a fee or "Item Bill" is
       // never taken for a product and no tax line is counted twice.
       // File times break ties: people screenshot a long page top to bottom.
-      const joined = stitch(shots, fileOf.map((i) => list[i].lastModified));
-      const order = readOrder([joined.text], app);
+      const { stitched: joined, order, complete } = readOrderShots(shots, app, fileOf.map((i) => list[i].lastModified));
       const file = (k: number) => fileOf[k];
       setStitched({
         ...joined,
         order: joined.order.map(file),
         duplicates: joined.duplicates.map(file),
+        duplicateOf: joined.duplicateOf.map(file),
         joins: joined.joins.map((j) => ({ ...j, from: file(j.from), to: file(j.to) })),
-        complete: orderCompleteness(joined.text, order),
+        complete,
       });
       setBill({
         charges: order.bill.charges.map((c) => ({ label: c.label, amount: c.amount.toFixed(2) })),
@@ -305,10 +305,7 @@ export function ReceiptScanner({
     } else {
       setBill(null);
       setStitched(null);
-      const repeats = repeatedRows(
-        texts.map((t) => parseReceipt(t).items.map((it) => it.description)),
-        whole.items.map((it) => it.description),
-      );
+      const { repeats } = readReceiptShots(texts);
       setItems(
         whole.items.map((it, n) => ({
           description: it.description,

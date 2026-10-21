@@ -7,7 +7,9 @@
 import { parseReceipt } from "./parse";
 import { categorize } from "./categorize";
 import { FOOD_APPS, cleanOrderItem, repeatedRows } from "./quickCommerce";
+import type { ParsedReceipt } from "./types";
 import { TOLERANCE, orderRows, orderedCount, readOrderBill, type OrderBill } from "./orderBill";
+import { stitch, type ShotRow, type Stitched } from "./stitch";
 
 // A row that is only the pack size and count: "6 x 330 ml x 1", "1 pack (1 kg) · 1 unit".
 const PACK = /^\d+(?:\.\d+)?\s*(?:[x×]\s*\d+(?:\.\d+)?\s*)?(?:ml|l|ltr|litre|g|gm|gms|kg|pcs?|packs?|units?)\b/i;
@@ -89,4 +91,34 @@ export function orderCompleteness(text: string, read: { items: OrderItem[]; bill
   const fewer = expected != null && items.length < expected && units < expected;
   const noTotal = read.bill.orderTotal == null;
   return { expected, found: items.length, short, noTotal, checked: expected != null || itemTotal != null, missing: fewer || short != null || noTotal };
+}
+
+/**
+ * An order from its screenshots, end to end: put back together (see
+ * stitch), read, and checked for missing parts. Add Expense and the
+ * developer scan inspector both call this, so they cannot read an order
+ * differently. `taken` is each file's time.
+ */
+export function readOrderShots(
+  shots: ShotRow[][],
+  app: string,
+  taken?: number[],
+): { stitched: Stitched; order: { items: OrderItem[]; bill: OrderBill }; complete: Completeness } {
+  const stitched = stitch(shots, taken);
+  const order = readOrder([stitched.text], app);
+  return { stitched, order, complete: orderCompleteness(stitched.text, order) };
+}
+
+/**
+ * A receipt (not an app order) from the text of each of its images: read as
+ * one, with the rows an overlapping photo repeats marked. Add Expense and
+ * the developer scan inspector both call this.
+ */
+export function readReceiptShots(texts: string[]): { parsed: ParsedReceipt; repeats: boolean[] } {
+  const parsed = parseReceipt(texts.join("\n"));
+  const repeats = repeatedRows(
+    texts.map((t) => parseReceipt(t).items.map((it) => it.description)),
+    parsed.items.map((it) => it.description),
+  );
+  return { parsed, repeats };
 }
