@@ -31,13 +31,24 @@ derived from `DOCLING_SECRET`, see `envelope.py`):
 
        docker compose up -d --build
 
-   On Windows, `run-scanner.bat` does the same one step at a time
-   (`docker compose build`, `docker images ledger-scanner`,
-   `docker compose up -d`), stops at the first step that fails, waits
-   until the scanner reports healthy, then starts ngrok for port 8787 in
-   a new window. Set `NGROK_URL` in `.env` to your static ngrok domain so
-   the address stays the same, and `NGROK_AUTHTOKEN` when that domain
-   belongs to a different ngrok account from the one n8n uses. Double-click it or run
+   On Windows, `run-scanner.bat` does it all, one step at a time, and
+   stops at the first step that fails:
+   1. gets the latest code (`git pull --ff-only`; if that fails, it says
+      so and builds the code already there, and if the pull changed the
+      script itself it restarts on the new version),
+   2. builds the image (which runs the strike check's tests and a sample
+      scan),
+   3. checks the image was saved,
+   4. starts the scanner (`docker compose up -d`, which replaces a running
+      older one) and waits until it reports healthy,
+   5. checks the running scanner has the strike check, and if it is
+      still an older one, replaces it (`--force-recreate`),
+   6. starts ngrok for port 8787 in a new window, unless a window from an
+      earlier run already serves the address (other ngrok windows, like
+      n8n's, are left alone).
+   Set `NGROK_URL` in `.env` to your static ngrok domain so the address
+   stays the same, and `NGROK_AUTHTOKEN` when that domain belongs to a
+   different ngrok account from the one n8n uses. Double-click it or run
    `.\run-scanner.bat`.
 
 4. Check it is up (it needs about a minute after start to load models):
