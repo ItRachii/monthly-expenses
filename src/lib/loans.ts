@@ -210,6 +210,18 @@ export async function listLoans(ownerEmail: string): Promise<LoanView[]> {
   return [...loans.values()];
 }
 
+/**
+ * Removes every instalment of a loan. A GST charge that had been traced to
+ * one goes back to pending, as when its statement is removed, so uploading
+ * that statement again traces it again.
+ */
 export async function deleteLoan(ownerEmail: string, loanKey: string): Promise<void> {
-  await prisma.emiInstalment.deleteMany({ where: { ownerEmail, loanKey } });
+  await prisma.$transaction(async (tx) => {
+    const ids = (await tx.emiInstalment.findMany({ where: { ownerEmail, loanKey }, select: { id: true } })).map((i) => i.id);
+    await tx.gstPending.updateMany({
+      where: { ownerEmail, resolvedInstalmentId: { in: ids } },
+      data: { resolvedAt: null, resolvedInstalmentId: null },
+    });
+    await tx.emiInstalment.deleteMany({ where: { id: { in: ids } } });
+  });
 }

@@ -54,7 +54,8 @@ export async function deleteLoanAction(loanKey: string): Promise<Result> {
   if (!email) return { ok: false, error: "Not signed in." };
   if (typeof loanKey !== "string" || !/^l_[A-Za-z0-9_-]{16,64}$/.test(loanKey)) return { ok: false, error: "Invalid loan." };
   await deleteLoan(email, loanKey);
-  revalidatePath("/statements");
+  // A GST charge traced to the loan is flagged again on its expense.
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 
