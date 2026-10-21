@@ -20,8 +20,12 @@ export function ExportButton({
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"all" | "range">("all");
-  const [from, setFrom] = useState(minDate);
-  const [to, setTo] = useState(maxDate);
+  // A date you picked is kept between opens; until then the range follows
+  // the expenses on show, so one added after the page loaded is included.
+  const [pickedFrom, setFrom] = useState<string | null>(null);
+  const [pickedTo, setTo] = useState<string | null>(null);
+  const from = pickedFrom ?? minDate;
+  const to = pickedTo ?? maxDate;
   const invalid = mode === "range" && (!from || !to || from > to);
 
   function download() {
