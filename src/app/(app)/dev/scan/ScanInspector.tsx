@@ -311,7 +311,7 @@ export function ScanInspector() {
                 <tr><td>Round trip (browser, Vercel, ngrok, scanner)</td><td>{run.roundTripMs} ms</td></tr>
                 <tr><td>Image picked</td><td>{(run.originalBytes / 1024).toFixed(0)} KB</td></tr>
                 <tr><td>Image sent</td><td>{(run.sentBytes / 1024).toFixed(0)} KB, {run.result.pages[0]?.width} x {run.result.pages[0]?.height} px</td></tr>
-                <tr><td>OCR pieces / layout blocks</td><td>{run.result.cells?.length ?? "none (old scanner)"} / {run.result.items.length}</td></tr>
+                <tr><td>OCR pieces / layout blocks</td><td>{run.result.cells?.length || "none (old scanner)"} / {run.result.items.length}</td></tr>
               </tbody>
             </table>
           </div>
