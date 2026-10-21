@@ -100,6 +100,28 @@ check("a number starting 1-5 is not a mobile", JSON.stringify(tiny(["Ref", "2010
 check("email and UPI id", JSON.stringify(tiny(["asha.v@example.com", "asha@okhdfc"])) === JSON.stringify(["email", "email"]));
 check("a product with a road in its name is not an address", JSON.stringify(tiny(["Road Runner Toy Car ₹499", "1 pc"])) === JSON.stringify(["none", "none"]));
 
+// A line the scanner wrongly took for a strike through the phone number
+// splits it into "91234" (struck) and "56780" (kept), neither ten digits.
+const split = scan("multi/bigbasket-c-3.json", ["Asha Verma", "9123456780", "102, Rose Villa, 14, MG Road,", "Indiranagar, Bangalore -", "560038", "BNN-9876543210-20260607"]);
+const whole = split.cells!.find((c) => c.text === "9123456780")!;
+const [x0, y0, x1, y1] = whole.box;
+const cut = Math.round((x0 + x1) / 2);
+const struckHalf: ScanItem = { ...whole, text: "91234", box: [x0, y0, cut, y1], struck: true, from: whole.text };
+const keptHalf: ScanItem = { ...whole, text: "56780", box: [cut, y0, x1, y1], from: whole.text };
+split.cells!.splice(split.cells!.indexOf(whole), 1, struckHalf, keptHalf);
+const splitTags = findPii(split);
+check("a phone split at a strike line: both parts are the phone", splitTags.get(struckHalf)?.kind === "phone" && splitTags.get(keptHalf)?.kind === "phone", `${splitTags.get(struckHalf)?.kind} / ${splitTags.get(keptHalf)?.kind}`);
+check("a phone split at a strike line: the name beside it is still found", [...splitTags].some(([c, t]) => c.text === "Asha Verma" && t.kind === "name"));
+check("a phone split at a strike line: no part reaches the text", !/56780|91234/.test(scanToLines(withoutPii(split)).join("\n")));
+const splitDev = withoutPii(split, true).cells!;
+const phoneParts = splitDev.filter((c) => c.from != null && c.pii?.kind === "phone");
+check("a phone split at a strike line: the developer view masks both parts and where they came from", phoneParts.length === 2 && phoneParts.every((c) => !/\d{3}/.test(c.text) && !/\d{3}/.test(c.from!)) && phoneParts.map((c) => c.text).join("") === "91••••••••", JSON.stringify(phoneParts.map((c) => [c.text, c.from])));
+// Struck prices split the same way are left alone.
+const zp = JSON.parse(readFileSync(join(__dirname, "..", "scanner", "orders", "zepto.json"), "utf8")) as ScanResult;
+const zpTags = findPii(zp);
+const zpSplit = zp.cells!.filter((c) => c.from != null);
+check("struck prices are not personal details", zpSplit.length > 0 && zpSplit.every((c) => !zpTags.has(c)), `${zpSplit.length} split pieces`);
+
 if (failures) {
   console.error(`${failures} check(s) failed`);
   process.exit(1);

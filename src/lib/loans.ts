@@ -2,7 +2,7 @@
 // the instalment it belongs to. Server only.
 
 import { createHmac } from "crypto";
-import { prisma } from "./prisma";
+import { inTransaction, prisma, type Db } from "./prisma";
 import { formatDate, formatINR } from "./format";
 import { piiSecret } from "./piiCrypto";
 import { gstLineageName, monthLabel, type KnownInstalment, type LineagePayload } from "./statements/lineage";
@@ -42,9 +42,9 @@ export function validateLineage(p: LineagePayload): string | null {
 const toDate = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
 /** Records instalments and the GST charges traced to earlier ones. */
-export async function saveLineage(ownerEmail: string, cardId: string | null, p: LineagePayload): Promise<void> {
+export async function saveLineage(ownerEmail: string, cardId: string | null, p: LineagePayload, db: Db = prisma): Promise<void> {
   for (const i of p.instalments) {
-    await prisma.emiInstalment.upsert({
+    await db.emiInstalment.upsert({
       where: { ownerEmail_loanKey_date: { ownerEmail, loanKey: i.loanKey, date: toDate(i.date) } },
       create: {
         ownerEmail,
@@ -75,9 +75,9 @@ export async function saveLineage(ownerEmail: string, cardId: string | null, p: 
   for (const g of p.gstMatches) {
     // By the cited reference when there is one, else by loan and date.
     const where = g.matchedBy === "ref" && g.refKey ? { ownerEmail, refKey: g.refKey } : { ownerEmail, loanKey: g.loanKey, date: toDate(g.date) };
-    await prisma.emiInstalment.updateMany({ where, data: { gst: g.gst, gstPeriod: g.gstPeriod } });
+    await db.emiInstalment.updateMany({ where, data: { gst: g.gst, gstPeriod: g.gstPeriod } });
   }
-  await resolvePendingGst(ownerEmail, p.instalments.map((i) => i.refKey).filter((k): k is string => !!k));
+  await resolvePendingGst(ownerEmail, p.instalments.map((i) => i.refKey).filter((k): k is string => !!k), db);
 }
 
 // ---- GST added before its instalment was on record ---------------------
@@ -96,8 +96,8 @@ export interface PendingGstInput {
   period: string;
 }
 
-export async function recordPendingGst(ownerEmail: string, input: PendingGstInput): Promise<void> {
-  await prisma.gstPending.create({
+export async function recordPendingGst(ownerEmail: string, input: PendingGstInput, db: Db = prisma): Promise<void> {
+  await db.gstPending.create({
     data: { ownerEmail, expenseId: input.expenseId, refKey: input.refKey, amount: input.amount, date: toDate(input.date), period: input.period },
   });
 }
@@ -127,18 +127,18 @@ export async function pendingFlagsFor(expenseIds: number[]): Promise<Map<number,
  * the instalment gets its GST, the expense its lineage name, and the flag
  * is cleared. Returns how many were traced.
  */
-export async function resolvePendingGst(ownerEmail: string, refKeys: string[]): Promise<number> {
+export async function resolvePendingGst(ownerEmail: string, refKeys: string[], db: Db = prisma): Promise<number> {
   if (refKeys.length === 0) return 0;
-  const pending = await prisma.gstPending.findMany({ where: { ownerEmail, resolvedAt: null, refKey: { in: refKeys } } });
+  const pending = await db.gstPending.findMany({ where: { ownerEmail, resolvedAt: null, refKey: { in: refKeys } } });
   let traced = 0;
   for (const p of pending) {
-    const inst = await prisma.emiInstalment.findFirst({ where: { ownerEmail, refKey: p.refKey } });
+    const inst = await db.emiInstalment.findFirst({ where: { ownerEmail, refKey: p.refKey } });
     if (!inst) continue;
-    await prisma.$transaction([
-      prisma.emiInstalment.update({ where: { id: inst.id }, data: { gst: p.amount, gstPeriod: p.period } }),
-      prisma.expense.updateMany({ where: { id: p.expenseId }, data: { item: gstLineageName(inst) } }),
-      prisma.gstPending.update({ where: { id: p.id }, data: { resolvedAt: new Date(), resolvedInstalmentId: inst.id } }),
-    ]);
+    await inTransaction(db, async (tx) => {
+      await tx.emiInstalment.update({ where: { id: inst.id }, data: { gst: p.amount, gstPeriod: p.period } });
+      await tx.expense.updateMany({ where: { id: p.expenseId }, data: { item: gstLineageName(inst) } });
+      await tx.gstPending.update({ where: { id: p.id }, data: { resolvedAt: new Date(), resolvedInstalmentId: inst.id } });
+    });
     traced++;
   }
   return traced;

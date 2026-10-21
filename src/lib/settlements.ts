@@ -1,4 +1,4 @@
-import { prisma } from "./prisma";
+import { prisma, type Db } from "./prisma";
 import type { Context } from "./context";
 import {
   applyPayments,
@@ -45,8 +45,8 @@ export async function createSettlement(data: {
   note: string | null;
   ownerEmail: string | null;
   groupId: string | null;
-}): Promise<{ id: number }> {
-  return prisma.settlement.create({
+}, db: Db = prisma): Promise<{ id: number }> {
+  return db.settlement.create({
     select: { id: true },
     data: {
       month: data.month,
@@ -70,17 +70,18 @@ export async function getOutstandingTransfers(
   groupId: string,
   month: string, // YYYY-MM
   memberEmails: string[],
+  db: Db = prisma,
 ): Promise<Transfer[]> {
   const [y, m] = month.split("-").map(Number);
   const start = new Date(Date.UTC(y, m - 1, 1));
   const end = new Date(Date.UTC(y, m, 1));
 
   const [expenses, settlements] = await Promise.all([
-    prisma.expense.findMany({
+    db.expense.findMany({
       where: { groupId, date: { gte: start, lt: end } },
       select: { payer: true, split: true, amount: true, shares: true, payers: true },
     }),
-    prisma.settlement.findMany({
+    db.settlement.findMany({
       where: { groupId, month },
       orderBy: { settledAt: "asc" },
     }),

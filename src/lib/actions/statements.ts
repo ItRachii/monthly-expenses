@@ -177,73 +177,82 @@ export async function importStatementAction(input: {
     }
   }
 
-  // The statement the rows belong to, filed first so each row can point at it.
   let summarySaved = false;
-  let cardId: string | null = null;
-  let statementId: number | null = null;
-  if (input.summary && !validateSaveInput(input.summary)) {
-    ({ cardId, statementId } = await saveCardStatement(email, input.summary));
-    summarySaved = true;
-  } else if (input.card && /^\d{4}$/.test(input.card.last4) && /^\d{4}-\d{2}$/.test(input.card.period) && input.card.bank in BANK_LABEL) {
-    ({ cardId, statementId } = await fileStatementShell(email, {
-      bank: input.card.bank,
-      last4: input.card.last4,
-      product: typeof input.card.product === "string" ? input.card.product : null,
-      period: input.card.period,
-    }));
-  }
-
-  const period = input.summary?.period ?? input.card?.period ?? input.lineage?.instalments[0]?.period ?? null;
   const createdIds: number[] = [];
   // Group id (null for Personal) to the ids overwritten there.
   const replacedIn = new Map<string | null, number[]>();
-  for (let i = 0; i < rows.length; i++) {
-    const old = rows[i].replaceId !== null ? replaceable.get(rows[i].replaceId!)! : null;
-    let id: number;
-    if (old) {
-      // Overwrite the earlier import with this read of the row. Its payer
-      // and split stay; a name a traced GST charge was given stays too.
-      await prisma.expense.update({
-        where: { id: old.id },
-        data: {
-          date: new Date(`${rows[i].date}T00:00:00.000Z`),
-          amount: rows[i].amount,
-          category: categories[i],
-          ...(old.gstPending.length > 0 ? {} : { item: rows[i].item }),
-          statementId,
-          importKey: rowKeys[i],
-        },
-      });
-      await prisma.gstPending.deleteMany({ where: { expenseId: old.id, resolvedAt: null } });
-      id = old.id;
-      replacedIn.set(old.groupId, [...(replacedIn.get(old.groupId) ?? []), id]);
-    } else {
-      const created = await createExpense({
-        date: rows[i].date,
-        category: categories[i],
-        item: rows[i].item,
-        amount: rows[i].amount,
-        payer: email,
-        split: SPLIT_EQUAL,
-        shares: null,
-        ownerEmail,
-        groupId,
-        statementId,
-        importKey: rowKeys[i],
-      });
-      id = created.id;
-      createdIds.push(id);
-    }
-    if (rows[i].untracedRefKey && !(old && old.gstPending.length > 0)) {
-      await recordPendingGst(email, {
-        expenseId: id,
-        refKey: rows[i].untracedRefKey!,
-        amount: rows[i].amount,
-        date: rows[i].date,
-        period: period && /^\d{4}-\d{2}$/.test(period) ? period : rows[i].date.slice(0, 7),
-      });
-    }
-  }
+  // All or nothing: a failure part way (a dropped connection, a timeout)
+  // leaves no statement, rows or GST records half saved.
+  await prisma.$transaction(
+    async (tx) => {
+      // The statement the rows belong to, filed first so each row can point at it.
+      let cardId: string | null = null;
+      let statementId: number | null = null;
+      if (input.summary && !validateSaveInput(input.summary)) {
+        ({ cardId, statementId } = await saveCardStatement(email, input.summary, tx));
+        summarySaved = true;
+      } else if (input.card && /^\d{4}$/.test(input.card.last4) && /^\d{4}-\d{2}$/.test(input.card.period) && input.card.bank in BANK_LABEL) {
+        ({ cardId, statementId } = await fileStatementShell(email, {
+          bank: input.card.bank,
+          last4: input.card.last4,
+          product: typeof input.card.product === "string" ? input.card.product : null,
+          period: input.card.period,
+        }, tx));
+      }
+
+      const period = input.summary?.period ?? input.card?.period ?? input.lineage?.instalments[0]?.period ?? null;
+      for (let i = 0; i < rows.length; i++) {
+        const old = rows[i].replaceId !== null ? replaceable.get(rows[i].replaceId!)! : null;
+        let id: number;
+        if (old) {
+          // Overwrite the earlier import with this read of the row. Its payer
+          // and split stay; a name a traced GST charge was given stays too.
+          await tx.expense.update({
+            where: { id: old.id },
+            data: {
+              date: new Date(`${rows[i].date}T00:00:00.000Z`),
+              amount: rows[i].amount,
+              category: categories[i],
+              ...(old.gstPending.length > 0 ? {} : { item: rows[i].item }),
+              statementId,
+              importKey: rowKeys[i],
+            },
+          });
+          await tx.gstPending.deleteMany({ where: { expenseId: old.id, resolvedAt: null } });
+          id = old.id;
+          replacedIn.set(old.groupId, [...(replacedIn.get(old.groupId) ?? []), id]);
+        } else {
+          const created = await createExpense({
+            date: rows[i].date,
+            category: categories[i],
+            item: rows[i].item,
+            amount: rows[i].amount,
+            payer: email,
+            split: SPLIT_EQUAL,
+            shares: null,
+            ownerEmail,
+            groupId,
+            statementId,
+            importKey: rowKeys[i],
+          }, tx);
+          id = created.id;
+          createdIds.push(id);
+        }
+        if (rows[i].untracedRefKey && !(old && old.gstPending.length > 0)) {
+          await recordPendingGst(email, {
+            expenseId: id,
+            refKey: rows[i].untracedRefKey!,
+            amount: rows[i].amount,
+            date: rows[i].date,
+            period: period && /^\d{4}-\d{2}$/.test(period) ? period : rows[i].date.slice(0, 7),
+          }, tx);
+        }
+      }
+
+      if (input.lineage && !validateLineage(input.lineage)) await saveLineage(email, cardId, input.lineage, tx);
+    },
+    { maxWait: 10_000, timeout: 120_000 },
+  );
 
   try {
     const actor = await prisma.appUser.findUnique({ where: { email } });
@@ -270,8 +279,6 @@ export async function importStatementAction(input: {
   } catch {
     // Notifications are best-effort.
   }
-
-  if (input.lineage && !validateLineage(input.lineage)) await saveLineage(email, cardId, input.lineage);
 
   revalidatePath("/", "layout");
   const replaced = rows.length - createdIds.length;
