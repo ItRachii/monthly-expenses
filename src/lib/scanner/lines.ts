@@ -7,6 +7,7 @@
 // runs anywhere and is unit-testable.
 
 import { itemsToRows, type PositionedText } from "../statements/lines";
+import type { Tag } from "./pii";
 
 export interface ScanItem {
   text: string;
@@ -17,6 +18,10 @@ export interface ScanItem {
   struck?: boolean;
   /** The OCR piece this one was split from, when it held a struck price. */
   from?: string;
+  /** Developer view only: a personal detail, masked, and why it was taken for one. */
+  pii?: Tag;
+  /** Developer view only: an order number that might pass for a phone, and why it is not one. */
+  ref?: Tag;
 }
 
 export interface ScanResult {
@@ -103,7 +108,7 @@ export interface ScanRow {
 export function scanToRows(result: ScanResult, opts: { order?: boolean } = {}): ScanRow[] {
   const heights = new Map(result.pages.map((p) => [p.page, p.height]));
   const byPage = new Map<number, PositionedText[]>();
-  const all = (result.cells?.length ? result.cells : result.items).filter((p) => !p.struck);
+  const all = (result.cells?.length ? result.cells : result.items).filter((p) => !p.struck && !p.pii);
   const guess = opts.order && !result.strikeCheck;
   const pieces = guess ? dropStruckPrices(all).map((p) => ({ ...p, text: unstrikePrice(p.text) })) : all;
   for (const it of pieces) {
