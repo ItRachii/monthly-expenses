@@ -68,7 +68,6 @@ export function Settlement({
   ctx,
   rows,
   settlements,
-  isPersonal,
   nameMap,
   members,
   payerOptions,
@@ -77,7 +76,6 @@ export function Settlement({
   ctx: string;
   rows: ExpenseDTO[];
   settlements: SettlementDTO[];
-  isPersonal: boolean;
   nameMap: Record<string, string>;
   members: Member[];
   payerOptions: Opt[];
@@ -234,18 +232,7 @@ export function Settlement({
         <MonthSelect months={months} value={selectedMonth} onChange={setMonth} />
       </div>
 
-      {isPersonal ? (
-        <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Metric label="Total Spent" value={formatINR(total)} />
-            <Metric label="Expenses" value={String(monthRows.length)} />
-          </div>
-          <div className="alert-info">
-            Personal expenses are yours alone, so there&apos;s nothing to settle here.
-            Settlements apply to <strong>group</strong> expenses.
-          </div>
-        </div>
-      ) : fullySettled ? (
+      {fullySettled ? (
         <div className="space-y-3">
           <div className="alert-success">
             This month is <strong>fully settled</strong>: {formatINR(owedTotal)} recovered

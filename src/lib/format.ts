@@ -34,8 +34,19 @@ export function formatDate(d: Date | string): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Today in UTC. The server renders forms in UTC, so this is the value that
+ * matches the server's HTML on the first render; forms then switch to
+ * localISO() once mounted (in India the UTC day is still yesterday until
+ * 05:30).
+ */
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** The day in the browser's own time zone, as YYYY-MM-DD. */
+export function localISO(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** "Golu", "Golu and Peehu", "Golu, Peehu and Chintu". */

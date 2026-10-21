@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileDropzone } from "@/components/FileDropzone";
 import { prepareImage } from "@/lib/scanner/prepareImage";
-import { parseReceipt } from "@/lib/receipt/parse";
 import { NOT_A_PRICE, plainText, struckPrices, unstrikePrice, type ScanItem, type ScanResult } from "@/lib/scanner/lines";
 import type { Tag } from "@/lib/scanner/pii";
 import { ORDER_APPS, OTHER_APP } from "@/lib/receipt/quickCommerce";

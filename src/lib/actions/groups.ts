@@ -153,7 +153,8 @@ export async function deleteGroupAction(groupId: string) {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
   const group = await groups.getGroup(groupId);
-  if (!group || group.createdBy !== email)
+  // Still a member too: a creator who left or was removed no longer has a say.
+  if (!group || group.createdBy !== email || !(await groups.isGroupMember(groupId, email)))
     return { ok: false, error: "Only the creator can delete this group." };
   await groups.deleteGroup(groupId);
   revalidateGroupViews();

@@ -188,7 +188,6 @@ export function SpaceView({
             ctx={ctx}
             rows={rows}
             settlements={settlements}
-            isPersonal={isPersonal}
             nameMap={nameMap}
             members={members}
             payerOptions={payerOptions}

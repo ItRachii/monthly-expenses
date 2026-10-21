@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownIcon, ArrowUpIcon, CheckIcon, FilterIcon, SearchIcon, SortIcon, XIcon } from "@/components/Icons";
+import { localISO } from "@/lib/format";
 
 // Pieces for the list tables (statement review, expenses, settlement
 // history, the summary's expense detail): filter tabs come from Tabs.tsx;
@@ -332,10 +333,6 @@ export function rangeLabel(r: DateRange): string {
   return r.from ? `From ${short(r.from)}` : `Until ${short(r.to)}`;
 }
 
-function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 /** Date heading: the label sorts, the funnel opens a from/to range with quick picks. */
 export function DateRangeHeader<K extends string>({
   label,
@@ -365,7 +362,7 @@ export function DateRangeHeader<K extends string>({
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - (n - 1));
-    set(isoDay(start), isoDay(end));
+    set(localISO(start), localISO(end));
   };
   const field = "input px-2 py-1.5 text-sm";
   return (

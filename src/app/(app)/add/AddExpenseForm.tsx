@@ -1,11 +1,11 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addExpenseAction } from "@/lib/actions/expenses";
 import { enqueueExpense } from "@/lib/offlineQueue";
 import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
-import { formatINR, todayISO } from "@/lib/format";
+import { formatINR, localISO, todayISO } from "@/lib/format";
 import { CategorySelect } from "@/components/CategorySelect";
 import {
   SplitShares,
@@ -48,6 +48,8 @@ export function AddExpenseForm({
   onSaved?: (saved: { item: string; amount: number; offline: boolean }) => void;
 }) {
   const [date, setDate] = useState(todayISO());
+  // Once in the browser, default to the local day rather than the server's UTC one.
+  useEffect(() => setDate((d) => (d === todayISO() ? localISO() : d)), []);
   const [category, setCategory] = useState(categories[0]);
   const [item, setItem] = useState("");
   const [amount, setAmount] = useState("");

@@ -90,11 +90,6 @@ export function itemsToRows(items: PositionedText[]): TextRow[] {
   });
 }
 
-/** Lines per page, in reading order. */
-export function itemsToLines(items: PositionedText[]): string[] {
-  return itemsToRows(items).map((r) => r.text);
-}
-
 /** Lines and positioned rows of a page. */
 export function itemsToPage(items: PositionedText[]): PageText {
   const rows = itemsToRows(items);
