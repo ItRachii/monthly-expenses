@@ -100,8 +100,11 @@ export function ExpenseFeed({
   const [sort, onSort] = useSort<SortKey>({ key: "date", dir: "desc" }, ["date", "amount"]);
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
-  // Why the last delete failed, shown in the dialog it was started from.
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Why the last delete failed, and which dialog started it ("bulk", or the
+  // expense's id): shown there only, so a refusal that arrives after its
+  // dialog was closed never turns up in the next one.
+  const [deleteError, setDeleteError] = useState<{ from: "bulk" | number; text: string } | null>(null);
+  const errorFor = (from: "bulk" | number) => (deleteError?.from === from ? deleteError.text : null);
 
   // Opened from a notification: highlight what it was about, or show what
   // was deleted crossed out where it was, on that month, filters cleared.
@@ -263,7 +266,7 @@ export function ExpenseFeed({
     startTransition(async () => {
       const res = await deleteExpenseAction(id).catch(() => null);
       if (res?.ok) setActionsFor(null);
-      else setDeleteError(res?.error ?? "Something went wrong.");
+      else setDeleteError({ from: id, text: res?.error ?? "Something went wrong." });
       router.refresh();
     });
   }
@@ -288,7 +291,7 @@ export function ExpenseFeed({
       }
       setSelected(new Set(failed));
       if (failed.length === 0) setConfirmBulk(false);
-      else setDeleteError(`${failed.length} of ${ids.length} could not be deleted. ${reason}`);
+      else setDeleteError({ from: "bulk", text: `${failed.length} of ${ids.length} could not be deleted. ${reason}` });
       router.refresh();
     });
   }
@@ -321,7 +324,10 @@ export function ExpenseFeed({
           type="button"
           className="chip-btn max-md:hidden"
           disabled={picked.length === 0 || pending}
-          onClick={() => setConfirmBulk(true)}
+          onClick={() => {
+            setDeleteError(null);
+            setConfirmBulk(true);
+          }}
         >
           <TrashIcon className="h-4 w-4 text-negative" />
           Delete
@@ -456,7 +462,10 @@ export function ExpenseFeed({
                   pending={pending}
                   onToggle={() => toggle(r.id)}
                   onEdit={() => setEditing(r)}
-                  onDelete={() => setActionsFor({ expense: r, confirm: true })}
+                  onDelete={() => {
+                    setDeleteError(null);
+                    setActionsFor({ expense: r, confirm: true });
+                  }}
                 />
                 ),
               )}
@@ -484,7 +493,10 @@ export function ExpenseFeed({
                   category={r.category || "Uncategorised"}
                   inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
                   isNew={fresh.has(r.id)}
-                  onOpenActions={() => setActionsFor({ expense: r, confirm: false })}
+                  onOpenActions={() => {
+                    setDeleteError(null);
+                    setActionsFor({ expense: r, confirm: false });
+                  }}
                 />
               );
             })}
@@ -499,7 +511,7 @@ export function ExpenseFeed({
           total={pickedTotal}
           grouped={!isPersonal}
           pending={pending}
-          error={deleteError}
+          error={errorFor("bulk")}
           onConfirm={removePicked}
           onClose={() => {
             setConfirmBulk(false);
@@ -513,7 +525,7 @@ export function ExpenseFeed({
           expense={actionsFor.expense}
           startConfirming={actionsFor.confirm}
           pending={pending}
-          error={deleteError}
+          error={errorFor(actionsFor.expense.id)}
           onEdit={() => {
             setEditing(actionsFor.expense);
             closeActions();
