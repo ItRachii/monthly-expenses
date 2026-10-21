@@ -44,11 +44,12 @@ const RUPEES = /(?:₹|rs\.?\s*)\d/i;
 // Zepto says "3 items in order". OCR may read the icon before a heading as a
 // stray symbol, hence the leading non-letters.
 // BigBasket: "Product details 3 products · ₹211"; Blinkit: "1 item in this order".
+// OCR may run the next word in: "Product details9 products".
 const ITEMS_HEADER =
-  /^[^a-z0-9]*(?:item\s*details|product\s*details|(?:\d+\s+)?items?\s+in\s+(?:this\s+|your\s+)?order)\b/i;
+  /^[^a-z0-9]*(?:item\s*details|product\s*details|(?:\d+\s+)?items?\s+in\s+(?:this\s+|your\s+)?order)(?![a-z])/i;
 const BILL_HEADER = /^[^a-z0-9]*(?:total\s+)?(?:order\s+)?(?:bill|payment|price)\s*(?:details|summary)\b/i;
 // The order's own heading, not a product: "Completed | 4 items, ₹177", "3 items • Ulsoor".
-const ORDER_META = /\b\d+\s*(?:items?|products?)\b/i;
+const ORDER_META = /(?<![\d.])\d+\s*(?:items?|products?)\b/i;
 
 /** The last amount on a line, negative when written "-₹30". */
 function lastAmount(line: string): number | null {
@@ -115,6 +116,24 @@ export function orderRows(text: string): { line: string; part: RowPart }[] {
     if (ORDER_META.test(line)) return { line, part: "order-heading" };
     return { line, part: "product" };
   });
+}
+
+/** Where a screenshot sits in a long order: its top (the order heading or
+ * the start of the items), its end (the order total), or neither. */
+export function screenCue(rows: string[]): "top" | "end" | null {
+  if (rows.some((l) => ITEMS_HEADER.test(l.trim()))) return "top";
+  if (rows.some((l) => ORDER_TOTAL.test(l) && lastAmount(l) != null)) return "end";
+  return null;
+}
+
+/** How many items the order says it has: "4 items", "9 products", "1 item in this order". */
+export function orderedCount(text: string): number | null {
+  for (const { line, part } of orderRows(text)) {
+    if (part !== "before-items" && part !== "items-heading" && part !== "order-heading") continue;
+    const m = line.match(/(?<![\d.])(\d{1,3})\s*(?:items?|products?)\b/i);
+    if (m && Number(m[1]) > 0) return Number(m[1]);
+  }
+  return null;
 }
 
 /** One screenshot's product rows, as text for the receipt parser. */

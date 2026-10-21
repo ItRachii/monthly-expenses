@@ -6,7 +6,8 @@
 // they are only the fallback for a scanner that sends no cells. Pure, so it
 // runs anywhere and is unit-testable.
 
-import { itemsToLines, type PositionedText } from "../statements/lines";
+import { itemsToRows, type PositionedText } from "../statements/lines";
+import type { Tag } from "./pii";
 
 export interface ScanItem {
   text: string;
@@ -17,6 +18,10 @@ export interface ScanItem {
   struck?: boolean;
   /** The OCR piece this one was split from, when it held a struck price. */
   from?: string;
+  /** Developer view only: a personal detail, masked, and why it was taken for one. */
+  pii?: Tag;
+  /** Developer view only: an order number that might pass for a phone, and why it is not one. */
+  ref?: Tag;
 }
 
 export interface ScanResult {
@@ -89,9 +94,21 @@ export function dropStruckPrices(pieces: ScanItem[]): ScanItem[] {
  * guessed from the layout instead (struckPrices, unstrikePrice).
  */
 export function scanToLines(result: ScanResult, opts: { order?: boolean } = {}): string[] {
+  return scanToRows(result, opts).map((r) => r.text);
+}
+
+/** A rebuilt row and where it sits: `y` is its top, as a share of the page height (0 top, 1 bottom). */
+export interface ScanRow {
+  text: string;
+  page: number;
+  y: number;
+}
+
+/** The rows of scanToLines, each with its position on the page. */
+export function scanToRows(result: ScanResult, opts: { order?: boolean } = {}): ScanRow[] {
   const heights = new Map(result.pages.map((p) => [p.page, p.height]));
   const byPage = new Map<number, PositionedText[]>();
-  const all = (result.cells?.length ? result.cells : result.items).filter((p) => !p.struck);
+  const all = (result.cells?.length ? result.cells : result.items).filter((p) => !p.struck && !p.pii);
   const guess = opts.order && !result.strikeCheck;
   const pieces = guess ? dropStruckPrices(all).map((p) => ({ ...p, text: unstrikePrice(p.text) })) : all;
   for (const it of pieces) {
@@ -110,5 +127,12 @@ export function scanToLines(result: ScanResult, opts: { order?: boolean } = {}):
   }
   return Array.from(byPage.keys())
     .sort((a, b) => a - b)
-    .flatMap((page) => itemsToLines(byPage.get(page)!));
+    .flatMap((page) => {
+      const height = heights.get(page) ?? 1;
+      return itemsToRows(byPage.get(page)!).map((r) => ({
+        text: r.text,
+        page,
+        y: Math.min(1, Math.max(0, (height - r.y - r.h) / height)),
+      }));
+    });
 }

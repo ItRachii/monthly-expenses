@@ -76,7 +76,9 @@ export async function POST(req: Request) {
   const out = await scanFile(data, { order: params.get("order") === "1" });
   if (out.ok)
     return NextResponse.json(
-      { text: out.lines.join("\n"), ...(debug ? { debug: out.result } : {}) },
+      // rows: each line with its height on the page, so screenshots of one
+      // long order can be put in order and their overlaps found.
+      { text: out.lines.join("\n"), rows: out.rows, ...(debug ? { debug: out.result } : {}) },
       { headers: noStore },
     );
   const status = { unavailable: 503, unsupported: 415, "too-large": 413, "no-text": 422 }[out.reason];

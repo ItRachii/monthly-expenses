@@ -5,6 +5,7 @@ import { FileDropzone } from "@/components/FileDropzone";
 import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
 import { struckPrices, unstrikePrice, type ScanItem, type ScanResult } from "@/lib/scanner/lines";
+import type { Tag } from "@/lib/scanner/pii";
 import type { ParsedReceipt } from "@/lib/receipt/types";
 import { ORDER_APPS, OTHER_APP } from "@/lib/receipt/quickCommerce";
 import { billRows, orderRows, settleOrder, type BillReading, type RowPart } from "@/lib/receipt/orderBill";
@@ -65,6 +66,15 @@ function reading(r: BillReading): string {
   }
 }
 
+// How each kind of detail is drawn and named.
+const TAG_STYLE: Record<Tag["kind"], { stroke: string; text: string; label: string }> = {
+  phone: { stroke: "stroke-orange-500", text: "text-orange-500", label: "Phone number" },
+  address: { stroke: "stroke-fuchsia-500", text: "text-fuchsia-500", label: "Address" },
+  name: { stroke: "stroke-pink-500", text: "text-pink-500", label: "Name" },
+  email: { stroke: "stroke-teal-500", text: "text-teal-500", label: "Email or UPI id" },
+  "order-id": { stroke: "stroke-sky-500", text: "text-sky-500", label: "Order number (kept)" },
+};
+
 /** The order reading of one screenshot, with every step kept for display. */
 function orderView(run: Run) {
   const all = run.result.cells?.length ? run.result.cells : run.result.items;
@@ -105,12 +115,14 @@ function Overlay({
   showBlocks,
   struck = [],
   merged = [],
+  showPii = false,
 }: {
   run: Run;
   showCells: boolean;
   showBlocks: boolean;
   struck?: ScanItem[];
   merged?: ScanItem[];
+  showPii?: boolean;
 }) {
   const page = run.result.pages[0];
   if (!page) return null;
@@ -127,6 +139,11 @@ function Overlay({
         {showCells ? (run.result.cells ?? []).filter((it) => it.page === page.page).map((it, i) => rect(it, i, "stroke-primary [stroke-width:2]")) : null}
         {struck.map((it, i) => rect(it, i, "stroke-negative [stroke-width:4]"))}
         {merged.map((it, i) => rect(it, i, "stroke-warning [stroke-width:4]"))}
+        {showPii
+          ? (run.result.cells ?? run.result.items)
+              .filter((it) => it.page === page.page && (it.pii || it.ref))
+              .map((it, i) => rect(it, i, `${TAG_STYLE[(it.pii ?? it.ref)!.kind].stroke} [stroke-width:4] [stroke-dasharray:10_4]`))
+          : null}
       </svg>
     </div>
   );
@@ -140,6 +157,7 @@ export function ScanInspector() {
   const [run, setRun] = useState<Run | null>(null);
   const [showCells, setShowCells] = useState(true);
   const [showBlocks, setShowBlocks] = useState(false);
+  const [showPii, setShowPii] = useState(true);
   const [app, setApp] = useState<string>(OTHER_APP);
 
   const check = useCallback(async () => {
@@ -282,6 +300,10 @@ export function ScanInspector() {
                 <span className="text-primary-light">OCR pieces</span> (used by the app)
               </label>
               <label className="flex items-center gap-2">
+                <input type="checkbox" checked={showPii} onChange={(e) => setShowPii(e.target.checked)} />
+                Personal details (dashed, by kind)
+              </label>
+              <label className="flex items-center gap-2">
                 <input type="checkbox" checked={showBlocks} onChange={(e) => setShowBlocks(e.target.checked)} />
                 <span className="text-muted">Layout blocks</span> (dashed)
               </label>
@@ -295,6 +317,7 @@ export function ScanInspector() {
               </div>
             ) : null}
             <Overlay
+              showPii={showPii}
               run={run}
               showCells={showCells}
               showBlocks={showBlocks}
@@ -303,8 +326,10 @@ export function ScanInspector() {
             />
           </div>
 
+          <PersonalDetails run={run} />
+
           <div className="card space-y-2">
-            <h2 className="section-title">5. Rows rebuilt ({rows.length})</h2>
+            <h2 className="section-title">6. Rows rebuilt ({rows.length})</h2>
             <ol className="space-y-1 font-mono text-xs">
               {rows.map((r, i) => (
                 <li key={i} className="flex gap-3">
@@ -317,7 +342,7 @@ export function ScanInspector() {
 
           {ov ? <OrderSections ov={ov} /> : (
           <div className="card space-y-3">
-            <h2 className="section-title">6. What the parser made</h2>
+            <h2 className="section-title">7. What the parser made</h2>
             <table className="data-table">
               <tbody>
                 <tr><td>Merchant</td><td>{run.parsed.merchant}</td></tr>
@@ -381,7 +406,7 @@ function OrderSections({ ov }: { ov: ReturnType<typeof orderView> }) {
   return (
     <>
       <div className="card space-y-2">
-        <h2 className="section-title">6. Struck-out prices</h2>
+        <h2 className="section-title">7. Struck-out prices</h2>
         {ov.fromImage ? (
           <>
             <p className="text-sm text-muted">
@@ -443,7 +468,7 @@ function OrderSections({ ov }: { ov: ReturnType<typeof orderView> }) {
       </div>
 
       <div className="card space-y-2">
-        <h2 className="section-title">7. How each row was read</h2>
+        <h2 className="section-title">8. How each row was read</h2>
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>
@@ -464,7 +489,7 @@ function OrderSections({ ov }: { ov: ReturnType<typeof orderView> }) {
       </div>
 
       <div className="card space-y-3">
-        <h2 className="section-title">8. The order, as Add Expense shows it</h2>
+        <h2 className="section-title">9. The order, as Add Expense shows it</h2>
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>
@@ -528,5 +553,51 @@ function OrderSections({ ov }: { ov: ReturnType<typeof orderView> }) {
         )}
       </div>
     </>
+  );
+}
+
+/** What was taken for a personal detail and left out of everything the app reads, and the order numbers that were not. */
+function PersonalDetails({ run }: { run: Run }) {
+  const pieces = (run.result.cells?.length ? run.result.cells : run.result.items).filter((p) => p.pii || p.ref);
+  return (
+    <div className="card space-y-2">
+      <h2 className="section-title">5. Personal details</h2>
+      <p className="text-sm text-muted">
+        Left out of everything the app reads, so they are never parsed, shown or saved; masked here. A 10-digit number is a
+        phone only when nothing marks it as an order or reference number: a label beside it (&quot;Order ID&quot;,
+        &quot;Invoice no.&quot;) or letters and hyphens glued to it (&quot;ORD…&quot;, &quot;BNN-…&quot;). Addresses need two signs
+        (a place word, a city or state, a PIN code, a comma list), or one beside an address label or another address line.
+      </p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        {Object.values(TAG_STYLE).map((t) => (
+          <span key={t.label} className={t.text}>
+            {t.label}
+          </span>
+        ))}
+      </div>
+      {pieces.length === 0 ? (
+        <div className="text-sm text-muted">None on this screenshot.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr><th>Found</th><th>As</th><th>Why</th></tr>
+            </thead>
+            <tbody>
+              {pieces.map((p, i) => {
+                const tag = (p.pii ?? p.ref)!;
+                return (
+                  <tr key={i}>
+                    <td className="font-mono text-xs">{p.text}</td>
+                    <td className={TAG_STYLE[tag.kind].text}>{TAG_STYLE[tag.kind].label}</td>
+                    <td>{tag.why}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

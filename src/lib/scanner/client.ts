@@ -4,10 +4,11 @@
 // crash. Server-only: it holds DOCLING_SECRET.
 
 import { deriveKey, openResponse, sealRequest } from "./envelope";
-import { scanToLines, type ScanResult } from "./lines";
+import { scanToRows, type ScanResult, type ScanRow } from "./lines";
+import { withoutPii } from "./pii";
 
 export type ScanOutcome =
-  | { ok: true; lines: string[]; result: ScanResult & { ms?: number } }
+  | { ok: true; lines: string[]; rows: ScanRow[]; /** Personal details masked. */ result: ScanResult & { ms?: number } }
   | { ok: false; reason: "unavailable" | "unsupported" | "too-large" | "no-text" };
 
 const HEALTH_TIMEOUT_MS = 5_000;
@@ -95,7 +96,11 @@ export async function scanFile(data: Uint8Array, opts: { order?: boolean } = {})
   try {
     const plain = openResponse(cfg.key, Buffer.from(await res.arrayBuffer()), replyNonce, sealed.nonce);
     const result = JSON.parse(plain.toString("utf8")) as ScanResult & { ms?: number };
-    return { ok: true, lines: scanToLines(result, opts), result };
+    // Personal details (phone, address, names, emails) go no further than
+    // here: the text has none, and the result kept for the developer view
+    // has them masked, with why each was taken for one.
+    const rows = scanToRows(withoutPii(result), opts);
+    return { ok: true, lines: rows.map((r) => r.text), rows, result: withoutPii(result, true) };
   } catch {
     console.error("Scanner reply could not be decrypted or read.");
     return { ok: false, reason: "unavailable" };
