@@ -439,6 +439,17 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   const gg = parseSheet([gstGap]);
   check("sheet: a GST summary that disagrees with the lines read is flagged", gg.gstBilled === 105.92 && gg.warnings.some((w) => /GST summary says ₹105\.92.*₹34\.74/.test(w)), JSON.stringify(gg.warnings));
 
+  // The separator is judged outside quotes: a semicolon file whose quoted
+  // descriptions and amounts are full of commas is still a semicolon file.
+  const semi = parseCsv('Date;Description;Amount\n01/08/2026;"SWIGGY, BANGALORE, IN";"1,23,456.00"\n');
+  check("csv: quoted commas do not change the separator", semi.length === 2 && semi[1].length === 3 && semi[1][1] === "SWIGGY, BANGALORE, IN" && semi[1][2] === "1,23,456.00", JSON.stringify(semi));
+  const semiRows = parseSheet([semi]).rows;
+  check("csv: that semicolon file's transaction is read", semiRows.length === 1 && semiRows[0].total === 123456, JSON.stringify(semiRows.map((r) => [r.date, r.description, r.total])));
+  const plain = parseCsv('Date,Description,Amount\n01/08/2026,"ZOMATO; DELHI",350.00\n');
+  check("csv: a comma file with a quoted semicolon stays a comma file", plain[1].length === 3 && plain[1][1] === "ZOMATO; DELHI", JSON.stringify(plain));
+  const tabs = parseCsv('Date\tDescription\tAmount\n01/08/2026\t"Tea, ""special"""\t20\n');
+  check("csv: tabs with a doubled quote inside a field", tabs[1].length === 3 && tabs[1][1] === 'Tea, "special"', JSON.stringify(tabs));
+
   // A phone number is ten digits on their own, not the tail of a longer reference.
   const longRef = redactLine("08/07/2026 IGST-VPS2607987654321098 0 110.25");
   check("redact: a long reference stays one token, not a reference plus [phone]", longRef === "08/07/2026 IGST-VPS[ref] 0 110.25", longRef);

@@ -30,12 +30,27 @@ export type Grid = CellValue[][];
 
 // ---- CSV --------------------------------------------------------------
 
+/**
+ * How often `ch` separates fields: outside quotes only, so the commas in
+ * "SWIGGY, BANGALORE, IN" or "1,23,456.00" do not make a semicolon file
+ * look comma separated. A doubled quote inside a field toggles twice and
+ * changes nothing.
+ */
+function countUnquoted(text: string, ch: string): number {
+  let n = 0;
+  let quoted = false;
+  for (const c of text) {
+    if (c === '"') quoted = !quoted;
+    else if (c === ch && !quoted) n++;
+  }
+  return n;
+}
+
 /** Splits CSV text into a grid. Quoted fields, doubled quotes, CRLF, and comma, semicolon or tab delimiters. */
 export function parseCsv(text: string): Grid {
   const src = text.replace(/^﻿/, "");
   const sample = src.split(/\r?\n/).slice(0, 20).join("\n");
-  const count = (ch: string) => sample.split(ch).length - 1;
-  const delim = [",", ";", "\t"].sort((a, b) => count(b) - count(a))[0];
+  const delim = [",", ";", "\t"].sort((a, b) => countUnquoted(sample, b) - countUnquoted(sample, a))[0];
   const rows: Grid = [];
   let row: CellValue[] = [];
   let field = "";
