@@ -10,9 +10,10 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+/** The ISO date, or null when there is no such day ("31/02/2026", "31/04/2026", "29/02/2025"). */
 function iso(y: number, m: number, d: number): string | null {
-  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
   const year = y < 100 ? 2000 + y : y;
+  if (m < 1 || m > 12 || d < 1 || d > new Date(Date.UTC(year, m, 0)).getUTCDate()) return null;
   return `${year}-${pad(m)}-${pad(d)}`;
 }
 

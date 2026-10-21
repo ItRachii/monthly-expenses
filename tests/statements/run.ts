@@ -12,6 +12,7 @@ import { detectBank, parseStatement } from "../../src/lib/statements/parse";
 import { amountCell, parseCsv, parseSheet, type Grid } from "../../src/lib/statements/sheet";
 import { readXlsx } from "../../src/lib/statements/xlsx";
 import { redactLine } from "../../src/lib/statements/redact";
+import { readDate } from "../../src/lib/statements/dates";
 import { applyKeys, canonicalDigits, gstLineageName, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
 
 const dir = join(__dirname, "fixtures");
@@ -449,6 +450,11 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("csv: a comma file with a quoted semicolon stays a comma file", plain[1].length === 3 && plain[1][1] === "ZOMATO; DELHI", JSON.stringify(plain));
   const tabs = parseCsv('Date\tDescription\tAmount\n01/08/2026\t"Tea, ""special"""\t20\n');
   check("csv: tabs with a doubled quote inside a field", tabs[1].length === 3 && tabs[1][1] === 'Tea, "special"', JSON.stringify(tabs));
+
+  // Only days the month has: a misread "31/02/2026" is not a date.
+  const day = (t: string) => readDate(t.split(" "), 0)?.date ?? null;
+  check("dates: impossible days are not dates", ["31/02/2026", "30/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].every((t) => day(t) === null), JSON.stringify(["31/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].map(day)));
+  check("dates: real ones still are", day("29/02/2028") === "2028-02-29" && day("31/12/2026") === "2026-12-31" && day("30/04/2026") === "2026-04-30" && day("12-Aug-26") === "2026-08-12" && day("12 Aug 2026") === "2026-08-12", JSON.stringify(["29/02/2028", "31/12/2026", "30/04/2026", "12-Aug-26", "12 Aug 2026"].map(day)));
 
   // A phone number is ten digits on their own, not the tail of a longer reference.
   const longRef = redactLine("08/07/2026 IGST-VPS2607987654321098 0 110.25");
