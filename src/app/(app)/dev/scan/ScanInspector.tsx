@@ -134,7 +134,7 @@ function Overlay({
         {struck.map((it, i) => rect(it, i, "stroke-negative [stroke-width:4]"))}
         {merged.map((it, i) => rect(it, i, "stroke-warning [stroke-width:4]"))}
         {showPii
-          ? (run.result.cells ?? run.result.items)
+          ? (run.result.cells?.length ? run.result.cells : run.result.items)
               .filter((it) => it.page === page.page && (it.pii || it.ref))
               .map((it, i) => rect(it, i, `${TAG_STYLE[(it.pii ?? it.ref)!.kind].stroke} [stroke-width:4] [stroke-dasharray:10_4]`))
           : null}

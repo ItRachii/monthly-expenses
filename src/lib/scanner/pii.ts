@@ -194,22 +194,25 @@ export function withoutPii(result: ScanResult, keep = false): ScanResult {
     const t = tags.get(p);
     return t && t.kind !== "order-id" ? t : null;
   };
-  const clean = (list: ScanItem[]) =>
-    keep
-      ? list.map((p) => {
-          const t = tags.get(p);
-          if (!t) return p;
-          if (t.kind === "order-id") return { ...p, ref: t };
-          // A later part of a split piece shows nothing: its first two
-          // characters are already the middle of the detail.
-          const later = p.from != null && !p.from.startsWith(p.text);
-          return { ...p, text: later ? p.text.replace(/[\p{L}\p{N}]/gu, "•") : mask(p.text), from: p.from != null ? mask(p.from) : undefined, pii: t };
-        })
-      : list.filter((p) => !personal(p));
+  // For the developer view: a found piece masked and tagged, an order number tagged.
+  const tagged = (p: ScanItem): ScanItem => {
+    const t = tags.get(p);
+    if (!t) return p;
+    if (t.kind === "order-id") return { ...p, ref: t };
+    // A later part of a split piece shows nothing: its first two
+    // characters are already the middle of the detail.
+    const later = p.from != null && !p.from.startsWith(p.text);
+    return { ...p, text: later ? p.text.replace(/[\p{L}\p{N}]/gu, "•") : mask(p.text), from: p.from != null ? mask(p.from) : undefined, pii: t };
+  };
+  const clean = (list: ScanItem[]) => (keep ? list.map(tagged) : list.filter((p) => !personal(p)));
   // Docling's layout blocks hold the same text: drop (or mask) any that
   // overlaps a personal piece.
   const hit = [...tags].filter(([, t]) => t.kind !== "order-id").map(([p]) => p);
   const overlaps = (a: ScanItem) => hit.some((p) => p.page === a.page && p.box[0] < a.box[2] && a.box[0] < p.box[2] && p.box[1] < a.box[3] && a.box[1] < p.box[3]);
-  const items = keep ? result.items.map((it) => (overlaps(it) ? { ...it, text: mask(it.text) } : it)) : result.items.filter((it) => !overlaps(it));
+  // A scanner that sends no OCR pieces (an older image) is read from these
+  // blocks, so they carry the tags themselves.
+  const items = keep
+    ? result.items.map((it) => (tags.has(it) ? tagged(it) : overlaps(it) ? { ...it, text: mask(it.text) } : it))
+    : result.items.filter((it) => !overlaps(it));
   return { ...result, items, cells: result.cells ? clean(result.cells) : result.cells };
 }

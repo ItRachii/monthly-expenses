@@ -122,6 +122,18 @@ const zpTags = findPii(zp);
 const zpSplit = zp.cells!.filter((c) => c.from != null);
 check("struck prices are not personal details", zpSplit.length > 0 && zpSplit.every((c) => !zpTags.has(c)), `${zpSplit.length} split pieces`);
 
+// An older scanner sends layout blocks only, no OCR pieces: the details are
+// found on the blocks, and the developer view tags them there.
+const blocksOnly: ScanResult = {
+  pages: [{ page: 1, width: 1080, height: 2400 }],
+  items: [piece("Asha Verma", 100), piece("9123456780", 145), piece("Milk ₹30", 400)],
+};
+const bo = withoutPii(blocksOnly, true).items;
+check("blocks only: the phone is tagged and masked", bo[1].pii?.kind === "phone" && bo[1].text === "91••••••••", JSON.stringify(bo[1]));
+check("blocks only: the name is tagged and masked", bo[0].pii?.kind === "name" && !/Asha|Verma/.test(bo[0].text), JSON.stringify(bo[0]));
+check("blocks only: other blocks are left alone", !bo[2].pii && bo[2].text === "Milk ₹30");
+check("blocks only: the details never reach the text", JSON.stringify(scanToLines(withoutPii(blocksOnly))) === JSON.stringify(["Milk ₹30"]), JSON.stringify(scanToLines(withoutPii(blocksOnly))));
+
 if (failures) {
   console.error(`${failures} check(s) failed`);
   process.exit(1);
