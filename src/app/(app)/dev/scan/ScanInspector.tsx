@@ -577,9 +577,15 @@ function StruckSection({ sv }: { sv: ReturnType<typeof strikeView> }) {
 function OrderSections({ ov, complete }: { ov: ReturnType<typeof orderView>; complete: Completeness }) {
   const { check, shares } = ov.settled;
   const bill = ov.order.bill;
+  // Each product row's place among the product rows, as readOrder counts
+  // them, so a row shows the item read from it, not the first item whose
+  // name it starts with ("Milk ₹30" for the "Milk Bread ₹40" row).
+  let seen = 0;
+  const productNo = ov.parts.map((r) => (r.part === "product" ? seen++ : -1));
   // A product row with a price is an item; one without is a detail line ("1 pc (250 ml)").
-  const became = (line: string) => {
-    const it = ov.order.items.find((x) => line.trim().startsWith(x.read));
+  const became = (line: string, k: number) => {
+    const it =
+      ov.order.items.find((x) => x.row === k) ?? ov.order.items.find((x) => x.row === -1 && line.trim().startsWith(x.read));
     if (it) return `Item: ${it.description}, ${formatINR(it.amount)}`;
     const text = plainText(line).trim();
     const of = text.length > 2 ? ov.order.items.find((x) => x.description.endsWith(text)) : undefined;
@@ -603,7 +609,7 @@ function OrderSections({ ov, complete }: { ov: ReturnType<typeof orderView>; com
                   <td>{i + 1}</td>
                   <td className="font-mono text-xs">{plainText(r.line)}</td>
                   <td>{PART[r.part]}</td>
-                  <td>{r.part === "product" ? became(r.line) : reading(ov.bills[i].reading)}</td>
+                  <td>{r.part === "product" ? became(r.line, productNo[i]) : reading(ov.bills[i].reading)}</td>
                 </tr>
               ))}
             </tbody>

@@ -31,6 +31,11 @@ export interface OrderItem {
   amount: number;
   /** Read again from an overlapping screenshot. */
   repeat: boolean;
+  /**
+   * Which of the order's product rows it was read from, counting down all
+   * the screenshots' product rows from 0; -1 when the row was not found.
+   */
+  row: number;
 }
 
 /** One order from the text of each of its screenshots; `app` is where it was ordered from. */
@@ -87,6 +92,7 @@ export function readOrder(texts: string[], app?: string): { items: OrderItem[]; 
       qty: clean.qty ?? (count ? Number(count[1] ?? count[2]) : null) ?? it.qty,
       amount: it.amount,
       repeat: repeats[n],
+      row,
     };
   });
   // Some apps (Zepto with a coupon) print item prices with the discount

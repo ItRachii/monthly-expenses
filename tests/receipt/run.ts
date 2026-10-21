@@ -142,6 +142,14 @@ check("sections are per screenshot", same(split.charges.map((c) => c.amount), [1
 check("a dash before a price is not a discount", !isBillLine("Atta 5kg - ₹250") && isBillLine("Cashback -₹20") && isBillLine("Free cash for you -₹75.00"));
 check("Item Bill is the item total", isBillLine("Item Bill ₹206.00"));
 
+// Each item knows the product row it was read from, so the scan inspector
+// can show the right item for a row whose name another item's starts with.
+const milk = readOrder(["2 items in this order\nMilk ₹30\nMilk Bread ₹40\nBill details\nItem total ₹70\nGrand total ₹70"]).items;
+check("items carry their product row", JSON.stringify(milk.map((it) => [it.read, it.row])) === JSON.stringify([["Milk", 0], ["Milk Bread", 1]]), JSON.stringify(milk.map((it) => [it.read, it.row])));
+check("the Milk Bread row is Milk Bread, not Milk", milk.find((it) => it.row === 1)?.description === "Milk Bread");
+const across = readOrder(["ITEM DETAILS\nMilk ₹30\nBread ₹40", "Bread ₹40\nEggs ₹70\nBill Details\nGrand Total ₹140"]).items;
+check("rows count on across screenshots", JSON.stringify(across.map((it) => it.row)) === JSON.stringify([0, 1, 2, 3]), JSON.stringify(across.map((it) => [it.read, it.row])));
+
 if (failures) {
   console.error(`${failures} check(s) failed`);
   process.exit(1);
