@@ -40,6 +40,18 @@ export function normalizeItem(s: string): string {
 const cents = (n: number) => Math.round(n * 100);
 
 /**
+ * Whether two descriptions read the same, for a likely match. Letters of
+ * any script count here ("चाय" is not "दूध", though normalizeItem makes
+ * both empty), and an empty description matches nothing. Import keys keep
+ * normalizeItem, so rows imported before still key the same.
+ */
+function sameItem(a: string, b: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const x = norm(a);
+  return x !== "" && x === norm(b);
+}
+
+/**
  * Which time this exact row (same day, amount and description) appears in
  * the statement, from 1. Two identical coffees on one day are two rows,
  * not a duplicate, and keep apart on every re-read.
@@ -82,13 +94,12 @@ export function matchDuplicates(
 
   for (const r of incoming) {
     if (out.has(r.index)) continue;
-    const item = normalizeItem(r.item);
     const hit = existing.find(
       (e) =>
         !used.has(e.id) &&
         e.date === r.date &&
         cents(e.amount) === cents(r.amount) &&
-        (normalizeItem(e.item) === item || (cardId !== null && e.cardId === cardId)),
+        (sameItem(r.item, e.item) || (cardId !== null && e.cardId === cardId)),
     );
     if (!hit) continue;
     used.add(hit.id);
