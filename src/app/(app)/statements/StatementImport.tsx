@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PdfPasswordError, readPdfPages } from "@/lib/statements/pdf";
@@ -139,6 +139,11 @@ export function StatementImport({
   // A file the parser could not place with HDFC or ICICI: a popup says which
   // banks are supported before the generic-rules review is shown.
   const [unsupported, setUnsupported] = useState(false);
+  // Which read of a file is current. A read (or its duplicate check) that
+  // finishes after the statement was closed or another file picked is
+  // dropped: row ids repeat across files ("page-index"), so its results
+  // would land on the wrong rows.
+  const readNo = useRef(0);
 
   // Categories already used in the chosen destination, so the picker offers them.
   useEffect(() => {
@@ -154,6 +159,8 @@ export function StatementImport({
   }, [ctx]);
 
   async function run(f: File, pw?: string) {
+    const mine = ++readNo.current;
+    const current = () => mine === readNo.current;
     setError(null);
     setPhase("reading");
     try {
@@ -169,6 +176,7 @@ export function StatementImport({
       // Loan numbers and references become keyed hashes here; the digits
       // are forgotten before anything is shown or sent.
       await applyKeys(p, loanSalt);
+      if (!current()) return;
       p.warnings.push(...lineageWarnings(resolveLineage(p.rows, known)));
       setSummarySaved(false);
       setParsed(p);
@@ -192,7 +200,7 @@ export function StatementImport({
         const occ = occurrenceMap(p.rows);
         checkStatementDuplicatesAction({ rows: debits.map((r) => payloadOf(r, r.category, occ)), card: cardOf(p) })
           .then((res) => {
-            if (!res.ok || res.duplicates.length === 0) return;
+            if (!current() || !res.ok || res.duplicates.length === 0) return;
             const map = new Map(res.duplicates.map((d) => [debits[d.index].id, d]));
             setOnRecord(map);
             setSelected((sel) => new Set([...sel].filter((id) => !map.has(id))));
@@ -200,6 +208,7 @@ export function StatementImport({
           .catch(() => {});
       }
     } catch (e) {
+      if (!current()) return;
       setPhase("pick");
       if (e instanceof PdfPasswordError) {
         setNeedPassword(true);
@@ -220,6 +229,7 @@ export function StatementImport({
   }
 
   function reset() {
+    readNo.current++;
     setFile(null);
     setParsed(null);
     setUnsupported(false);
