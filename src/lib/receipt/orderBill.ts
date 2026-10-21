@@ -17,6 +17,8 @@ export interface OrderBill {
   itemTotal: number | null;
   /** What was paid: "Grand Total", "To Pay", "Bill Total", ... */
   orderTotal: number | null;
+  /** Discounts the item prices already have taken off (set by readOrder): not taken off again. */
+  inPrices?: Charge[];
 }
 
 // Shown for information only: "You saved ₹45" is not taken off the total.
@@ -182,7 +184,14 @@ export function billRows(screen: string): { line: string; reading: BillReading }
   });
 }
 
-const label = (line: string) => line.replace(AMOUNTS, " ").replace(/\s+/g, " ").replace(/[:\s|+-]+$/, "").trim();
+// The row without its amounts; a number that is part of a word stays ("ADVANTAGE50").
+const label = (line: string) =>
+  line
+    .replace(/(?<![A-Za-z\d])(-|−)?\s*(?:₹|rs\.?\s*)?\d[\d,]*(?:\.\d{1,2})?(?![A-Za-z\d])/gi, " ")
+    .replace(/[\u2063]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[:\s|+-]+$/, "")
+    .trim();
 
 /** Reads the bill summary out of an order's text: one screenshot's, or a list of them. */
 export function readOrderBill(text: string | string[]): OrderBill {

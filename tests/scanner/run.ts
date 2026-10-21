@@ -199,8 +199,8 @@ check("a price in another column is kept", twoColumns.length === 2);
 // returned them; addresses and order numbers replaced. Each must come out
 // with the right items and add up to what was paid.
 const orders: [string, string, [string, number | null, number][], number][] = [
-  ["zepto", "Zepto", [["Nandini Toned Fresh Milk | Pouch", null, 48], ["Zyro by Karan Aujla | Zero Sugar Tonic", null, 106], ["Kinley Soda | Refreshing Carbonated", null, 20]], 174],
-  ["zepto2", "Zepto", [["Tata Salt | Free Flowing and lodized", null, 29], ["Daily Good Saunf - Fennel", null, 65], ["Tata Sampann Coriander Powder With", null, 41], ["24 Mantra Organic Sugar", null, 117]], 252],
+  ["zepto", "Zepto", [["Nandini Toned Fresh Milk | Pouch", null, 48], ["Zyro by Karan Aujla | Zero Sugar Tonic Water (250ml)", null, 106], ["Kinley Soda | Refreshing Carbonated Drink", null, 20]], 174],
+  ["zepto2", "Zepto", [["Tata Salt | Free Flowing and lodized Namak | Vacuum Evaporated | Salt in Fr...", null, 29], ["Daily Good Saunf - Fennel", null, 65], ["Tata Sampann Coriander Powder With Natural Oils Dhania Powder", null, 41], ["24 Mantra Organic Sugar", null, 117]], 252],
   ["swiggy", "Swiggy", [["Chipotle Potato Shots Wrap", 1, 169], ["Chatpata Double Egg Roll", 1, 119], ["Aloo Patty Chipotle Burger Wrap", 1, 149]], 360],
   ["bigbasket", "BigBasket", [["Onion - Organically Grown", null, 52], ["Zero Sugar Lemon Lime Sparkling .….", null, 60], ["Anti Roach Gel", null, 99]], 188.27],
   ["blinkit", "Blinkit", [["lok Coca-Cola Diet-Coke Diets & Lights", 1, 297]], 309],
@@ -215,6 +215,28 @@ for (const [file, app, want, paid] of orders) {
   const final = read.items.map((it, k) => it.amount + (settled.shares?.[k] ?? 0));
   check(`${file}: expenses come to what was paid`, Math.round(final.reduce((a, b) => a + b, 0) * 100) === Math.round(paid * 100));
 }
+// Zepto, a long name over two rows and numbers inside text: "Rock and
+// Quarry - UK 9" is the rest of a name (9 is the shoe size), "Eligible for
+// Exchange/Return till Oct 24" is not an item. Its prices already have the
+// coupon taken off, so the coupon is not taken off again.
+const sliders = readOrder([scanToLines(JSON.parse(readFileSync(join(__dirname, "orders", "zepto-sliders.json"), "utf8")), { order: true }).join("\n")], "Zepto");
+check(
+  "zepto sliders: two items, the name whole",
+  JSON.stringify(sliders.items.map((it) => [it.description, it.amount])) ===
+    JSON.stringify([["Gluconorm SR 500 Tablet", 93], ["Lotto Men's Sliders Enduro TX | Castle Rock and Quarry - UK 9", 831]]),
+  JSON.stringify(sliders.items.map((it) => [it.description, it.amount])),
+);
+const slidersSettled = settleOrder(sliders.items.map((it) => it.amount), sliders.bill.charges.map((c) => c.amount), sliders.bill.orderTotal);
+check(
+  "zepto sliders: coupon already in the prices, adds up to 924",
+  slidersSettled.check.status === "matched" && sliders.bill.orderTotal === 924 && sliders.bill.inPrices?.[0]?.label === "ADVANTAGE50 Coupon Applied" && sliders.bill.inPrices?.[0]?.amount === -50,
+  JSON.stringify(sliders.bill),
+);
+check("zepto sliders: nothing else reads as a price", !scanToLines(JSON.parse(readFileSync(join(__dirname, "orders", "zepto-sliders.json"), "utf8")), { order: true }).some((l) => /(UK 9|Oct 24)$/.test(l)));
+// A coupon that is not in the prices is still taken off.
+const coupon = readOrder(["Bill Summary\nItem Total ₹974\nADVANTAGE50 Coupon Applied -₹50\nTotal Bill ₹924"], "Zepto");
+check("a coupon not in the prices is taken off", coupon.bill.charges.length === 1 && !coupon.bill.inPrices);
+
 const swiggyFood = readOrder([scanToLines(JSON.parse(readFileSync(join(__dirname, "orders", "swiggy.json"), "utf8")), { order: true }).join("\n")], "Swiggy");
 check("food orders are meals out", swiggyFood.items.every((it) => it.category === "Dining Out"));
 const zepto2 = JSON.parse(readFileSync(join(__dirname, "orders", "zepto2.json"), "utf8")) as ScanResult;

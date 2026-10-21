@@ -90,6 +90,8 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 interface EditBill {
   charges: { label: string; amount: string }[];
   total: string;
+  /** Discounts the item prices already have taken off: shown, not counted again. */
+  inPrices: { label: string; amount: number }[];
 }
 
 // Identity for de-duping picks across the camera and gallery inputs.
@@ -288,6 +290,7 @@ export function ReceiptScanner({
       setBill({
         charges: order.bill.charges.map((c) => ({ label: c.label, amount: c.amount.toFixed(2) })),
         total: order.bill.orderTotal != null ? order.bill.orderTotal.toFixed(2) : "",
+        inPrices: order.bill.inPrices ?? [],
       });
       setItems(
         order.items.map((it) => ({
@@ -823,6 +826,11 @@ export function ReceiptScanner({
               >
                 + Add charge or discount
               </button>
+              {bill.inPrices.map((c) => (
+                <div key={c.label} className="text-xs text-muted" data-in-prices>
+                  {c.label} {formatINR(c.amount)}: already taken off the item prices, so not counted again.
+                </div>
+              ))}
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor={`${uid}-order-total`} className="text-sm font-semibold">Order total (paid)</label>
                 <input
