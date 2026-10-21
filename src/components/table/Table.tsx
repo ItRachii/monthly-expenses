@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDownIcon, ArrowUpIcon, CheckIcon, FilterIcon, SearchIcon, SortIcon } from "@/components/Icons";
+import { ArrowDownIcon, ArrowUpIcon, CheckIcon, FilterIcon, SearchIcon, SortIcon, XIcon } from "@/components/Icons";
 
-// Pieces for the list tables (statement review, expenses): filter tabs come
-// from Tabs.tsx; these add sortable headers, a search box, status pills and
-// the selection checkboxes, styled once so both tables match.
+// Pieces for the list tables (statement review, expenses, settlement
+// history, the summary's expense detail): filter tabs come from Tabs.tsx;
+// these add sortable and filtering headers, a search box, the row of active
+// filters, status pills and the selection checkboxes, styled once so every
+// table matches.
 
 export type SortDir = "asc" | "desc";
 export interface SortState<K extends string> {
@@ -507,4 +509,47 @@ export function tableDate(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d} ${MONTHS[(m ?? 1) - 1]} ${y}`;
+}
+
+/** One active filter above a table; the cross removes just that filter. */
+export function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/40 bg-primary/10 py-0.5 pl-3 pr-1 text-sm">
+      <span className="truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Remove filter ${label}`}
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted outline-none hover:bg-ink/10 hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/70"
+      >
+        <XIcon className="h-3.5 w-3.5" />
+      </button>
+    </span>
+  );
+}
+
+/**
+ * The column filters in force, above the table: "Filtered by" and a chip for
+ * each (null entries are filters not set), with "Clear all" once there are two.
+ */
+export function ActiveFilters({ filters, onClearAll }: { filters: ({ label: string; onClear: () => void } | null)[]; onClearAll: () => void }) {
+  const on = filters.filter((f): f is { label: string; onClear: () => void } => f !== null);
+  if (on.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-muted">Filtered by</span>
+      {on.map((f) => (
+        <FilterChip key={f.label} label={f.label} onClear={f.onClear} />
+      ))}
+      {on.length > 1 ? (
+        <button
+          type="button"
+          className="rounded px-1 text-primary-light outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/70"
+          onClick={onClearAll}
+        >
+          Clear all
+        </button>
+      ) : null}
+    </div>
+  );
 }

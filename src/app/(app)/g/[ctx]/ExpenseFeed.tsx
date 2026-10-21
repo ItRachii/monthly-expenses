@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangleIcon, CalendarIcon, DownloadIcon, PeopleIcon, PencilIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/Icons";
-import { DateRangeHeader, FilterHeader, RowCheckbox, rangeLabel, type DateRange, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
+import { AlertTriangleIcon, CalendarIcon, DownloadIcon, PeopleIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
+import { ActiveFilters, DateRangeHeader, FilterHeader, RowCheckbox, rangeLabel, type DateRange, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
 import { DateBadge } from "@/components/DateBadge";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -346,28 +346,19 @@ export function ExpenseFeed({
       </div>
 
       {/* Active column filters, each removable on its own. */}
-      {filterCount > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted">Filtered by</span>
-          {range ? <FilterChip label={`Date: ${rangeLabel(range)}`} onClear={() => pickRange(null)} /> : null}
-          {category ? <FilterChip label={`Category: ${category}`} onClear={() => pickCategory(null)} /> : null}
-          {payer ? <FilterChip label={`Paid by: ${nameMap[payer] ?? payer}`} onClear={() => pickPayer(null)} /> : null}
-          {filterCount > 1 ? (
-            <button
-              type="button"
-              className="rounded px-1 text-primary-light outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/70"
-              onClick={() => {
-                setPayer(null);
-                setCategory(null);
-                setRange(null);
-                setSelected(new Set());
-              }}
-            >
-              Clear all
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      <ActiveFilters
+        filters={[
+          range ? { label: `Date: ${rangeLabel(range)}`, onClear: () => pickRange(null) } : null,
+          category ? { label: `Category: ${category}`, onClear: () => pickCategory(null) } : null,
+          payer ? { label: `Paid by: ${nameMap[payer] ?? payer}`, onClear: () => pickPayer(null) } : null,
+        ]}
+        onClearAll={() => {
+          setPayer(null);
+          setCategory(null);
+          setRange(null);
+          setSelected(new Set());
+        }}
+      />
 
       {placed.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted">
@@ -974,23 +965,6 @@ function ExpenseActions({
         )}
       </div>
     </div>
-  );
-}
-
-/** One active filter above the table; the cross removes just that filter. */
-function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
-  return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/40 bg-primary/10 py-0.5 pl-3 pr-1 text-sm">
-      <span className="truncate">{label}</span>
-      <button
-        type="button"
-        onClick={onClear}
-        aria-label={`Remove filter ${label}`}
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted outline-none hover:bg-ink/10 hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/70"
-      >
-        <XIcon className="h-3.5 w-3.5" />
-      </button>
-    </span>
   );
 }
 

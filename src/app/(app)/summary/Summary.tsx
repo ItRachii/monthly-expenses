@@ -3,10 +3,24 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronDownIcon, XIcon } from "@/components/Icons";
+import type { ReactNode } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { MonthSelect, monthLabel } from "@/components/MonthSelect";
-import { tableDate } from "@/components/table/Table";
+import {
+  ActiveFilters,
+  DateRangeHeader,
+  FilterHeader,
+  SearchBox,
+  SortHeader,
+  Th,
+  rangeLabel,
+  sortRows,
+  tableDate,
+  useSort,
+  type DateRange,
+} from "@/components/table/Table";
+import { PeopleIcon } from "@/components/Icons";
 import { DateBadge } from "@/components/DateBadge";
 import { PersonAvatar, PersonAvatars } from "@/components/Person";
 import { paidFor, payersOf } from "@/lib/settlementMath";
@@ -232,49 +246,194 @@ export function Summary({
               ) : null}
             </div>
             {detailOpen ? (
-              <div className="overflow-x-auto border-t border-ink/10">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Category</th>
-                      <th>Item</th>
-                      <th className="text-right">Amount</th>
-                      <th>Payer</th>
-                      <th>Split</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailRows.map((r) => (
-                      <tr key={r.id}>
-                        {/* Phones: the expense list's date badge; wider screens the full date. */}
-                        <td className="whitespace-nowrap">
-                          <span className="md:hidden">
-                            <DateBadge iso={r.date} />
-                          </span>
-                          <span className="max-md:hidden">{tableDate(r.date)}</span>
-                        </td>
-                        <td>{categoryName(r.category)}</td>
-                        <td>{r.item}</td>
-                        <td className="whitespace-nowrap text-right tabular-nums">{formatINR(r.amount)}</td>
-                        <td>
-                          <PersonAvatars ids={payersOf(r)} />
-                        </td>
-                        <td>{splitLabel(r.split)}</td>
-                      </tr>
-                    ))}
-                    {detailRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center text-muted">
-                          No expenses in {selectedCategory === OTHER ? "other categories" : "this category"}.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
+              <ExpenseDetail
+                rows={monthRows}
+                bucket={(r) => palette.bucket(r.category)}
+                category={selectedCategory}
+                onCategory={setSelectedCategory}
+                isPersonal={isPersonal}
+                members={members}
+                splitLabel={splitLabel}
+              />
             ) : null}
           </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+type DetailKey = "date" | "item" | "category" | "amount";
+
+/**
+ * The month's expenses, styled and filtered like the expense list: count
+ * and total of what is shown, a search, and filters in the column headings
+ * (a date range, the category, who paid), each shown as a chip above the
+ * table. The category filter is the donut's selection, so picking either
+ * moves both. Read only: no edit or delete here. Desktop has the table;
+ * phones the expense list's compact rows.
+ */
+function ExpenseDetail({
+  rows,
+  bucket,
+  category,
+  onCategory,
+  isPersonal,
+  members,
+  splitLabel,
+}: {
+  rows: ExpenseDTO[];
+  /** The chart's category for a row: a named one, or "Other". */
+  bucket: (r: ExpenseDTO) => string;
+  category: string | null;
+  onCategory: (c: string | null) => void;
+  isPersonal: boolean;
+  members: Member[];
+  splitLabel: (v: string) => ReactNode;
+}) {
+  const [query, setQuery] = useState("");
+  const [sort, onSort] = useSort<DetailKey>({ key: "date", dir: "desc" }, ["date", "amount"]);
+  const [payer, setPayer] = useState<string | null>(null);
+  const [range, setRange] = useState<DateRange | null>(null);
+
+  const days = rows.map((r) => r.date).sort();
+  const nameOf = (k: string) => members.find((m) => m.key === k)?.displayName ?? k;
+  const q = query.trim().toLowerCase();
+  const shown = sortRows(
+    rows.filter(
+      (r) =>
+        (!category || bucket(r) === category) &&
+        (!payer || payersOf(r).includes(payer)) &&
+        (!range?.from || r.date >= range.from) &&
+        (!range?.to || r.date <= range.to) &&
+        (!q ||
+          r.item.toLowerCase().includes(q) ||
+          categoryName(r.category).toLowerCase().includes(q) ||
+          payersOf(r).some((k) => nameOf(k).toLowerCase().includes(q))),
+    ),
+    sort,
+    (r, k) => (k === "date" ? r.date : k === "amount" ? r.amount : k === "category" ? categoryName(r.category) : r.item),
+  );
+  const total = shown.reduce((t, r) => t + r.amount, 0);
+  const filtered = Boolean(category || payer || range);
+
+  return (
+    <div className="space-y-3 border-t border-ink/10 p-4">
+      {/* Toolbar: count and total of what is shown, and the search. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm text-muted" aria-live="polite">
+          {shown.length} expense{shown.length === 1 ? "" : "s"} · <span className="font-semibold text-ink">{formatINR(total)}</span>
+        </span>
+        <SearchBox value={query} onChange={setQuery} placeholder="Search expenses" className="w-full sm:ml-auto sm:w-64" />
+      </div>
+
+      <ActiveFilters
+        filters={[
+          range ? { label: `Date: ${rangeLabel(range)}`, onClear: () => setRange(null) } : null,
+          category ? { label: `Category: ${category}`, onClear: () => onCategory(null) } : null,
+          payer ? { label: `Paid by: ${nameOf(payer)}`, onClear: () => setPayer(null) } : null,
+        ]}
+        onClearAll={() => {
+          setRange(null);
+          onCategory(null);
+          setPayer(null);
+        }}
+      />
+
+      {shown.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted">
+          {q
+            ? `No expenses match "${query.trim()}".`
+            : filtered
+              ? category === OTHER && !payer && !range
+                ? "No expenses in other categories."
+                : "No expenses match these filters."
+              : "No expenses here."}
+        </p>
+      ) : (
+        <>
+          {/* Desktop: the table. */}
+          <div className="hidden overflow-x-auto rounded-xl border border-ink/10 md:block">
+            <table className="list-table">
+              <thead>
+                <tr>
+                  <DateRangeHeader label="Date" value={range} onChange={setRange} min={days[0] ?? ""} max={days[days.length - 1] ?? ""} sort={{ sortKey: "date", sort, onSort }} className="w-28" />
+                  <FilterHeader
+                    label="Category"
+                    allLabel="All categories"
+                    options={Array.from(new Set(rows.map(bucket)))
+                      .sort((a, b) => (a === OTHER ? 1 : b === OTHER ? -1 : a.localeCompare(b)))
+                      .map((c) => ({ value: c, label: c }))}
+                    value={category}
+                    onChange={onCategory}
+                    sort={{ sortKey: "category" as DetailKey, sort, onSort }}
+                    className="w-36"
+                  />
+                  <SortHeader label="Item" sortKey="item" sort={sort} onSort={onSort} />
+                  <SortHeader label="Amount" sortKey="amount" sort={sort} onSort={onSort} align="right" className="w-28" />
+                  {isPersonal ? (
+                    <Th className="w-28">Payer</Th>
+                  ) : (
+                    <FilterHeader
+                      label="Payer"
+                      allLabel="Everyone"
+                      allIcon={
+                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink/[0.08] text-muted">
+                          <PeopleIcon className="h-4 w-4" />
+                        </span>
+                      }
+                      options={members.map((m) => ({ value: m.key, label: m.displayName, icon: <PersonAvatar id={m.key} interactive={false} /> }))}
+                      value={payer}
+                      onChange={setPayer}
+                      className="w-28"
+                    />
+                  )}
+                  <Th className="w-32">Split</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((r) => (
+                  <tr key={r.id} className="hover:bg-ink/[0.03]">
+                    <td className="whitespace-nowrap text-muted">{tableDate(r.date)}</td>
+                    <td className="truncate text-muted">{categoryName(r.category)}</td>
+                    <td className="max-w-0">
+                      <span className="block truncate font-semibold" title={r.item}>
+                        {r.item}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap text-right font-semibold tabular-nums">{formatINR(r.amount)}</td>
+                    <td>
+                      <PersonAvatars ids={payersOf(r)} />
+                    </td>
+                    <td className="text-muted">{splitLabel(r.split)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Phones: the expense list's compact rows. */}
+          <div className="divide-y divide-ink/5 rounded-xl border border-ink/10 md:hidden">
+            {shown.map((r) => (
+              <div key={r.id} className="flex items-center gap-3 px-3 py-2.5">
+                <DateBadge iso={r.date} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{r.item}</div>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted">
+                    <span className="min-w-0 truncate">{categoryName(r.category)}</span>
+                    <span className="shrink-0">·</span>
+                    <span className="shrink-0">{splitLabel(r.split)}</span>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-sm font-semibold tabular-nums">{formatINR(r.amount)}</div>
+                  <div className="mt-0.5 flex justify-end">
+                    <PersonAvatars ids={payersOf(r)} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </>
       )}
     </div>

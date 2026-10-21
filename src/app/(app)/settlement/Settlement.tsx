@@ -23,7 +23,22 @@ import { formatINR } from "@/lib/format";
 import { Metric } from "@/components/Metric";
 import { MonthSelect, monthLabel } from "@/components/MonthSelect";
 import { DateBadge } from "@/components/DateBadge";
-import { StatusPill, tableDate } from "@/components/table/Table";
+import {
+  ActiveFilters,
+  DateRangeHeader,
+  FilterHeader,
+  SearchBox,
+  SortHeader,
+  StatusPill,
+  Th,
+  rangeLabel,
+  sortRows,
+  tableDate,
+  useSort,
+  type DateRange,
+} from "@/components/table/Table";
+import { PersonAvatar } from "@/components/Person";
+import { PeopleIcon } from "@/components/Icons";
 
 /**
  * When a payment was recorded, in India time: the day (YYYY-MM-DD) and the
@@ -441,76 +456,208 @@ export function Settlement({
         {settlements.length === 0 ? (
           <div className="alert-info">No settlements recorded yet.</div>
         ) : (
-          <>
-            {/* Phones: one row per payment, dated like the expense list. */}
-            <ul className="card divide-y divide-ink/5 p-0 md:hidden">
-              {settlements.map((s) => {
-                const at = settledAt(s.settledAt);
-                const progress = progressText(lineageById.get(s.id));
-                return (
-                  <li
-                    key={s.id}
-                    data-landing={marked === s.id ? "" : undefined}
-                    className={`flex items-center gap-3 px-3 py-2.5 ${marked === s.id ? "landing-mark" : ""}`}
-                  >
-                    <DateBadge iso={at.day} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {marked === s.id ? <LandingPill className="mr-1.5">Recorded</LandingPill> : null}
-                        {nameOf(s.settledBy)} paid{s.settledTo ? ` ${nameOf(s.settledTo)}` : ""}
-                      </div>
-                      <div className="truncate text-xs text-muted">
-                        For {monthLabel(s.month)} · {at.time}
-                        {s.note ? ` · ${s.note}` : ""}
-                      </div>
-                      {progress ? <div className="truncate text-xs text-muted">{progress}</div> : null}
-                    </div>
-                    <div className="shrink-0 text-sm font-semibold tabular-nums">{formatINR(s.amount)}</div>
-                  </li>
-                );
-              })}
-            </ul>
-
-            {/* Desktop: the table. */}
-            <div className="card hidden overflow-x-auto p-0 md:block">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th>Settled at</th>
-                    <th>From</th>
-                    <th>To</th>
-                    <th className="text-right">Paid</th>
-                    <th>Progress</th>
-                    <th>Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {settlements.map((s) => {
-                    const at = settledAt(s.settledAt);
-                    return (
-                      <tr key={s.id} data-landing={marked === s.id ? "" : undefined} className={marked === s.id ? "landing-mark" : ""}>
-                        <td className="whitespace-nowrap">
-                          {monthLabel(s.month)}
-                          {marked === s.id ? <LandingPill className="ml-1.5">Recorded</LandingPill> : null}
-                        </td>
-                        <td className="whitespace-nowrap">
-                          {tableDate(at.day)}, {at.time}
-                        </td>
-                        <td>{nameOf(s.settledBy)}</td>
-                        <td>{s.settledTo ? nameOf(s.settledTo) : ""}</td>
-                        <td className="whitespace-nowrap text-right tabular-nums">{formatINR(s.amount)}</td>
-                        <td className="whitespace-nowrap">{progressText(lineageById.get(s.id))}</td>
-                        <td>{s.note ?? ""}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
+          <SettlementHistory settlements={settlements} nameOf={nameOf} marked={marked} progress={(id) => progressText(lineageById.get(id))} />
         )}
       </div>
     </div>
+  );
+}
+
+type HistoryKey = "settledAt" | "amount" | "month";
+
+/**
+ * Recorded payments, styled and filtered like the expense list: the count
+ * and total of what is shown, a search, and filters in the column headings
+ * (month, who paid, who received, a date range), each shown as a chip above
+ * the table. Read only: a payment is not edited or deleted here. Desktop has
+ * the table; phones keep one compact row per payment.
+ */
+function SettlementHistory({
+  settlements,
+  nameOf,
+  marked,
+  progress,
+}: {
+  settlements: SettlementDTO[];
+  nameOf: (key: string) => string;
+  /** The payment a notification is about, highlighted. */
+  marked: number | null;
+  progress: (id: number) => string;
+}) {
+  const [query, setQuery] = useState("");
+  const [sort, onSort] = useSort<HistoryKey>({ key: "settledAt", dir: "desc" }, ["settledAt", "amount", "month"]);
+  const [month, setMonth] = useState<string | null>(null);
+  const [from, setFrom] = useState<string | null>(null);
+  const [to, setTo] = useState<string | null>(null);
+  const [range, setRange] = useState<DateRange | null>(null);
+
+  const days = settlements.map((s) => settledAt(s.settledAt).day).sort();
+  const people = (keys: (string | null)[]) =>
+    Array.from(new Set(keys.filter((k): k is string => !!k)))
+      .map((k) => ({ value: k, label: nameOf(k), icon: <PersonAvatar id={k} interactive={false} /> }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  const everyone = (
+    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink/[0.08] text-muted">
+      <PeopleIcon className="h-4 w-4" />
+    </span>
+  );
+
+  const q = query.trim().toLowerCase();
+  const shown = sortRows(
+    settlements.filter((s) => {
+      const day = settledAt(s.settledAt).day;
+      return (
+        (!month || s.month === month) &&
+        (!from || s.settledBy === from) &&
+        (!to || s.settledTo === to) &&
+        (!range?.from || day >= range.from) &&
+        (!range?.to || day <= range.to) &&
+        (!q ||
+          nameOf(s.settledBy).toLowerCase().includes(q) ||
+          (s.settledTo ? nameOf(s.settledTo).toLowerCase().includes(q) : false) ||
+          (s.note ?? "").toLowerCase().includes(q) ||
+          monthLabel(s.month).toLowerCase().includes(q))
+      );
+    }),
+    sort,
+    (s, k) => (k === "amount" ? s.amount : k === "month" ? s.month : s.settledAt),
+  );
+  const total = round2(shown.reduce((t, s) => t + s.amount, 0));
+  const filtered = Boolean(month || from || to || range);
+
+  return (
+    <div className="space-y-3">
+      {/* Toolbar: count and total of what is shown, and the search. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm text-muted" aria-live="polite">
+          {shown.length} payment{shown.length === 1 ? "" : "s"} · <span className="font-semibold text-ink">{formatINR(total)}</span>
+        </span>
+        <SearchBox value={query} onChange={setQuery} placeholder="Search payments" className="w-full sm:ml-auto sm:w-64" />
+      </div>
+
+      <ActiveFilters
+        filters={[
+          month ? { label: `Month: ${monthLabel(month)}`, onClear: () => setMonth(null) } : null,
+          range ? { label: `Settled: ${rangeLabel(range)}`, onClear: () => setRange(null) } : null,
+          from ? { label: `From: ${nameOf(from)}`, onClear: () => setFrom(null) } : null,
+          to ? { label: `To: ${nameOf(to)}`, onClear: () => setTo(null) } : null,
+        ]}
+        onClearAll={() => {
+          setMonth(null);
+          setRange(null);
+          setFrom(null);
+          setTo(null);
+        }}
+      />
+
+      {shown.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted">
+          {q ? `No payments match "${query.trim()}".` : filtered ? "No payments match these filters." : "No payments here."}
+        </p>
+      ) : (
+        <>
+          {/* Desktop: the table. */}
+          <div className="hidden overflow-x-auto rounded-xl border border-ink/10 md:block">
+            <table className="list-table">
+              <thead>
+                <tr>
+                  <FilterHeader
+                    label="Month"
+                    allLabel="All months"
+                    options={Array.from(new Set(settlements.map((s) => s.month)))
+                      .sort((a, b) => b.localeCompare(a))
+                      .map((m) => ({ value: m, label: monthLabel(m) }))}
+                    value={month}
+                    onChange={setMonth}
+                    sort={{ sortKey: "month" as HistoryKey, sort, onSort }}
+                    className="w-32"
+                  />
+                  <DateRangeHeader
+                    label="Settled at"
+                    value={range}
+                    onChange={setRange}
+                    min={days[0] ?? ""}
+                    max={days[days.length - 1] ?? ""}
+                    sort={{ sortKey: "settledAt", sort, onSort }}
+                    className="w-44"
+                  />
+                  <FilterHeader label="From" allLabel="Everyone" allIcon={everyone} options={people(settlements.map((s) => s.settledBy))} value={from} onChange={setFrom} className="w-36" />
+                  <FilterHeader label="To" allLabel="Everyone" allIcon={everyone} options={people(settlements.map((s) => s.settledTo))} value={to} onChange={setTo} className="w-36" />
+                  <SortHeader label="Paid" sortKey="amount" sort={sort} onSort={onSort} align="right" className="w-28" />
+                  <Th>Progress</Th>
+                  <Th>Note</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((s) => {
+                  const at = settledAt(s.settledAt);
+                  return (
+                    <tr
+                      key={s.id}
+                      data-landing={marked === s.id ? "" : undefined}
+                      className={`hover:bg-ink/[0.03] ${marked === s.id ? "landing-mark" : ""}`}
+                    >
+                      <td className="whitespace-nowrap">
+                        <span className="font-semibold">{monthLabel(s.month)}</span>
+                        {marked === s.id ? <LandingPill className="ml-1.5">Recorded</LandingPill> : null}
+                      </td>
+                      <td className="whitespace-nowrap text-muted">
+                        {tableDate(at.day)}, {at.time}
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <Person id={s.settledBy} name={nameOf(s.settledBy)} />
+                      </td>
+                      <td className="whitespace-nowrap">{s.settledTo ? <Person id={s.settledTo} name={nameOf(s.settledTo)} /> : null}</td>
+                      <td className="whitespace-nowrap text-right font-semibold tabular-nums">{formatINR(s.amount)}</td>
+                      <td className="whitespace-nowrap text-muted">{progress(s.id)}</td>
+                      <td className="min-w-40 text-muted">{s.note ?? ""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Phones: one compact row per payment, dated like the expense list. */}
+          <ul className="card divide-y divide-ink/5 p-0 md:hidden">
+            {shown.map((s) => {
+              const at = settledAt(s.settledAt);
+              const p = progress(s.id);
+              return (
+                <li
+                  key={s.id}
+                  data-landing={marked === s.id ? "" : undefined}
+                  className={`flex items-center gap-3 px-3 py-2.5 ${marked === s.id ? "landing-mark" : ""}`}
+                >
+                  <DateBadge iso={at.day} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">
+                      {marked === s.id ? <LandingPill className="mr-1.5">Recorded</LandingPill> : null}
+                      {nameOf(s.settledBy)} paid{s.settledTo ? ` ${nameOf(s.settledTo)}` : ""}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-muted">
+                      For {monthLabel(s.month)} · {at.time}
+                      {s.note ? ` · ${s.note}` : ""}
+                    </div>
+                    {p ? <div className="truncate text-xs text-muted">{p}</div> : null}
+                  </div>
+                  <div className="shrink-0 text-sm font-semibold tabular-nums">{formatINR(s.amount)}</div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A member in a table cell: their picture and name. */
+function Person({ id, name }: { id: string; name: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <PersonAvatar id={id} interactive={false} />
+      <span className="truncate">{name}</span>
+    </span>
   );
 }
