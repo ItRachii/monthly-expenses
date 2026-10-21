@@ -617,14 +617,19 @@ function BulkDeleteDialog({
   onClose: () => void;
 }) {
   const cancel = useRef<HTMLButtonElement>(null);
+  // The latest onClose, read when Escape is pressed: the effect runs once,
+  // so a re-render (a live refresh landing) does not move focus back to
+  // Cancel while you are on Delete.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     cancel.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") close.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
   return (
     <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
