@@ -131,10 +131,10 @@ export function StatementImport({
   // A file the parser could not place with HDFC or ICICI: a popup says which
   // banks are supported before the generic-rules review is shown.
   const [unsupported, setUnsupported] = useState(false);
-  // Which read of a file is current. A read (or its duplicate check) that
-  // finishes after the statement was closed or another file picked is
-  // dropped: row ids repeat across files ("page-index"), so its results
-  // would land on the wrong rows.
+  // Which read of a file is current. A read, its duplicate check, or a save
+  // from it that finishes after the statement was closed or another file
+  // picked is dropped: row ids repeat across files ("page-index"), so its
+  // results would land on the wrong rows.
   const readNo = useRef(0);
 
   // Categories already used in the chosen destination, so the picker offers them.
@@ -274,15 +274,17 @@ export function StatementImport({
 
   function saveSummary() {
     if (!summaryInput) return;
+    const mine = readNo.current;
     setError(null);
     startSaveSummary(async () => {
       const res = await saveStatementSummaryAction(summaryInput, lineage ?? undefined);
+      router.refresh();
+      if (mine !== readNo.current) return;
       if (!res.ok) {
         setError(res.error);
         return;
       }
       setSummarySaved(true);
-      router.refresh();
     });
   }
 
@@ -323,17 +325,19 @@ export function StatementImport({
     if (selectedRows.length === 0) return;
     setError(null);
     const batch = selectedRows;
+    const mine = readNo.current;
     startImport(async () => {
       const check = await checkStatementDuplicatesAction({
         rows: batch.map((r) => payloadOf(r, categories[r.id] ?? r.category, occ)),
         card: parsed ? cardOf(parsed) : undefined,
       });
+      if (mine !== readNo.current) return;
       if (!check.ok) {
         setError(check.error);
         return;
       }
       if (check.duplicates.length === 0) {
-        await send(batch, new Map(), new Set());
+        await send(batch, new Map(), new Set(), mine);
         return;
       }
       const dups = new Map(check.duplicates.map((d) => [batch[d.index].id, d]));
@@ -342,7 +346,7 @@ export function StatementImport({
   }
 
   /** Sends the batch: rows to replace carry the expense they overwrite; skipped ones stay out. */
-  async function send(batch: StatementRow[], replace: Map<string, number>, skip: Set<string>) {
+  async function send(batch: StatementRow[], replace: Map<string, number>, skip: Set<string>, mine: number) {
     const sending = batch.filter((r) => !skip.has(r.id));
     if (sending.length === 0) {
       setAdded((a) => new Set([...a, ...batch.map((r) => r.id)]));
@@ -363,6 +367,8 @@ export function StatementImport({
       lineage: lineage ?? undefined,
       rows: sending.map((r) => ({ ...payloadOf(r, categories[r.id] ?? r.category, occ), replaceId: replace.get(r.id) ?? null })),
     }).catch(() => ({ ok: false as const, error: "Could not save these rows, so nothing was added. Try again." }));
+    router.refresh();
+    if (mine !== readNo.current) return;
     if (!res.ok) {
       setError(res.error);
       return;
@@ -372,7 +378,6 @@ export function StatementImport({
     setReview(null);
     setResult({ count: res.count, replaced: res.replaced, skipped: skip.size + res.skipped, ctx });
     if (res.summarySaved) setSummarySaved(true);
-    router.refresh();
   }
 
   function confirmReview() {
@@ -385,7 +390,8 @@ export function StatementImport({
       // "add": a likely match the user knows is a separate spend; sent as new.
     }
     setError(null);
-    startImport(() => send(review.rows, replace, skip));
+    const mine = readNo.current;
+    startImport(() => send(review.rows, replace, skip, mine));
   }
 
   async function copyDebug() {
@@ -504,7 +510,15 @@ export function StatementImport({
                 </h2>
                 <p className="truncate text-sm text-muted">{file?.name}</p>
               </div>
-              <button type="button" className="icon-btn" aria-label="Close statement" title="Close" onClick={reset}>
+              {/* Not while a save is on its way: its answer belongs to this statement. */}
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Close statement"
+                title={importing || savingSummary ? "Saving…" : "Close"}
+                disabled={importing || savingSummary}
+                onClick={reset}
+              >
                 <XIcon />
               </button>
             </div>

@@ -179,7 +179,12 @@ export function ReceiptScanner({
     if (open) void checkService();
   }, [open, checkService]);
 
+  // Which scan is current: closing or starting over mid-scan makes the one
+  // still reading stop, so its results never fill a scanner it no longer owns.
+  const scanNo = useRef(0);
+
   function reset() {
+    scanNo.current++;
     setPhase("pick");
     setFiles([]);
     scans.current.clear();
@@ -220,6 +225,8 @@ export function ReceiptScanner({
 
   async function extract(list: File[] = files) {
     if (list.length === 0) return;
+    const mine = ++scanNo.current;
+    const stale = () => mine !== scanNo.current;
     setError(null);
     setMessage(null);
     setPhase("reading");
@@ -245,6 +252,7 @@ export function ReceiptScanner({
           body: image,
         });
         const body = (await res.json().catch(() => ({}))) as { text?: string; rows?: ShotRow[]; error?: string };
+        if (stale()) return;
         if (res.ok && typeof body.text === "string") {
           const rows = body.rows ?? body.text.split("\n").map((text, k, all) => ({ text, y: k / all.length }));
           scans.current.set(fileKey(list[i]), { text: body.text, rows });
@@ -263,10 +271,12 @@ export function ReceiptScanner({
         return;
       }
     } catch {
+      if (stale()) return;
       setPhase("pick");
       setError("Scanning failed. Check your connection and try again.");
       return;
     }
+    if (stale()) return;
     const fromApp = app !== OTHER_APP;
     const whole = parseReceipt(texts.join("\n"));
     // The app is a better merchant name than whatever heads the screenshot.
