@@ -142,6 +142,27 @@ check("sections are per screenshot", same(split.charges.map((c) => c.amount), [1
 check("a dash before a price is not a discount", !isBillLine("Atta 5kg - ₹250") && isBillLine("Cashback -₹20") && isBillLine("Free cash for you -₹75.00"));
 check("Item Bill is the item total", isBillLine("Item Bill ₹206.00"));
 
+// Each item knows the product row it was read from, so the scan inspector
+// can show the right item for a row whose name another item's starts with.
+const milk = readOrder(["2 items in this order\nMilk ₹30\nMilk Bread ₹40\nBill details\nItem total ₹70\nGrand total ₹70"]).items;
+check("items carry their product row", JSON.stringify(milk.map((it) => [it.read, it.row])) === JSON.stringify([["Milk", 0], ["Milk Bread", 1]]), JSON.stringify(milk.map((it) => [it.read, it.row])));
+check("the Milk Bread row is Milk Bread, not Milk", milk.find((it) => it.row === 1)?.description === "Milk Bread");
+const across = readOrder(["ITEM DETAILS\nMilk ₹30\nBread ₹40", "Bread ₹40\nEggs ₹70\nBill Details\nGrand Total ₹140"]).items;
+check("rows count on across screenshots", JSON.stringify(across.map((it) => it.row)) === JSON.stringify([0, 1, 2, 3]), JSON.stringify(across.map((it) => [it.read, it.row])));
+
+// An item's row is the one with its price, not an unpriced row above that
+// starts with the same words.
+const rowsOf = (lines: string[], app?: string) => readOrder([lines.join("\n")], app).items.map((it) => [it.description, it.qty, it.row]);
+check("a heading starting with an item's name is not its row", JSON.stringify(rowsOf(["2 items in this order", "Tea Time Specials", "Tea ₹20", "Coffee ₹50", "Bill details", "Item total ₹70", "Grand total ₹70"])) === JSON.stringify([["Tea", null, 1], ["Coffee", null, 2]]), JSON.stringify(rowsOf(["2 items in this order", "Tea Time Specials", "Tea ₹20", "Coffee ₹50", "Bill details", "Item total ₹70", "Grand total ₹70"])));
+check("the dish's priced row gives its quantity (Swiggy)", JSON.stringify(rowsOf(["ITEM DETAILS", "Paneer Butter Masala", "Paneer Butter Masala x 1 ₹250", "Bill details", "Item total ₹250", "Grand total ₹250"], "Swiggy")) === JSON.stringify([["Paneer Butter Masala", 1, 1]]));
+check("a replaced item's priced row is its row", JSON.stringify(rowsOf(["2 items in this order", "Amul Butter 100 g", "Replaced with", "Amul Butter 100 g ₹56", "Bread ₹40", "Bill details", "Item total ₹96", "Grand total ₹96"]).map((r) => r[2])) === JSON.stringify([2, 3]));
+
+// A receipt's date must be a real day; a misread one is no date (it is
+// asked for) rather than one the save then refuses.
+check("receipt: 31/02 is no date", parseReceipt("BIG BAZAAR\nDate: 31/02/2026\nMilk 30.00\nTotal 30.00").purchasedOn === null, String(parseReceipt("BIG BAZAAR\nDate: 31/02/2026\nMilk 30.00\nTotal 30.00").purchasedOn));
+check("receipt: a real date still reads", parseReceipt("BIG BAZAAR\nDate: 28/02/2026\nMilk 30.00\nTotal 30.00").purchasedOn === "2026-02-28");
+check("receipt: a bad date, then a good one in another form", parseReceipt("Printed 31/02/2026\nBill date 2026-02-27\nMilk 30.00\nTotal 30.00").purchasedOn === "2026-02-27", String(parseReceipt("Printed 31/02/2026\nBill date 2026-02-27\nMilk 30.00\nTotal 30.00").purchasedOn));
+
 if (failures) {
   console.error(`${failures} check(s) failed`);
   process.exit(1);

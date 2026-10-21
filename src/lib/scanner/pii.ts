@@ -42,6 +42,17 @@ const PHONE = /(?<![\w-])(?:\+?91[\s-]?|0)?([6-9]\d{4}[\s-]?\d{5})(?![\w-])/;
 // A long run of digits glued to letters or hyphens: an order or reference number.
 const REFERENCE = /[A-Za-z]+[-#]?\d{6,}|\d{6,}-[\dA-Za-z-]+|[A-Za-z0-9]+-\d{6,}/;
 const NAME = /^(?:by\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z.]*){0,3}$/;
+// The country code or trunk 0 in front of a mobile number.
+const PHONE_PREFIX = /(?<![\w-])(?:\+?91[\s-]?|0)(?=[6-9]\d{4}[\s-]?\d{5}(?![\w-]))/g;
+
+/**
+ * The reference number in a piece, if it holds one that is not simply a
+ * phone number: "+91-9123456780" is the phone's country code and a hyphen,
+ * not a reference glued to digits, so the prefix is set aside first.
+ */
+function referenceIn(text: string): RegExpMatchArray | null {
+  return text.replace(PHONE_PREFIX, "").match(REFERENCE);
+}
 
 function rowsOf(pieces: ScanItem[]): Row[] {
   const sorted = [...pieces].sort((a, b) => a.page - b.page || (a.box[1] + a.box[3]) / 2 - (b.box[1] + b.box[3]) / 2);
@@ -87,7 +98,7 @@ export function findPii(result: ScanResult): Map<ScanItem, Tag> {
         tags.set(c, { kind: "email", why: c.text.includes(".") ? "email address" : "UPI id (name@bank)" });
         continue;
       }
-      const ref = c.text.match(REFERENCE);
+      const ref = referenceIn(c.text);
       const phone = c.text.match(PHONE);
       if (ref && (!phone || ref[0].includes(phone[1].replace(/[\s-]/g, "")))) {
         tags.set(c, { kind: "order-id", why: `digits glued to letters or hyphens ("${ref[0].replace(/\d/g, "#")}"): a reference, not a phone` });
@@ -129,7 +140,7 @@ export function findPii(result: ScanResult): Map<ScanItem, Tag> {
     let tag = parts.map((p) => tags.get(p)).find((t) => t != null) ?? null;
     if (!tag && EMAIL.test(whole)) tag = { kind: "email", why: "email address, split at a line the scanner took for a strike" };
     const phone = tag ? null : whole.match(PHONE);
-    const ref = whole.match(REFERENCE);
+    const ref = referenceIn(whole);
     if (phone && !(ref && ref[0].includes(phone[1].replace(/[\s-]/g, "")))) {
       const kept = parts.find((p) => !p.struck);
       const at = rows.findIndex((r) => (kept ? r.cells.includes(kept) : r.page === parts[0].page && midOf(parts[0]) >= r.top && midOf(parts[0]) <= r.bottom));
@@ -194,22 +205,33 @@ export function withoutPii(result: ScanResult, keep = false): ScanResult {
     const t = tags.get(p);
     return t && t.kind !== "order-id" ? t : null;
   };
-  const clean = (list: ScanItem[]) =>
-    keep
-      ? list.map((p) => {
-          const t = tags.get(p);
-          if (!t) return p;
-          if (t.kind === "order-id") return { ...p, ref: t };
-          // A later part of a split piece shows nothing: its first two
-          // characters are already the middle of the detail.
-          const later = p.from != null && !p.from.startsWith(p.text);
-          return { ...p, text: later ? p.text.replace(/[\p{L}\p{N}]/gu, "•") : mask(p.text), from: p.from != null ? mask(p.from) : undefined, pii: t };
-        })
-      : list.filter((p) => !personal(p));
+  // For the developer view: a found piece masked and tagged, an order number tagged.
+  const tagged = (p: ScanItem): ScanItem => {
+    const t = tags.get(p);
+    if (!t) return p;
+    if (t.kind === "order-id") return { ...p, ref: t };
+    // A later part of a split piece shows nothing: its first two
+    // characters are already the middle of the detail.
+    const later = p.from != null && !p.from.startsWith(p.text);
+    return { ...p, text: later ? p.text.replace(/[\p{L}\p{N}]/gu, "•") : mask(p.text), from: p.from != null ? mask(p.from) : undefined, pii: t };
+  };
+  const clean = (list: ScanItem[]) => (keep ? list.map(tagged) : list.filter((p) => !personal(p)));
   // Docling's layout blocks hold the same text: drop (or mask) any that
   // overlaps a personal piece.
   const hit = [...tags].filter(([, t]) => t.kind !== "order-id").map(([p]) => p);
   const overlaps = (a: ScanItem) => hit.some((p) => p.page === a.page && p.box[0] < a.box[2] && a.box[0] < p.box[2] && p.box[1] < a.box[3] && a.box[1] < p.box[3]);
-  const items = keep ? result.items.map((it) => (overlaps(it) ? { ...it, text: mask(it.text) } : it)) : result.items.filter((it) => !overlaps(it));
+  // A scanner that sends no OCR pieces (an older image) is read from these
+  // blocks, so they carry the tags themselves.
+  const items = keep
+    ? result.items.map((it) => {
+        const t = tags.get(it);
+        if (t && t.kind !== "order-id") return tagged(it);
+        // An order number that overlaps a personal detail is masked like
+        // any block that does: only what was dropped from the reading may
+        // show, and only masked.
+        if (overlaps(it)) return { ...it, text: mask(it.text), ...(t ? { ref: t } : {}) };
+        return t ? { ...it, ref: t } : it;
+      })
+    : result.items.filter((it) => !overlaps(it));
   return { ...result, items, cells: result.cells ? clean(result.cells) : result.cells };
 }

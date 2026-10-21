@@ -12,7 +12,7 @@ export default async function NotificationsPage() {
   return (
     <div className="space-y-6">
       <h1>Notifications</h1>
-      <NotificationList notifications={notifications} />
+      <NotificationList notifications={notifications} renderedAt={Date.now()} />
     </div>
   );
 }

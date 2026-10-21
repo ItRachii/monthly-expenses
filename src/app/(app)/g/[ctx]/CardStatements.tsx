@@ -16,7 +16,7 @@ import { AlertTriangleIcon, CalendarIcon, CreditCardIcon, DownloadIcon } from "@
 import { PendingFlagNote } from "@/components/PendingFlag";
 import { LoansPanel } from "@/components/LoansPanel";
 import { DateBadge } from "@/components/DateBadge";
-import { formatINR, monthLabel } from "@/lib/format";
+import { MONTH_SHORT, formatINR, monthLabel } from "@/lib/format";
 import { tableDate } from "@/components/table/Table";
 
 const ALL = "all";
@@ -31,7 +31,9 @@ export function CardStatements({ cards, loans }: { cards: CardView[]; loans: Loa
   const [cardId, setCardId] = useState<string>(ALL);
   const [month, setMonth] = useState<string>(ALL);
 
-  const shownCards = cards.filter((c) => cardId === ALL || c.id === cardId);
+  // A picked card that is gone (just removed) falls back to all cards.
+  const cardOk = cardId === ALL || cards.some((c) => c.id === cardId) ? cardId : ALL;
+  const shownCards = cards.filter((c) => cardOk === ALL || c.id === cardOk);
   // Months across the cards on show, newest first.
   const months = useMemo(
     () => Array.from(new Set(shownCards.flatMap((c) => c.statements.map((s) => s.period)))).sort((a, b) => b.localeCompare(a)),
@@ -39,7 +41,10 @@ export function CardStatements({ cards, loans }: { cards: CardView[]; loans: Loa
   );
   const monthOk = month === ALL || months.includes(month) ? month : ALL;
   const statementsOf = (c: CardView) => c.statements.filter((s) => monthOk === ALL || s.period === monthOk);
-  const total = shownCards.reduce((n, c) => n + statementsOf(c).length, 0);
+  // Under All months every card, one with no statements left (its last one
+  // removed) too, so it can still be removed; a picked month, only the
+  // cards with a statement in it.
+  const blocks = shownCards.filter((c) => monthOk === ALL || statementsOf(c).length > 0);
 
   if (cards.length === 0 && loans.length === 0) {
     return (
@@ -62,8 +67,8 @@ export function CardStatements({ cards, loans }: { cards: CardView[]; loans: Loa
             <div className="flex flex-wrap gap-2" role="group" aria-label="Cards">
               <button
                 type="button"
-                aria-pressed={cardId === ALL}
-                className={`chip-btn ${cardId === ALL ? "border-primary/40 bg-primary/10" : ""}`}
+                aria-pressed={cardOk === ALL}
+                className={`chip-btn ${cardOk === ALL ? "border-primary/40 bg-primary/10" : ""}`}
                 onClick={() => setCardId(ALL)}
               >
                 All cards
@@ -95,13 +100,12 @@ export function CardStatements({ cards, loans }: { cards: CardView[]; loans: Loa
             </label>
           </div>
 
-          {total === 0 ? (
-            <p className="py-6 text-center text-sm text-muted">No statements for {monthLabel(monthOk)}.</p>
+          {blocks.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted">
+              {monthOk === ALL ? "No statements on file." : `No statements for ${monthLabel(monthOk)}.`}
+            </p>
           ) : (
-            shownCards.map((c) => {
-              const rows = statementsOf(c);
-              return rows.length === 0 ? null : <CardBlock key={c.id} card={c} statements={rows} />;
-            })
+            blocks.map((c) => <CardBlock key={c.id} card={c} statements={statementsOf(c)} />)
           )}
         </div>
       ) : null}
@@ -157,11 +161,15 @@ function CardBlock({ card, statements }: { card: CardView; statements: CardState
         ) : null}
       </div>
       {error ? <div className="alert-error">{error}</div> : null}
-      <div className="space-y-2">
-        {statements.map((s) => (
-          <StatementBlock key={s.id} cardId={card.id} statement={s} />
-        ))}
-      </div>
+      {statements.length === 0 ? (
+        <p className="text-sm text-muted">No statements on file for this card.</p>
+      ) : (
+        <div className="space-y-2">
+          {statements.map((s) => (
+            <StatementBlock key={s.id} cardId={card.id} statement={s} />
+          ))}
+        </div>
+      )}
       <button type="button" className="text-xs text-negative hover:underline" onClick={() => setConfirm(true)}>
         Remove this card
       </button>
@@ -256,7 +264,7 @@ function StatementBlock({ cardId, statement: s }: { cardId: string; statement: C
   );
 }
 
-const shortMonth = (ym: string) => new Date(`${ym}-01T00:00:00.000Z`).toLocaleDateString("en-IN", { month: "short", timeZone: "UTC" });
+const shortMonth = (ym: string) => MONTH_SHORT[Number(ym.slice(5, 7)) - 1];
 
 /**
  * One imported expense. A GST charge whose instalment is not on record yet

@@ -1,6 +1,8 @@
 // Date tokens as statements print them: "12/08/2026", "12-Aug-2026",
 // "12 Aug 2026", "August 12, 2026", "12 Oct, 2026".
 
+import { isRealDay } from "../format";
+
 export const MONTHS: Record<string, number> = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
   jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
@@ -10,9 +12,13 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+/**
+ * The ISO date, or null when there is no such day ("31/02/2026",
+ * "31/04/2026", "29/02/2025") or the year is cut short ("12/08/202").
+ */
 function iso(y: number, m: number, d: number): string | null {
-  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
   const year = y < 100 ? 2000 + y : y;
+  if (!isRealDay(year, m, d)) return null;
   return `${year}-${pad(m)}-${pad(d)}`;
 }
 

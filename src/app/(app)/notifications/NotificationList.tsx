@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { NotificationDTO } from "@/lib/notifications";
 import { AddCircleIcon, PaymentsIcon, PencilIcon, TrashIcon } from "@/components/Icons";
@@ -25,8 +25,8 @@ function TypeIcon({ type }: { type: string }) {
   );
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+function timeAgo(iso: string, now: number): string {
+  const diff = now - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
@@ -38,11 +38,22 @@ function timeAgo(iso: string): string {
 
 export function NotificationList({
   notifications,
+  renderedAt,
 }: {
   notifications: NotificationDTO[];
+  /** When the server rendered the page (ms), so "2m ago" reads the same in its HTML and on the first render here. */
+  renderedAt: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  // The server's clock first, so hydration matches; then this device's,
+  // kept current each minute.
+  const [now, setNow] = useState(renderedAt);
+  useEffect(() => {
+    setNow(Date.now());
+    const tick = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(tick);
+  }, []);
 
   function markAll() {
     startTransition(async () => {
@@ -87,7 +98,7 @@ export function NotificationList({
             <div className="min-w-0 flex-1">
               <div className="text-sm text-ink">{n.message}</div>
               <div className="mt-0.5 truncate text-xs text-muted">
-                <span className="font-medium text-ink/80">{n.groupName}</span> · {timeAgo(n.createdAt)}
+                <span className="font-medium text-ink/80">{n.groupName}</span> · {timeAgo(n.createdAt, now)}
               </div>
             </div>
             <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />

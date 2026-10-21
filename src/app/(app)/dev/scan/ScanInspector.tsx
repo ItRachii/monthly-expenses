@@ -134,7 +134,7 @@ function Overlay({
         {struck.map((it, i) => rect(it, i, "stroke-negative [stroke-width:4]"))}
         {merged.map((it, i) => rect(it, i, "stroke-warning [stroke-width:4]"))}
         {showPii
-          ? (run.result.cells ?? run.result.items)
+          ? (run.result.cells?.length ? run.result.cells : run.result.items)
               .filter((it) => it.page === page.page && (it.pii || it.ref))
               .map((it, i) => rect(it, i, `${TAG_STYLE[(it.pii ?? it.ref)!.kind].stroke} [stroke-width:4] [stroke-dasharray:10_4]`))
           : null}
@@ -311,7 +311,7 @@ export function ScanInspector() {
                 <tr><td>Round trip (browser, Vercel, ngrok, scanner)</td><td>{run.roundTripMs} ms</td></tr>
                 <tr><td>Image picked</td><td>{(run.originalBytes / 1024).toFixed(0)} KB</td></tr>
                 <tr><td>Image sent</td><td>{(run.sentBytes / 1024).toFixed(0)} KB, {run.result.pages[0]?.width} x {run.result.pages[0]?.height} px</td></tr>
-                <tr><td>OCR pieces / layout blocks</td><td>{run.result.cells?.length ?? "none (old scanner)"} / {run.result.items.length}</td></tr>
+                <tr><td>OCR pieces / layout blocks</td><td>{run.result.cells?.length || "none (old scanner)"} / {run.result.items.length}</td></tr>
               </tbody>
             </table>
           </div>
@@ -577,9 +577,15 @@ function StruckSection({ sv }: { sv: ReturnType<typeof strikeView> }) {
 function OrderSections({ ov, complete }: { ov: ReturnType<typeof orderView>; complete: Completeness }) {
   const { check, shares } = ov.settled;
   const bill = ov.order.bill;
+  // Each product row's place among the product rows, as readOrder counts
+  // them, so a row shows the item read from it, not the first item whose
+  // name it starts with ("Milk ₹30" for the "Milk Bread ₹40" row).
+  let seen = 0;
+  const productNo = ov.parts.map((r) => (r.part === "product" ? seen++ : -1));
   // A product row with a price is an item; one without is a detail line ("1 pc (250 ml)").
-  const became = (line: string) => {
-    const it = ov.order.items.find((x) => line.trim().startsWith(x.read));
+  const became = (line: string, k: number) => {
+    const it =
+      ov.order.items.find((x) => x.row === k) ?? ov.order.items.find((x) => x.row === -1 && line.trim().startsWith(x.read));
     if (it) return `Item: ${it.description}, ${formatINR(it.amount)}`;
     const text = plainText(line).trim();
     const of = text.length > 2 ? ov.order.items.find((x) => x.description.endsWith(text)) : undefined;
@@ -603,7 +609,7 @@ function OrderSections({ ov, complete }: { ov: ReturnType<typeof orderView>; com
                   <td>{i + 1}</td>
                   <td className="font-mono text-xs">{plainText(r.line)}</td>
                   <td>{PART[r.part]}</td>
-                  <td>{r.part === "product" ? became(r.line) : reading(ov.bills[i].reading)}</td>
+                  <td>{r.part === "product" ? became(r.line, productNo[i]) : reading(ov.bills[i].reading)}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PdfPasswordError, readPdfPages } from "@/lib/statements/pdf";
@@ -21,7 +21,7 @@ import { FileDropzone } from "@/components/FileDropzone";
 import { EyeIcon, LabelIcon, ReceiptIcon, XIcon } from "@/components/Icons";
 import { RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { findCategory, formatCategory, mergeCategories } from "@/lib/constants";
-import { formatINR } from "@/lib/format";
+import { formatINR, monthLabel, shortDate } from "@/lib/format";
 
 interface Opt {
   value: string;
@@ -49,11 +49,6 @@ const BANK_LABEL: Record<ParsedStatement["bank"], string> = {
   unknown: "Card statement",
 };
 
-function monthLabel(period: string | null): string {
-  if (!period) return "";
-  const [y, m] = period.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
-}
 
 /** How to read a file: by extension first, then by type. */
 function fileKind(f: File): "pdf" | "xlsx" | "csv" | "xls" {
@@ -64,10 +59,7 @@ function fileKind(f: File): "pdf" | "xlsx" | "csv" | "xls" {
   return "pdf";
 }
 
-function dayLabel(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" });
-}
+const dayLabel = (iso: string) => shortDate(iso, { year: false });
 
 /** What to do with a ticked row that is already on record. "add" is only offered for likely matches. */
 type Choice = "skip" | "replace" | "add";
@@ -139,6 +131,11 @@ export function StatementImport({
   // A file the parser could not place with HDFC or ICICI: a popup says which
   // banks are supported before the generic-rules review is shown.
   const [unsupported, setUnsupported] = useState(false);
+  // Which read of a file is current. A read, its duplicate check, or a save
+  // from it that finishes after the statement was closed or another file
+  // picked is dropped: row ids repeat across files ("page-index"), so its
+  // results would land on the wrong rows.
+  const readNo = useRef(0);
 
   // Categories already used in the chosen destination, so the picker offers them.
   useEffect(() => {
@@ -154,6 +151,8 @@ export function StatementImport({
   }, [ctx]);
 
   async function run(f: File, pw?: string) {
+    const mine = ++readNo.current;
+    const current = () => mine === readNo.current;
     setError(null);
     setPhase("reading");
     try {
@@ -169,6 +168,7 @@ export function StatementImport({
       // Loan numbers and references become keyed hashes here; the digits
       // are forgotten before anything is shown or sent.
       await applyKeys(p, loanSalt);
+      if (!current()) return;
       p.warnings.push(...lineageWarnings(resolveLineage(p.rows, known)));
       setSummarySaved(false);
       setParsed(p);
@@ -192,7 +192,7 @@ export function StatementImport({
         const occ = occurrenceMap(p.rows);
         checkStatementDuplicatesAction({ rows: debits.map((r) => payloadOf(r, r.category, occ)), card: cardOf(p) })
           .then((res) => {
-            if (!res.ok || res.duplicates.length === 0) return;
+            if (!current() || !res.ok || res.duplicates.length === 0) return;
             const map = new Map(res.duplicates.map((d) => [debits[d.index].id, d]));
             setOnRecord(map);
             setSelected((sel) => new Set([...sel].filter((id) => !map.has(id))));
@@ -200,6 +200,7 @@ export function StatementImport({
           .catch(() => {});
       }
     } catch (e) {
+      if (!current()) return;
       setPhase("pick");
       if (e instanceof PdfPasswordError) {
         setNeedPassword(true);
@@ -220,6 +221,7 @@ export function StatementImport({
   }
 
   function reset() {
+    readNo.current++;
     setFile(null);
     setParsed(null);
     setUnsupported(false);
@@ -272,15 +274,22 @@ export function StatementImport({
 
   function saveSummary() {
     if (!summaryInput) return;
+    const mine = readNo.current;
     setError(null);
     startSaveSummary(async () => {
-      const res = await saveStatementSummaryAction(summaryInput, lineage ?? undefined);
+      // Thrown (a dropped connection, a database error) is a failure like
+      // any other: said here, not a crashed page. It saves all or nothing.
+      const res = await saveStatementSummaryAction(summaryInput, lineage ?? undefined).catch(() => ({
+        ok: false as const,
+        error: "Could not save the summary, so nothing was saved. Try again.",
+      }));
+      router.refresh();
+      if (mine !== readNo.current) return;
       if (!res.ok) {
         setError(res.error);
         return;
       }
       setSummarySaved(true);
-      router.refresh();
     });
   }
 
@@ -321,17 +330,19 @@ export function StatementImport({
     if (selectedRows.length === 0) return;
     setError(null);
     const batch = selectedRows;
+    const mine = readNo.current;
     startImport(async () => {
       const check = await checkStatementDuplicatesAction({
         rows: batch.map((r) => payloadOf(r, categories[r.id] ?? r.category, occ)),
         card: parsed ? cardOf(parsed) : undefined,
-      });
+      }).catch(() => ({ ok: false as const, error: "Could not check these rows against your expenses, so nothing was added. Try again." }));
+      if (mine !== readNo.current) return;
       if (!check.ok) {
         setError(check.error);
         return;
       }
       if (check.duplicates.length === 0) {
-        await send(batch, new Map(), new Set());
+        await send(batch, new Map(), new Set(), mine);
         return;
       }
       const dups = new Map(check.duplicates.map((d) => [batch[d.index].id, d]));
@@ -340,7 +351,7 @@ export function StatementImport({
   }
 
   /** Sends the batch: rows to replace carry the expense they overwrite; skipped ones stay out. */
-  async function send(batch: StatementRow[], replace: Map<string, number>, skip: Set<string>) {
+  async function send(batch: StatementRow[], replace: Map<string, number>, skip: Set<string>, mine: number) {
     const sending = batch.filter((r) => !skip.has(r.id));
     if (sending.length === 0) {
       setAdded((a) => new Set([...a, ...batch.map((r) => r.id)]));
@@ -349,6 +360,11 @@ export function StatementImport({
       setResult({ count: 0, replaced: 0, skipped: skip.size, ctx });
       return;
     }
+    // The import saves all or nothing, so a failure (thrown, as a dropped
+    // connection is) leaves nothing half added. A connection that drops
+    // after the save may leave it done, so the message does not say it
+    // was not; trying again is safe either way, as rows already on record
+    // are skipped.
     const res = await importStatementAction({
       ctx,
       summary: summaryInput && !summarySaved ? summaryInput : undefined,
@@ -358,7 +374,9 @@ export function StatementImport({
           : undefined,
       lineage: lineage ?? undefined,
       rows: sending.map((r) => ({ ...payloadOf(r, categories[r.id] ?? r.category, occ), replaceId: replace.get(r.id) ?? null })),
-    });
+    }).catch(() => ({ ok: false as const, error: "Could not reach the server to save these rows. Try again: any already saved are skipped, never added twice." }));
+    router.refresh();
+    if (mine !== readNo.current) return;
     if (!res.ok) {
       setError(res.error);
       return;
@@ -368,7 +386,6 @@ export function StatementImport({
     setReview(null);
     setResult({ count: res.count, replaced: res.replaced, skipped: skip.size + res.skipped, ctx });
     if (res.summarySaved) setSummarySaved(true);
-    router.refresh();
   }
 
   function confirmReview() {
@@ -380,7 +397,9 @@ export function StatementImport({
       else if (c === "skip") skip.add(id);
       // "add": a likely match the user knows is a separate spend; sent as new.
     }
-    startImport(() => send(review.rows, replace, skip));
+    setError(null);
+    const mine = readNo.current;
+    startImport(() => send(review.rows, replace, skip, mine));
   }
 
   async function copyDebug() {
@@ -475,6 +494,7 @@ export function StatementImport({
           review={review}
           destination={ctxLabel}
           pending={importing}
+          error={error}
           onChoice={(id, c) => setReview((r) => (r ? { ...r, choice: new Map(r.choice).set(id, c) } : r))}
           onAll={(c) => setReview((r) => (r ? { ...r, choice: new Map([...r.choice.keys()].map((id) => [id, c])) } : r))}
           onCancel={() => setReview(null)}
@@ -498,7 +518,15 @@ export function StatementImport({
                 </h2>
                 <p className="truncate text-sm text-muted">{file?.name}</p>
               </div>
-              <button type="button" className="icon-btn" aria-label="Close statement" title="Close" onClick={reset}>
+              {/* Not while a save is on its way: its answer belongs to this statement. */}
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Close statement"
+                title={importing || savingSummary ? "Saving…" : "Close"}
+                disabled={importing || savingSummary}
+                onClick={reset}
+              >
                 <XIcon />
               </button>
             </div>
@@ -791,8 +819,7 @@ function SummaryGrid({ summary }: { summary: NonNullable<ParsedStatement["summar
   const money = (n: number | null) => (n === null ? "not printed" : formatINR(n));
   const date = (iso: string | null) => {
     if (!iso) return "not printed";
-    const [y, m, d] = iso.split("-").map(Number);
-    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+    return shortDate(iso);
   };
   const cells: [string, string, boolean?][] = [
     ["Total amount due", money(summary.totalDue), true],
@@ -1201,6 +1228,7 @@ function DuplicatesDialog({
   review,
   destination,
   pending,
+  error,
   onChoice,
   onAll,
   onCancel,
@@ -1209,6 +1237,8 @@ function DuplicatesDialog({
   review: { rows: StatementRow[]; dups: Map<string, DuplicateView>; choice: Map<string, Choice> };
   destination: string;
   pending: boolean;
+  /** Why adding failed: shown here, as the page's own message sits behind the dialog. */
+  error: string | null;
   onChoice: (rowId: string, c: Choice) => void;
   onAll: (c: Choice) => void;
   onCancel: () => void;
@@ -1312,6 +1342,12 @@ function DuplicatesDialog({
             );
           })}
         </ul>
+
+        {error ? (
+          <div className="alert-error" role="alert">
+            {error}
+          </div>
+        ) : null}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <span className="text-xs text-muted sm:mr-auto" aria-live="polite">

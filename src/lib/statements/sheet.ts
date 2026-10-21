@@ -17,6 +17,7 @@
 // Descriptions pass through the same deny-list redaction as PDF lines. The
 // name, address, CKYC ID and account numbers in the header are never read.
 
+import { isRealDay } from "../format";
 import { readDate } from "./dates";
 import { makeRefTagger, redactLine } from "./redact";
 import { assembleStatement, buildRows, citedRef, detectBank, dropEmiBadge, readForeign, sectionOf, type Line, type Section } from "./parse";
@@ -30,12 +31,39 @@ export type Grid = CellValue[][];
 
 // ---- CSV --------------------------------------------------------------
 
+/**
+ * How often `ch` separates fields if it is the separator: outside quoted
+ * fields only, so the commas in "SWIGGY, BANGALORE, IN" or "1,23,456.00" do
+ * not make a semicolon file look comma separated. As in parseCsv, a quote
+ * opens a quoted field only at the start of one (an inch mark in
+ * `TV 55" LED` is just a character), and a doubled one inside is a quote
+ * character.
+ */
+function countUnquoted(text: string, ch: string): number {
+  let n = 0;
+  let quoted = false;
+  let fieldStart = true;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') i++;
+      else if (c === '"') quoted = false;
+      continue;
+    }
+    if (c === '"' && fieldStart) quoted = true;
+    else if (c === ch) n++;
+    // Right after any of the separators being weighed, or a line break: a
+    // quote there opens a field whichever of them the file uses.
+    fieldStart = c === "," || c === ";" || c === "\t" || c === "\n" || c === "\r";
+  }
+  return n;
+}
+
 /** Splits CSV text into a grid. Quoted fields, doubled quotes, CRLF, and comma, semicolon or tab delimiters. */
 export function parseCsv(text: string): Grid {
   const src = text.replace(/^﻿/, "");
   const sample = src.split(/\r?\n/).slice(0, 20).join("\n");
-  const count = (ch: string) => sample.split(ch).length - 1;
-  const delim = [",", ";", "\t"].sort((a, b) => count(b) - count(a))[0];
+  const delim = [",", ";", "\t"].sort((a, b) => countUnquoted(sample, b) - countUnquoted(sample, a))[0];
   const rows: Grid = [];
   let row: CellValue[] = [];
   let field = "";
@@ -84,13 +112,17 @@ export function cellText(v: CellValue): string {
   return String(v).replace(/\s+/g, " ").trim();
 }
 
+// A cell written like a date ("31/02/2026", "2026-02-31", "31-Feb-26"),
+// whether or not it is a real day.
+const DATE_SHAPE = /^(?:\d{1,4}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}[\/\-. ]?[A-Za-z]{3})/;
+
 function dateOf(v: CellValue): string | null {
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : isoOf(v);
   const t = cellText(v);
   if (!t) return null;
   // ISO dates, common in generic CSV exports: 2026-07-18.
   const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})\b/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  if (iso) return isRealDay(+iso[1], +iso[2], +iso[3]) ? `${iso[1]}-${iso[2]}-${iso[3]}` : null;
   const tokens = t.split(" ");
   tokens[0] = tokens[0].replace(/\|+$/, "");
   return readDate(tokens, 0)?.date ?? null;
@@ -480,6 +512,13 @@ export function parseSheet(grids: Grid[], opts: { filename?: string } = {}): Par
             section: rowSection,
             text,
           });
+          continue;
+        }
+        // A date that is no real day ("31/02/2026", a misprint or a bad
+        // export) is a transaction row all the same: listed as not read,
+        // and the rows after it still are.
+        if (dateCell && DATE_SHAPE.test(cellText(dateCell.v))) {
+          unparsed.push({ page, text: redactLine(cells.map((c) => c.t).join(" "), tagger.tag) });
           continue;
         }
         // Several cells and no date: another block has begun.

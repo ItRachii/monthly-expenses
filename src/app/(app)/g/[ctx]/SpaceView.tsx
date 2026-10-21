@@ -57,6 +57,7 @@ export function SpaceView({
   finance,
   cards,
   loans,
+  renderedAt,
 }: {
   ctx: string;
   name: string;
@@ -86,6 +87,8 @@ export function SpaceView({
   cards: CardView[] | null;
   /** EMIs on record; Personal only. */
   loans: LoanView[];
+  /** When the server rendered the page (ms), for figures that depend on today's date. */
+  renderedAt: number;
 }) {
   const tabs: { id: SpaceTab; label: string }[] = isPersonal
     ? [
@@ -201,6 +204,7 @@ export function SpaceView({
             finance={finance}
             isPersonal={isPersonal}
             members={members}
+            renderedAt={renderedAt}
           />
         ) : null}
 

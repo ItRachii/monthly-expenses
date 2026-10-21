@@ -4,7 +4,7 @@ import {
   getGroupNameHistory,
   type GroupDTO,
 } from "./groups";
-import { wireKey } from "./wire";
+import { safeLabel, wireKey } from "./wire";
 
 /** Everything the group settings UI needs. Emails of members never leave the server. */
 export interface GroupView {
@@ -39,7 +39,7 @@ export async function buildGroupView(g: GroupDTO, userEmail: string): Promise<Gr
     // Members ship with opaque, group-scoped keys only.
     members: members.map((m) => ({
       key: wireKey(g.id, m.email),
-      displayName: m.displayName,
+      displayName: safeLabel(m.displayName, m.email),
       role: m.role,
       isSelf: m.email === userEmail,
     })),

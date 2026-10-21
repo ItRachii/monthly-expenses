@@ -15,8 +15,7 @@ import {
 } from "@/lib/cards";
 import { prisma } from "@/lib/prisma";
 import { notifyGroup } from "@/lib/notifications";
-import { displayNameFor } from "@/lib/users";
-import { maskEmail } from "@/lib/pii";
+import { nameForOthers } from "@/lib/users";
 import { formatINR } from "@/lib/format";
 import { deleteLoan, saveLineage, validateLineage } from "@/lib/loans";
 import type { LineagePayload } from "@/lib/statements/lineage";
@@ -36,14 +35,14 @@ async function requireEmail(): Promise<string | null> {
 export async function saveStatementSummaryAction(input: SaveStatementInput, lineage?: LineagePayload): Promise<Result> {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
-  const invalid = validateSaveInput(input);
+  // Everything is checked before anything is saved, and saved together:
+  // an error never leaves the summary filed without its instalments.
+  const invalid = validateSaveInput(input) ?? (lineage ? validateLineage(lineage) : null);
   if (invalid) return { ok: false, error: invalid };
-  const { cardId } = await saveCardStatement(email, input);
-  if (lineage) {
-    const bad = validateLineage(lineage);
-    if (bad) return { ok: false, error: bad };
-    await saveLineage(email, cardId, lineage);
-  }
+  await prisma.$transaction(async (tx) => {
+    const { cardId } = await saveCardStatement(email, input, tx);
+    if (lineage) await saveLineage(email, cardId, lineage, tx);
+  }, { maxWait: 10_000, timeout: 120_000 });
   // Tracing a pending GST charge renames an expense and clears its warning.
   revalidatePath("/", "layout");
   return { ok: true };
@@ -54,7 +53,8 @@ export async function deleteLoanAction(loanKey: string): Promise<Result> {
   if (!email) return { ok: false, error: "Not signed in." };
   if (typeof loanKey !== "string" || !/^l_[A-Za-z0-9_-]{16,64}$/.test(loanKey)) return { ok: false, error: "Invalid loan." };
   await deleteLoan(email, loanKey);
-  revalidatePath("/statements");
+  // A GST charge traced to the loan is flagged again on its expense.
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -98,7 +98,7 @@ async function notifyRemoval(email: string, plan: RemovalPlan) {
   try {
     const u = await prisma.appUser.findUnique({ where: { email } });
     // Stored and shown to other members: never the raw address.
-    const who = displayNameFor(u, maskEmail(email));
+    const who = await nameForOthers(u, email);
     for (const g of plan.groups) {
       await notifyGroup({
         groupId: g.id,

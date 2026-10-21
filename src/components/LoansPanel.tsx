@@ -4,17 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteLoanAction } from "@/lib/actions/cards";
 import type { LoanView } from "@/lib/loans";
-import { formatINR } from "@/lib/format";
-
-function monthLabel(period: string): string {
-  const [y, m] = period.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
-}
-
-function dayLabel(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
-}
+import { formatINR, monthLabel, shortDate as dayLabel } from "@/lib/format";
 
 /**
  * Every EMI on record, instalment by instalment, with the GST the bank
@@ -36,6 +26,7 @@ function LoanBlock({ loan }: { loan: LoanView }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const paid = loan.instalments.reduce((s, i) => s + i.principal + i.interest + (i.gst ?? 0), 0);
   const pendingGst = loan.instalments.filter((i) => i.gst === null).length;
 
@@ -86,7 +77,14 @@ function LoanBlock({ loan }: { loan: LoanView }) {
           Total is what the instalment really cost once its GST arrived. A pending GST usually turns up in the next statement.
         </p>
         {!confirm ? (
-          <button type="button" className="btn-danger px-3 py-2.5 text-xs" onClick={() => setConfirm(true)}>
+          <button
+            type="button"
+            className="btn-danger px-3 py-2.5 text-xs"
+            onClick={() => {
+              setError(null);
+              setConfirm(true);
+            }}
+          >
             Forget this loan
           </button>
         ) : (
@@ -96,18 +94,32 @@ function LoanBlock({ loan }: { loan: LoanView }) {
               type="button"
               className="btn-danger px-3 py-1 text-xs"
               disabled={pending}
-              onClick={() =>
+              onClick={() => {
+                setError(null);
                 startTransition(async () => {
-                  await deleteLoanAction(loan.loanKey);
+                  const res = await deleteLoanAction(loan.loanKey).catch(() => null);
+                  if (!res?.ok) setError(res?.error ?? "Something went wrong.");
                   router.refresh();
-                })
-              }
+                });
+              }}
             >
               Yes, forget
             </button>
-            <button type="button" className="btn-secondary px-3 py-1 text-xs" onClick={() => setConfirm(false)}>
+            <button
+              type="button"
+              className="btn-secondary px-3 py-1 text-xs"
+              onClick={() => {
+                setConfirm(false);
+                setError(null);
+              }}
+            >
               Cancel
             </button>
+            {error ? (
+              <div className="alert-error basis-full" role="alert">
+                {error}
+              </div>
+            ) : null}
           </div>
         )}
       </div>

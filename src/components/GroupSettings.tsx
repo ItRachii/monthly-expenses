@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/groups";
 import { CheckIcon, PencilIcon, XIcon } from "@/components/Icons";
 import type { GroupView } from "@/lib/groupView";
+import { localISO, shortDate } from "@/lib/format";
 
 // Group settings, opened from the gear on a group screen.
 
@@ -254,12 +255,9 @@ function NameField({
   );
 }
 
+/** "5 Sep 2026", on this device's calendar, spelled as everywhere else in the app. */
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return shortDate(localISO(new Date(iso)), { padDay: false });
 }
 
 function NameHistory({

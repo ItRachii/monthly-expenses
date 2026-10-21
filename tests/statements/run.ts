@@ -12,6 +12,7 @@ import { detectBank, parseStatement } from "../../src/lib/statements/parse";
 import { amountCell, parseCsv, parseSheet, type Grid } from "../../src/lib/statements/sheet";
 import { readXlsx } from "../../src/lib/statements/xlsx";
 import { redactLine } from "../../src/lib/statements/redact";
+import { readDate } from "../../src/lib/statements/dates";
 import { applyKeys, canonicalDigits, gstLineageName, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
 
 const dir = join(__dirname, "fixtures");
@@ -438,6 +439,45 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   ];
   const gg = parseSheet([gstGap]);
   check("sheet: a GST summary that disagrees with the lines read is flagged", gg.gstBilled === 105.92 && gg.warnings.some((w) => /GST summary says ₹105\.92.*₹34\.74/.test(w)), JSON.stringify(gg.warnings));
+
+  // The separator is judged outside quotes: a semicolon file whose quoted
+  // descriptions and amounts are full of commas is still a semicolon file.
+  const semi = parseCsv('Date;Description;Amount\n01/08/2026;"SWIGGY, BANGALORE, IN";"1,23,456.00"\n');
+  check("csv: quoted commas do not change the separator", semi.length === 2 && semi[1].length === 3 && semi[1][1] === "SWIGGY, BANGALORE, IN" && semi[1][2] === "1,23,456.00", JSON.stringify(semi));
+  const semiRows = parseSheet([semi]).rows;
+  check("csv: that semicolon file's transaction is read", semiRows.length === 1 && semiRows[0].total === 123456, JSON.stringify(semiRows.map((r) => [r.date, r.description, r.total])));
+  const plain = parseCsv('Date,Description,Amount\n01/08/2026,"ZOMATO; DELHI",350.00\n');
+  check("csv: a comma file with a quoted semicolon stays a comma file", plain[1].length === 3 && plain[1][1] === "ZOMATO; DELHI", JSON.stringify(plain));
+  const tabs = parseCsv('Date\tDescription\tAmount\n01/08/2026\t"Tea, ""special"""\t20\n');
+  check("csv: tabs with a doubled quote inside a field", tabs[1].length === 3 && tabs[1][1] === 'Tea, "special"', JSON.stringify(tabs));
+
+  // Only days the month has: a misread "31/02/2026" is not a date.
+  const day = (t: string) => readDate(t.split(" "), 0)?.date ?? null;
+  const impossible = ["31/02/2026", "30/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"];
+  check("dates: impossible days are not dates", impossible.every((t) => day(t) === null), JSON.stringify(impossible.map(day)));
+  check("dates: a year cut short is not a date", day("12/08/202") === null, String(day("12/08/202")));
+  const isoBad = parseSheet([parseCsv("Date,Description,Amount\n2026-07-18,SWIGGY,350.00\n2026-02-31,ZOMATO,120.00\n2026-13-45,UBER,99.00\n2026-07-19,BLINKIT,80.00\n")]);
+  check("sheet: impossible ISO dates are listed as not read, not ticked rows", JSON.stringify(isoBad.rows.map((r) => r.date)) === JSON.stringify(["2026-07-18", "2026-07-19"]) && isoBad.unparsed.length === 2, JSON.stringify([isoBad.rows.map((r) => r.date), isoBad.unparsed.map((u) => u.text)]));
+  check("dates: real ones still are", day("29/02/2028") === "2028-02-29" && day("31/12/2026") === "2026-12-31" && day("30/04/2026") === "2026-04-30" && day("12-Aug-26") === "2026-08-12" && day("12 Aug 2026") === "2026-08-12", JSON.stringify(["29/02/2028", "31/12/2026", "30/04/2026", "12-Aug-26", "12 Aug 2026"].map(day)));
+
+  // A quote in the middle of a field (an inch mark) is a character, not the start of a quoted field.
+  const inch = parseSheet([parseCsv('Date;Description;Amount\n01/08/2026;TV 55" LED;35000\n02/08/2026;"SWIGGY, BANGALORE, IN";"1,23,456.00"\n')]).rows;
+  check("csv: an inch mark does not change the separator", inch.length === 2 && inch[0].description === 'TV 55" LED' && inch[1].total === 123456, JSON.stringify(inch.map((r) => [r.description, r.total])));
+  const inchTab = parseCsv('Date\tDescription\tAmount\n01/08/2026\tMonitor 27" 4K\t"21,999.00"\n02/08/2026\t"Tea, coffee"\t20\n');
+  const inchComma = parseCsv('Date,Description,Amount\n01/08/2026,"Rack; 2 shelves; steel",500\n02/08/2026,TV 55" LED,35000\n');
+  check("csv: a comma file with quoted semicolons and an inch mark", inchComma[1].length === 3 && inchComma[2].length === 3 && inchComma[2][1] === 'TV 55" LED', JSON.stringify(inchComma));
+  check("csv: tabs with an inch mark", inchTab[1].length === 3 && inchTab[2].length === 3 && inchTab[1][1] === 'Monitor 27" 4K', JSON.stringify(inchTab));
+
+  // A row whose date is no real day is listed as not read; the rows after it are still read.
+  const badDay = parseSheet([parseCsv("Date,Description,Amount\n18/07/2026,SWIGGY BANGALORE,350.00\n31/02/2026,ZOMATO DELHI,120.00\n19/07/2026,BLINKIT GURGAON,99.00\n20/07/2026,UBER INDIA,250.00\n")]);
+  check("sheet: an impossible date does not end the table", JSON.stringify(badDay.rows.map((r) => r.date)) === JSON.stringify(["2026-07-18", "2026-07-19", "2026-07-20"]), JSON.stringify(badDay.rows.map((r) => [r.date, r.description])));
+  check("sheet: the impossible date's row is listed as not read", badDay.unparsed.length === 1 && /31\/02\/2026 ZOMATO DELHI/.test(badDay.unparsed[0].text), JSON.stringify(badDay.unparsed));
+
+  // A traced GST charge's name is part of its import key: its month keeps the
+  // locale's spelling ("Sept" on Node) so charges imported before still match.
+  const septName = gstLineageName({ instalmentNo: 3, loanLast4: "1234", period: "2026-09" });
+  const localeSept = new Date(Date.UTC(2026, 8, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
+  check("lineage: GST names keep the month spelling they were saved with", septName === `GST on EMI #3 interest (loan …1234, ${localeSept})`, septName);
 
   // A phone number is ten digits on their own, not the tail of a longer reference.
   const longRef = redactLine("08/07/2026 IGST-VPS2607987654321098 0 110.25");

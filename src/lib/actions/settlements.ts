@@ -7,11 +7,10 @@ import { createSettlement, getOutstandingTransfers } from "@/lib/settlements";
 import { SETTLE_EPS, pairAmount, round2 } from "@/lib/settlementMath";
 import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
-import { displayNameFor } from "@/lib/users";
+import { nameForOthers } from "@/lib/users";
 import { formatINR } from "@/lib/format";
 import { cleanText, isValidAmount, isValidMonth } from "@/lib/validate";
 import { emailForKey } from "@/lib/wire";
-import { maskEmail } from "@/lib/pii";
 
 export async function settleAction(input: {
   ctx: string;
@@ -92,7 +91,7 @@ export async function settleAction(input: {
         where: { email: { in: [email, settledBy, settledTo] } },
       });
       const byEmail = new Map(people.map((u) => [u.email, u]));
-      const name = (e: string) => displayNameFor(byEmail.get(e) ?? null, maskEmail(e));
+      const [actorName, byName, toName] = await Promise.all([email, settledBy, settledTo].map((e) => nameForOthers(byEmail.get(e) ?? null, e)));
       const status =
         remainingAfter != null && remainingAfter > SETTLE_EPS
           ? `part payment, ${formatINR(remainingAfter)} still due`
@@ -101,7 +100,7 @@ export async function settleAction(input: {
         groupId,
         actorEmail: email,
         type: "settlement_recorded",
-        message: `${name(email)} recorded a payment for ${input.month}: ${name(settledBy)} paid ${name(settledTo)} ${formatINR(input.amount)} (${status})`,
+        message: `${actorName} recorded a payment for ${input.month}: ${byName} paid ${toName} ${formatINR(input.amount)} (${status})`,
         target: { kind: "settlement", id: created.id, month: input.month },
       });
     } catch {

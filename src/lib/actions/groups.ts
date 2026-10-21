@@ -7,8 +7,7 @@ import { prisma } from "@/lib/prisma";
 import * as groups from "@/lib/groups";
 import { sendInviteEmail } from "@/lib/email";
 import { notifyGroup } from "@/lib/notifications";
-import { displayNameFor } from "@/lib/users";
-import { maskEmail } from "@/lib/pii";
+import { displayNameFor, nameForOthers } from "@/lib/users";
 import { maskedEmailFor } from "@/lib/piiStore";
 import { cleanText, isValidEmail } from "@/lib/validate";
 import { emailForKey } from "@/lib/wire";
@@ -59,7 +58,7 @@ export async function renameGroupAction(groupId: string, name: string) {
       groupId,
       actorEmail: email,
       type: "group_renamed",
-      message: `${displayNameFor(actor, maskEmail(email))} renamed the group "${before.name}" to "${cleanName}"`,
+      message: `${await nameForOthers(actor, email)} renamed the group "${before.name}" to "${cleanName}"`,
     });
   } catch (err) {
     console.error("Rename notification failed:", err);
@@ -144,7 +143,7 @@ export async function removeMemberAction(groupId: string, targetKey: string) {
 export async function leaveGroupAction(groupId: string) {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
-  await groups.removeMember(groupId, email);
+  await groups.leaveGroup(groupId, email);
   revalidateGroupViews();
   redirect("/");
 }

@@ -3,9 +3,9 @@
 
 import { createHmac } from "crypto";
 import { inTransaction, prisma, type Db } from "./prisma";
-import { formatDate, formatINR } from "./format";
+import { formatDate, formatINR, monthLabel, shortDate } from "./format";
 import { piiSecret } from "./piiCrypto";
-import { gstLineageName, monthLabel, type KnownInstalment, type LineagePayload } from "./statements/lineage";
+import { gstLineageName, type KnownInstalment, type LineagePayload } from "./statements/lineage";
 
 /**
  * The salt the browser uses to key loan numbers for this user. Derived from
@@ -105,7 +105,7 @@ export async function recordPendingGst(ownerEmail: string, input: PendingGstInpu
 /** The reason shown on the expense while its GST charge is untraced. */
 export function pendingGstReason(p: { amount: number; date: Date }): string {
   const iso = formatDate(p.date);
-  const day = new Date(p.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const day = shortDate(iso, { padDay: false });
   return (
     `This GST charge of ${formatINR(p.amount)} dated ${day} cites a reference that is not on record. ` +
     `It is most likely GST on an EMI instalment billed in the ${monthLabel(iso.slice(0, 7))} statement. ` +
@@ -210,6 +210,40 @@ export async function listLoans(ownerEmail: string): Promise<LoanView[]> {
   return [...loans.values()];
 }
 
+/**
+ * Before instalments are removed: every GST charge traced to one goes back
+ * to pending, flagged on its expense, so uploading the statement that billed
+ * the instalment again traces it again.
+ * - Traced on the server (its statement came later): its pending row was
+ *   marked resolved, and is unmarked.
+ * - Traced in the browser as it was imported: it has no pending row, only
+ *   the instalment's name, so it is given one by the reference it cites.
+ *   One matched by amount alone cites none and keeps its name.
+ */
+export async function returnGstToPending(tx: Db, ownerEmail: string, instalmentIds: number[]): Promise<void> {
+  if (instalmentIds.length === 0) return;
+  await tx.gstPending.updateMany({
+    where: { ownerEmail, resolvedInstalmentId: { in: instalmentIds } },
+    data: { resolvedAt: null, resolvedInstalmentId: null },
+  });
+  const traced = await tx.emiInstalment.findMany({ where: { id: { in: instalmentIds }, refKey: { not: null }, gst: { not: null } } });
+  for (const inst of traced) {
+    const charges = await tx.expense.findMany({
+      where: { item: gstLineageName(inst), statement: { card: { ownerEmail } }, gstPending: { none: { resolvedAt: null } } },
+      select: { id: true, amount: true },
+    });
+    for (const e of charges)
+      await tx.gstPending.create({
+        data: { ownerEmail, expenseId: e.id, refKey: inst.refKey!, amount: e.amount, date: inst.date, period: inst.gstPeriod ?? inst.period },
+      });
+  }
+}
+
+/** Removes every instalment of a loan, its GST charges going back to pending. */
 export async function deleteLoan(ownerEmail: string, loanKey: string): Promise<void> {
-  await prisma.emiInstalment.deleteMany({ where: { ownerEmail, loanKey } });
+  await prisma.$transaction(async (tx) => {
+    const ids = (await tx.emiInstalment.findMany({ where: { ownerEmail, loanKey }, select: { id: true } })).map((i) => i.id);
+    await returnGstToPending(tx, ownerEmail, ids);
+    await tx.emiInstalment.deleteMany({ where: { id: { in: ids } } });
+  });
 }

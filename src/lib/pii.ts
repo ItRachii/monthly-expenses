@@ -23,6 +23,13 @@ export function looksLikeEmail(s: string): boolean {
 }
 
 /**
+ * The name of a member with no profile and no stored name. Never their user
+ * id: it is the same in every group, so showing it would let one group's
+ * members be matched with another's.
+ */
+export const UNNAMED_MEMBER = "Member";
+
+/**
  * Label for a stored id or address that matches no current participant, e.g.
  * someone who paid an old expense and has since left the group.
  */

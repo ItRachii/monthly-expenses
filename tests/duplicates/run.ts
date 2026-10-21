@@ -72,5 +72,24 @@ m = matchDuplicates(
 );
 check("exact claims first", same(asObj(m), { 1: { id: 10, how: "exact" } }));
 
+// Descriptions in other scripts: "चाय" and "दूध" are different items, though
+// normalizeItem keeps only a-z and 0-9 and makes both empty.
+m = matchDuplicates([inc(0, "2026-09-03", 20, "चाय", "K1")], [ex(10, "2026-09-03", 20, "दूध", null)], null);
+check("different items in Hindi are not a likely match", same(asObj(m), {}), JSON.stringify(asObj(m)));
+m = matchDuplicates([inc(0, "2026-09-03", 20, "चाय", "K1")], [ex(10, "2026-09-03", 20, "चाय", null)], null);
+check("the same Hindi item is a likely match", same(asObj(m), { 0: { id: 10, how: "likely" } }), JSON.stringify(asObj(m)));
+m = matchDuplicates([inc(0, "2026-09-03", 20, "***", "K1")], [ex(10, "2026-09-03", 20, "---", null)], null);
+check("two descriptions with no letters or digits are not a match", same(asObj(m), {}), JSON.stringify(asObj(m)));
+m = matchDuplicates([inc(0, "2026-09-03", 20, "चाय", "K1")], [ex(10, "2026-09-03", 20, "दूध", null, "card-1")], "card-1");
+check("an empty-looking description still matches by the same card", same(asObj(m), { 0: { id: 10, how: "likely" } }));
+
+// Words that differ only in their vowel signs are different words.
+for (const [a, b] of [["तेल", "ताला"], ["दाल", "दिल"], ["पानी", "पेन"]]) {
+  m = matchDuplicates([inc(0, "2026-09-03", 120, a, "K1")], [ex(10, "2026-09-03", 120, b, null)], null);
+  check(`"${a}" is not "${b}"`, same(asObj(m), {}), JSON.stringify(asObj(m)));
+}
+m = matchDuplicates([inc(0, "2026-09-03", 120, "Café", "K1")], [ex(10, "2026-09-03", 120, "Cafe\u0301", null)], null);
+check("the same word in two Unicode spellings matches", same(asObj(m), { 0: { id: 10, how: "likely" } }), JSON.stringify(asObj(m)));
+
 console.log(failures ? `\n${failures} failed` : "\nall passed");
 process.exit(failures ? 1 : 0);

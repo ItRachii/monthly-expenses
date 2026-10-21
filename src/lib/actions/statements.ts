@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { canonicalCategoriesFor, createExpense } from "@/lib/expenses";
 import { isGroupMember } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
-import { displayNameFor } from "@/lib/users";
+import { nameForOthers } from "@/lib/users";
 import { SPLIT_EQUAL } from "@/lib/constants";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { statementsEnabled } from "@/lib/features";
@@ -256,7 +256,7 @@ export async function importStatementAction(input: {
 
   try {
     const actor = await prisma.appUser.findUnique({ where: { email } });
-    const who = displayNameFor(actor, "A member");
+    const who = await nameForOthers(actor, email);
     if (groupId && createdIds.length > 0) {
       await notifyGroup({
         groupId,

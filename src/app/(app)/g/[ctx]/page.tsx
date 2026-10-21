@@ -144,6 +144,7 @@ export default async function SpacePage({
       finance={finance}
       cards={cards}
       loans={loans}
+      renderedAt={Date.now()}
     />
   );
 }

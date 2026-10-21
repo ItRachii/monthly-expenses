@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDownIcon, XIcon } from "@/components/Icons";
 import type { ReactNode } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
@@ -48,12 +48,16 @@ function monthsUpTo(all: string[], end: string, count: number): string[] {
   return [...all].reverse().filter((m) => m <= end).slice(-count);
 }
 
-function daysIn(month: string): number {
+interface Day {
+  y: number;
+  m: number;
+  d: number;
+}
+
+function daysIn(month: string, today: Day): number {
   const [y, m] = month.split("-").map(Number);
-  const today = new Date();
-  const isCurrent = today.getFullYear() === y && today.getMonth() + 1 === m;
   // The current month only counts the days that have happened so far.
-  return isCurrent ? today.getDate() : new Date(y, m, 0).getDate();
+  return today.y === y && today.m === m ? today.d : new Date(y, m, 0).getDate();
 }
 
 export function Summary({
@@ -61,13 +65,26 @@ export function Summary({
   finance = null,
   isPersonal,
   members,
+  renderedAt,
 }: {
   rows: ExpenseDTO[];
   /** Personal only: income and group shares, for the savings cards. */
   finance?: FinanceData | null;
   isPersonal: boolean;
   members: Member[];
+  /** When the server rendered the page (ms), so the daily average is the same in its HTML and on the first render here. */
+  renderedAt: number;
 }) {
+  // Which day it is: the server's (UTC) first, so hydration matches, then
+  // this device's own, which can be a day later in India before 05:30.
+  const [today, setToday] = useState<Day>(() => {
+    const t = new Date(renderedAt);
+    return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() };
+  });
+  useEffect(() => {
+    const t = new Date();
+    setToday({ y: t.getFullYear(), m: t.getMonth() + 1, d: t.getDate() });
+  }, []);
   // Personal also lists months with only group spending, and this month
   // once an income is set, so savings show before the first expense.
   const months = useMemo(() => {
@@ -103,7 +120,7 @@ export function Summary({
     previous: prevMonth ? sumWhere(prevMonth, value) : null,
   });
   const countIn = (m: string) => rows.filter((r) => r.date.slice(0, 7) === m).length;
-  const dailyAvg = (m: string) => sumWhere(m) / daysIn(m);
+  const dailyAvg = (m: string) => sumWhere(m) / daysIn(m, today);
   const fin = (m: string) => (finance ? financeFor(finance, rows, m) : null);
   const finSeries = (pick: (m: string) => number | null | undefined) => ({
     value: pick(selectedMonth) ?? 0,
