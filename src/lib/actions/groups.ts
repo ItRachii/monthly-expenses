@@ -144,7 +144,7 @@ export async function removeMemberAction(groupId: string, targetKey: string) {
 export async function leaveGroupAction(groupId: string) {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
-  await groups.removeMember(groupId, email);
+  await groups.leaveGroup(groupId, email);
   revalidateGroupViews();
   redirect("/");
 }

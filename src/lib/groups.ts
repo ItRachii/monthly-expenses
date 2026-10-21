@@ -289,6 +289,22 @@ export async function removeMember(groupId: string, userEmail: string): Promise<
   await prisma.groupMember.deleteMany({ where: { groupId, email: userEmail } });
 }
 
+/**
+ * Takes a member out of a group of their own accord. When they were its
+ * last admin, the longest-standing member left becomes admin, so the group
+ * can still be managed. Under a lock on the group, so two admins leaving
+ * at once cannot both count on the other staying.
+ */
+export async function leaveGroup(groupId: string, userEmail: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`members:${groupId}`}))`;
+    await tx.groupMember.deleteMany({ where: { groupId, email: userEmail } });
+    if ((await tx.groupMember.count({ where: { groupId, role: "admin" } })) > 0) return;
+    const next = await tx.groupMember.findFirst({ where: { groupId }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }] });
+    if (next) await tx.groupMember.update({ where: { id: next.id }, data: { role: "admin" } });
+  });
+}
+
 export async function deleteGroup(groupId: string): Promise<void> {
   await prisma.group.update({ where: { id: groupId }, data: { active: 0 } });
 }
