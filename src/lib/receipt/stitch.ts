@@ -20,14 +20,27 @@ export interface Join {
   from: number;
   to: number;
   overlap: number;
+  /** How they were found to meet: rows they share, a row cut at the edge of one, or neither. */
+  how: "shared" | "cut-row" | "none";
+  /** The rows they share, kept once. */
+  shared: string[];
+  /** Rows cut at the edges, dropped: the upper one's bottom, the lower one's top. */
+  dropped: string[];
+  /** Shared rows read more fully on the lower one: [as on the upper, as kept]. */
+  fuller: [string, string][];
+  /** Why the lower one comes next, when they share nothing. */
+  why: string;
 }
 
 export interface Stitched {
   /** The screenshots in reading order, by their index in the upload. */
   order: number[];
   joins: Join[];
-  /** Screenshots that repeat another one entirely, left out. */
+  /** Screenshots that repeat another one entirely, left out; `duplicateOf` the one each repeats. */
   duplicates: number[];
+  duplicateOf: number[];
+  /** The status bar, header and footer every part repeats, kept once (top, bottom). */
+  chrome: { top: string[]; bottom: string[] };
   /** The order's rows, as one text. */
   text: string;
 }
@@ -152,10 +165,19 @@ function overlap(a: Part, b: Part): Overlap | null {
  * people screenshot a long page top to bottom.
  */
 export function stitch(shots: ShotRow[][], taken?: number[]): Stitched {
-  if (shots.length <= 1) return { order: shots.length ? [0] : [], joins: [], duplicates: [], text: (shots[0] ?? []).map((r) => r.text).join("\n") };
+  if (shots.length <= 1)
+    return {
+      order: shots.length ? [0] : [],
+      joins: [],
+      duplicates: [],
+      duplicateOf: [],
+      chrome: { top: [], bottom: [] },
+      text: (shots[0] ?? []).map((r) => r.text).join("\n"),
+    };
 
   // The same screenshot uploaded twice: nearly every row at the same height.
   const duplicates: number[] = [];
+  const duplicateOf: number[] = [];
   const kept: number[] = [];
   for (let i = 0; i < shots.length; i++) {
     const rows = shots[i].filter((r) => r.y >= STATUS_BAR && key(r.text));
@@ -165,8 +187,10 @@ export function stitch(shots: ShotRow[][], taken?: number[]): Stitched {
       const other = shots[j].filter((r) => r.y >= STATUS_BAR && key(r.text));
       return rows.length > 0 && covered(rows, other) && covered(other, rows);
     });
-    if (twin !== undefined) duplicates.push(i);
-    else kept.push(i);
+    if (twin !== undefined) {
+      duplicates.push(i);
+      duplicateOf.push(twin);
+    } else kept.push(i);
   }
 
   const parts: Part[] = kept.map((index) => {
@@ -221,21 +245,29 @@ export function stitch(shots: ShotRow[][], taken?: number[]): Stitched {
   chains.sort((x, y) => place(x) - place(y) || Math.min(...x.map(when)) - Math.min(...y.map(when)));
   const order = chains.flat();
 
+  const chainOf = (k: number) => chains.find((c) => c.includes(k))!;
   const rows = [...parts[order[0]].body];
   const joins: Join[] = [];
   for (let t = 1; t < n; t++) {
     const a = parts[order[t - 1]];
     const b = parts[order[t]];
     const o = ov[order[t - 1]][order[t]];
+    const join: Join = { from: a.index, to: b.index, overlap: o?.rows ?? 0, how: "none", shared: [], dropped: [], fuller: [], why: "" };
     if (o) {
       // Shared rows once, each as read more fully: a row at the edge of a
       // screenshot can be cut ("Eggs ₹7" for "Eggs ₹70").
+      join.how = "shared";
       const base = rows.length - a.body.length;
       for (let k = 0; k < o.rows; k++) {
         const at = base + o.aStart + k;
         const other = b.body[o.bStart + k];
-        if (at >= 0 && other && same(key(rows[at]), key(other)) && key(other).length > key(rows[at]).length) rows[at] = other;
+        if (at >= 0 && other && same(key(rows[at]), key(other)) && key(other).length > key(rows[at]).length) {
+          join.fuller.push([rows[at], other]);
+          rows[at] = other;
+        }
       }
+      join.shared = b.body.slice(o.bStart, o.bEnd + 1);
+      join.dropped = [...a.body.slice(o.aEnd + 1), ...b.body.slice(0, o.bStart)];
       rows.splice(rows.length - (a.body.length - 1 - o.aEnd)); // a's cut bottom rows
       rows.push(...b.body.slice(o.bEnd + 1));
     } else {
@@ -245,12 +277,28 @@ export function stitch(shots: ShotRow[][], taken?: number[]): Stitched {
       const last = rows.length - 1;
       const first = last >= 0 && b.body.length > 0 && cutCopy(rows[last], b.body[0]) ? 0 : -1;
       if (first !== -1) {
-        if (key(b.body[first]).length >= key(rows[last]).length) rows[last] = b.body[first];
+        join.how = "cut-row";
+        if (key(b.body[first]).length >= key(rows[last]).length) {
+          join.fuller.push([rows[last], b.body[first]]);
+          rows[last] = b.body[first];
+        }
         rows.push(...b.body.slice(first + 1));
-      } else rows.push(...b.body);
+      } else {
+        rows.push(...b.body);
+        const [pa, pb] = [place(chainOf(order[t - 1])), place(chainOf(order[t]))];
+        join.why =
+          pa === 0 && pb !== 0
+            ? "the one above holds the top of the order"
+            : pb === 2 && pa !== 2
+              ? "this one holds the bill total"
+              : taken
+                ? "by when they were taken"
+                : "in the order they were uploaded";
+      }
     }
-    joins.push({ from: a.index, to: b.index, overlap: o?.rows ?? 0 });
+    joins.push(join);
   }
-  const text = [...parts[order[0]].top, ...rows, ...parts[order[n - 1]].bottom].join("\n");
-  return { order: order.map((k) => parts[k].index), joins, duplicates, text };
+  const chrome = { top: parts[order[0]].top, bottom: parts[order[n - 1]].bottom };
+  const text = [...chrome.top, ...rows, ...chrome.bottom].join("\n");
+  return { order: order.map((k) => parts[k].index), joins, duplicates, duplicateOf, chrome, text };
 }
