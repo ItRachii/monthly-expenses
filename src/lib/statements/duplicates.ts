@@ -46,7 +46,9 @@ const cents = (n: number) => Math.round(n * 100);
  * normalizeItem, so rows imported before still key the same.
  */
 function sameItem(a: string, b: string): boolean {
-  const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  // Vowel signs and other combining marks are part of the word ("तेल" is
+  // not "ताला"), so they stay; NFC makes the same word spelled two ways one.
+  const norm = (s: string) => s.normalize("NFC").toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
   const x = norm(a);
   return x !== "" && x === norm(b);
 }
