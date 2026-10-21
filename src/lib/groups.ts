@@ -307,7 +307,9 @@ export async function removeMember(groupId: string, userEmail: string): Promise<
 export async function leaveGroup(groupId: string, userEmail: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await lockMembers(tx, groupId);
-    await tx.groupMember.deleteMany({ where: { groupId, email: userEmail } });
+    const left = await tx.groupMember.deleteMany({ where: { groupId, email: userEmail } });
+    // Someone who was not a member left nothing: no roles change.
+    if (left.count === 0) return;
     if ((await tx.groupMember.count({ where: { groupId, role: "admin" } })) > 0) return;
     const next = await tx.groupMember.findFirst({ where: { groupId }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }] });
     if (next) await tx.groupMember.update({ where: { id: next.id }, data: { role: "admin" } });
