@@ -361,7 +361,10 @@ export function StatementImport({
       return;
     }
     // The import saves all or nothing, so a failure (thrown, as a dropped
-    // connection is) leaves nothing half added.
+    // connection is) leaves nothing half added. A connection that drops
+    // after the save may leave it done, so the message does not say it
+    // was not; trying again is safe either way, as rows already on record
+    // are skipped.
     const res = await importStatementAction({
       ctx,
       summary: summaryInput && !summarySaved ? summaryInput : undefined,
@@ -371,7 +374,7 @@ export function StatementImport({
           : undefined,
       lineage: lineage ?? undefined,
       rows: sending.map((r) => ({ ...payloadOf(r, categories[r.id] ?? r.category, occ), replaceId: replace.get(r.id) ?? null })),
-    }).catch(() => ({ ok: false as const, error: "Could not save these rows, so nothing was added. Try again." }));
+    }).catch(() => ({ ok: false as const, error: "Could not reach the server to save these rows. Try again: any already saved are skipped, never added twice." }));
     router.refresh();
     if (mine !== readNo.current) return;
     if (!res.ok) {
