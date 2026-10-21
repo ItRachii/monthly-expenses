@@ -456,6 +456,11 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   check("dates: impossible days are not dates", ["31/02/2026", "30/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].every((t) => day(t) === null), JSON.stringify(["31/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].map(day)));
   check("dates: real ones still are", day("29/02/2028") === "2028-02-29" && day("31/12/2026") === "2026-12-31" && day("30/04/2026") === "2026-04-30" && day("12-Aug-26") === "2026-08-12" && day("12 Aug 2026") === "2026-08-12", JSON.stringify(["29/02/2028", "31/12/2026", "30/04/2026", "12-Aug-26", "12 Aug 2026"].map(day)));
 
+  // A row whose date is no real day is listed as not read; the rows after it are still read.
+  const badDay = parseSheet([parseCsv("Date,Description,Amount\n18/07/2026,SWIGGY BANGALORE,350.00\n31/02/2026,ZOMATO DELHI,120.00\n19/07/2026,BLINKIT GURGAON,99.00\n20/07/2026,UBER INDIA,250.00\n")]);
+  check("sheet: an impossible date does not end the table", JSON.stringify(badDay.rows.map((r) => r.date)) === JSON.stringify(["2026-07-18", "2026-07-19", "2026-07-20"]), JSON.stringify(badDay.rows.map((r) => [r.date, r.description])));
+  check("sheet: the impossible date's row is listed as not read", badDay.unparsed.length === 1 && /31\/02\/2026 ZOMATO DELHI/.test(badDay.unparsed[0].text), JSON.stringify(badDay.unparsed));
+
   // A traced GST charge's name is part of its import key: its month keeps the
   // locale's spelling ("Sept" on Node) so charges imported before still match.
   const septName = gstLineageName({ instalmentNo: 3, loanLast4: "1234", period: "2026-09" });

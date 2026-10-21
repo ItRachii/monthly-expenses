@@ -99,6 +99,10 @@ export function cellText(v: CellValue): string {
   return String(v).replace(/\s+/g, " ").trim();
 }
 
+// A cell written like a date ("31/02/2026", "2026-02-31", "31-Feb-26"),
+// whether or not it is a real day.
+const DATE_SHAPE = /^(?:\d{1,4}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}[\/\-. ]?[A-Za-z]{3})/;
+
 function dateOf(v: CellValue): string | null {
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : isoOf(v);
   const t = cellText(v);
@@ -495,6 +499,13 @@ export function parseSheet(grids: Grid[], opts: { filename?: string } = {}): Par
             section: rowSection,
             text,
           });
+          continue;
+        }
+        // A date that is no real day ("31/02/2026", a misprint or a bad
+        // export) is a transaction row all the same: listed as not read,
+        // and the rows after it still are.
+        if (dateCell && DATE_SHAPE.test(cellText(dateCell.v))) {
+          unparsed.push({ page, text: redactLine(cells.map((c) => c.t).join(" "), tagger.tag) });
           continue;
         }
         // Several cells and no date: another block has begun.
