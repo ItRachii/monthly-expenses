@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import { prisma } from "./prisma";
 import { displayNameFor } from "./users";
-import { maskEmail } from "./pii";
+import { UNNAMED_MEMBER, maskEmail } from "./pii";
 import { emailId } from "./piiCrypto";
 import { decryptEmail, encryptEmail, maskedEmailsFor } from "./piiStore";
 
@@ -222,7 +222,7 @@ export async function getGroupMembers(groupId: string): Promise<MemberDTO[]> {
   const byEmail = new Map(users.map((u) => [u.email, u]));
   return members.map((m) => {
     const u = byEmail.get(m.email);
-    const display = displayNameFor(u ?? null, m.displayName || m.email);
+    const display = displayNameFor(u ?? null, m.displayName || UNNAMED_MEMBER);
     return {
       email: m.email,
       displayName: display,
@@ -274,7 +274,7 @@ export async function getGroupParticipants(groupId: string): Promise<MemberDTO[]
   const byEmail = new Map(users.map((u) => [u.email, u]));
   return rows.map((m) => {
     const u = byEmail.get(m.email);
-    const display = displayNameFor(u ?? null, m.displayName || m.email);
+    const display = displayNameFor(u ?? null, m.displayName || UNNAMED_MEMBER);
     return {
       email: m.email,
       displayName: display,

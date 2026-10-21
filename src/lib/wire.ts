@@ -23,7 +23,8 @@ import type { MemberDTO } from "./groups";
 import type { ExpenseDTO } from "./expenses";
 import type { SettlementDTO } from "./settlements";
 import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
-import { labelForUnknown, looksLikeEmail } from "./pii";
+import { UNNAMED_MEMBER, labelForUnknown, looksLikeEmail } from "./pii";
+import { isUserId } from "./piiCrypto";
 
 // AUTH_SECRET is always set in any environment where auth works. The dev
 // fallback only keeps local builds without a secret from throwing.
@@ -59,7 +60,9 @@ export interface Wire {
   toKey: (email: string) => string;
 }
 
-function safeLabel(displayName: string, email: string): string {
+/** A member's label for the browser: never an address or a user id. */
+export function safeLabel(displayName: string, email: string): string {
+  if (isUserId(displayName)) return UNNAMED_MEMBER;
   return displayName && !looksLikeEmail(displayName)
     ? displayName
     : labelForUnknown(email);
