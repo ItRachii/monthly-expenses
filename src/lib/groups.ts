@@ -416,12 +416,15 @@ export async function respondToInvite(
       where: { groupId: invite.groupId, email: userEmail },
     });
     if (!already) {
+      // Joining a group nobody manages (its last admin left while only
+      // invites were open) makes you its admin, so someone can.
+      const admins = await tx.groupMember.count({ where: { groupId: invite.groupId, role: "admin" } });
       await tx.groupMember.create({
         data: {
           groupId: invite.groupId,
           email: userEmail,
           displayName: "",
-          role: "member",
+          role: admins === 0 ? "admin" : "member",
           joinedAt: new Date(),
         },
       });
