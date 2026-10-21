@@ -39,7 +39,9 @@ export function CardStatements({ cards, loans }: { cards: CardView[]; loans: Loa
   );
   const monthOk = month === ALL || months.includes(month) ? month : ALL;
   const statementsOf = (c: CardView) => c.statements.filter((s) => monthOk === ALL || s.period === monthOk);
-  const total = shownCards.reduce((n, c) => n + statementsOf(c).length, 0);
+  // Every card with a statement in the month, and under All months also a
+  // card with none left (its last one removed), so it can still be removed.
+  const blocks = shownCards.filter((c) => statementsOf(c).length > 0 || (monthOk === ALL && c.statements.length === 0));
 
   if (cards.length === 0 && loans.length === 0) {
     return (
@@ -95,13 +97,12 @@ export function CardStatements({ cards, loans }: { cards: CardView[]; loans: Loa
             </label>
           </div>
 
-          {total === 0 ? (
-            <p className="py-6 text-center text-sm text-muted">No statements for {monthLabel(monthOk)}.</p>
+          {blocks.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted">
+              {monthOk === ALL ? "No statements on file." : `No statements for ${monthLabel(monthOk)}.`}
+            </p>
           ) : (
-            shownCards.map((c) => {
-              const rows = statementsOf(c);
-              return rows.length === 0 ? null : <CardBlock key={c.id} card={c} statements={rows} />;
-            })
+            blocks.map((c) => <CardBlock key={c.id} card={c} statements={statementsOf(c)} />)
           )}
         </div>
       ) : null}
@@ -157,11 +158,15 @@ function CardBlock({ card, statements }: { card: CardView; statements: CardState
         ) : null}
       </div>
       {error ? <div className="alert-error">{error}</div> : null}
-      <div className="space-y-2">
-        {statements.map((s) => (
-          <StatementBlock key={s.id} cardId={card.id} statement={s} />
-        ))}
-      </div>
+      {statements.length === 0 ? (
+        <p className="text-sm text-muted">No statements on file for this card.</p>
+      ) : (
+        <div className="space-y-2">
+          {statements.map((s) => (
+            <StatementBlock key={s.id} cardId={card.id} statement={s} />
+          ))}
+        </div>
+      )}
       <button type="button" className="text-xs text-negative hover:underline" onClick={() => setConfirm(true)}>
         Remove this card
       </button>
