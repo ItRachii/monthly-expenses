@@ -36,14 +36,14 @@ async function requireEmail(): Promise<string | null> {
 export async function saveStatementSummaryAction(input: SaveStatementInput, lineage?: LineagePayload): Promise<Result> {
   const email = await requireEmail();
   if (!email) return { ok: false, error: "Not signed in." };
-  const invalid = validateSaveInput(input);
+  // Everything is checked before anything is saved, and saved together:
+  // an error never leaves the summary filed without its instalments.
+  const invalid = validateSaveInput(input) ?? (lineage ? validateLineage(lineage) : null);
   if (invalid) return { ok: false, error: invalid };
-  const { cardId } = await saveCardStatement(email, input);
-  if (lineage) {
-    const bad = validateLineage(lineage);
-    if (bad) return { ok: false, error: bad };
-    await saveLineage(email, cardId, lineage);
-  }
+  await prisma.$transaction(async (tx) => {
+    const { cardId } = await saveCardStatement(email, input, tx);
+    if (lineage) await saveLineage(email, cardId, lineage, tx);
+  }, { maxWait: 10_000, timeout: 120_000 });
   // Tracing a pending GST charge renames an expense and clears its warning.
   revalidatePath("/", "layout");
   return { ok: true };
