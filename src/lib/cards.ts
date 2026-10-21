@@ -1,6 +1,7 @@
+import type { Prisma } from "@prisma/client";
 import { prisma, type Db } from "./prisma";
 import { formatDate, monthLabel } from "./format";
-import { pendingGstReason } from "./loans";
+import { pendingGstReason, returnGstToPending } from "./loans";
 import type { Bank, StatementSummary } from "./statements/types";
 
 // Credit cards and their statement summaries. Filed under the user's own
@@ -296,33 +297,30 @@ export async function planStatementRemoval(ownerEmail: string, id: number): Prom
  * instalment goes back to pending, so importing that statement again
  * traces it again.
  */
-function removalWrites(plan: RemovalPlan) {
-  return [
-    prisma.gstPending.updateMany({
-      where: { resolvedInstalmentId: { in: plan.instalmentIds } },
-      data: { resolvedAt: null, resolvedInstalmentId: null },
-    }),
-    prisma.expense.deleteMany({ where: { id: { in: plan.expenseIds } } }),
-    // After the delete: the audit trigger has just logged it too.
-    prisma.$executeRaw`delete from expense_changes where expense_id = any(${plan.expenseIds}::int[])`,
-    // Notifications that pointed only at these expenses ("X added 12
-    // expenses from a card statement") go too.
-    prisma.$executeRaw`delete from notifications
+async function removalWrites(tx: Prisma.TransactionClient, ownerEmail: string, plan: RemovalPlan) {
+  await tx.expense.deleteMany({ where: { id: { in: plan.expenseIds } } });
+  // After the delete: the audit trigger has just logged it too.
+  await tx.$executeRaw`delete from expense_changes where expense_id = any(${plan.expenseIds}::int[])`;
+  // Notifications that pointed only at these expenses ("X added 12
+  // expenses from a card statement") go too.
+  await tx.$executeRaw`delete from notifications
       where target->>'kind' = 'expenses' and jsonb_array_length(target->'ids') > 0
-        and (select array_agg(x::int) from jsonb_array_elements_text(target->'ids') x) <@ ${plan.expenseIds}::int[]`,
-    prisma.emiInstalment.deleteMany({ where: { id: { in: plan.instalmentIds } } }),
-  ];
+        and (select array_agg(x::int) from jsonb_array_elements_text(target->'ids') x) <@ ${plan.expenseIds}::int[]`;
+  // GST charges traced to the instalments that go, and kept (imported from
+  // another statement), go back to pending.
+  await returnGstToPending(tx, ownerEmail, plan.instalmentIds);
+  await tx.emiInstalment.deleteMany({ where: { id: { in: plan.instalmentIds } } });
 }
 
 /** Removes the card and everything in its plan, in one transaction. */
 export async function deleteCard(ownerEmail: string, id: string): Promise<RemovalPlan | null> {
   const plan = await planCardRemoval(ownerEmail, id);
   if (!plan) return null;
-  await prisma.$transaction([
-    ...removalWrites(plan),
+  await prisma.$transaction(async (tx) => {
+    await removalWrites(tx, ownerEmail, plan);
     // Its statements go with it (ON DELETE CASCADE).
-    prisma.card.deleteMany({ where: { id, ownerEmail } }),
-  ]);
+    await tx.card.deleteMany({ where: { id, ownerEmail } });
+  });
   return plan;
 }
 
@@ -330,14 +328,14 @@ export async function deleteCard(ownerEmail: string, id: string): Promise<Remova
 export async function deleteCardStatement(ownerEmail: string, id: number): Promise<RemovalPlan | null> {
   const plan = await planStatementRemoval(ownerEmail, id);
   if (!plan) return null;
-  await prisma.$transaction([
-    ...removalWrites(plan),
+  await prisma.$transaction(async (tx) => {
+    await removalWrites(tx, ownerEmail, plan);
     // GST this statement billed on an earlier month's instalment goes too.
-    prisma.emiInstalment.updateMany({
+    await tx.emiInstalment.updateMany({
       where: { ownerEmail, cardId: plan.cardId, gstPeriod: plan.period },
       data: { gst: null, gstPeriod: null },
-    }),
-    prisma.cardStatement.deleteMany({ where: { id, card: { ownerEmail } } }),
-  ]);
+    });
+    await tx.cardStatement.deleteMany({ where: { id, card: { ownerEmail } } });
+  });
   return plan;
 }

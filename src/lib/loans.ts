@@ -211,17 +211,39 @@ export async function listLoans(ownerEmail: string): Promise<LoanView[]> {
 }
 
 /**
- * Removes every instalment of a loan. A GST charge that had been traced to
- * one goes back to pending, as when its statement is removed, so uploading
- * that statement again traces it again.
+ * Before instalments are removed: every GST charge traced to one goes back
+ * to pending, flagged on its expense, so uploading the statement that billed
+ * the instalment again traces it again.
+ * - Traced on the server (its statement came later): its pending row was
+ *   marked resolved, and is unmarked.
+ * - Traced in the browser as it was imported: it has no pending row, only
+ *   the instalment's name, so it is given one by the reference it cites.
+ *   One matched by amount alone cites none and keeps its name.
  */
+export async function returnGstToPending(tx: Db, ownerEmail: string, instalmentIds: number[]): Promise<void> {
+  if (instalmentIds.length === 0) return;
+  await tx.gstPending.updateMany({
+    where: { ownerEmail, resolvedInstalmentId: { in: instalmentIds } },
+    data: { resolvedAt: null, resolvedInstalmentId: null },
+  });
+  const traced = await tx.emiInstalment.findMany({ where: { id: { in: instalmentIds }, refKey: { not: null }, gst: { not: null } } });
+  for (const inst of traced) {
+    const charges = await tx.expense.findMany({
+      where: { item: gstLineageName(inst), statement: { card: { ownerEmail } }, gstPending: { none: { resolvedAt: null } } },
+      select: { id: true, amount: true },
+    });
+    for (const e of charges)
+      await tx.gstPending.create({
+        data: { ownerEmail, expenseId: e.id, refKey: inst.refKey!, amount: e.amount, date: inst.date, period: inst.gstPeriod ?? inst.period },
+      });
+  }
+}
+
+/** Removes every instalment of a loan, its GST charges going back to pending. */
 export async function deleteLoan(ownerEmail: string, loanKey: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const ids = (await tx.emiInstalment.findMany({ where: { ownerEmail, loanKey }, select: { id: true } })).map((i) => i.id);
-    await tx.gstPending.updateMany({
-      where: { ownerEmail, resolvedInstalmentId: { in: ids } },
-      data: { resolvedAt: null, resolvedInstalmentId: null },
-    });
+    await returnGstToPending(tx, ownerEmail, ids);
     await tx.emiInstalment.deleteMany({ where: { id: { in: ids } } });
   });
 }
