@@ -95,6 +95,7 @@ async function migrate(): Promise<{ emails: number; rows: number }> {
         const encs = emails.map((e) => encryptEmail(e));
         rows += await migrateUsers(tx, emails, ids, encs);
         rows += await migrateInvites(tx, emails, ids, encs);
+        rows += await mergeMembers(tx, emails, ids);
         for (const [table, column] of COLUMNS) {
           rows += await tx.$executeRawUnsafe(
             `update public.${table} t set ${column} = m.id
@@ -171,6 +172,31 @@ async function migrateUsers(tx: Tx, emails: string[], ids: string[], encs: strin
     rows++;
   }
   return rows;
+}
+
+/**
+ * A membership an older deployment re-created under the raw address, in a
+ * group where the person's id is already a member: keep the id's row (made
+ * admin if the raw one was), drop the raw one. Rewriting it to the id as
+ * well would add a second row for the same person, which the unique index
+ * on group_members (group_id, email) refuses, failing the whole sweep.
+ */
+async function mergeMembers(tx: Tx, emails: string[], ids: string[]) {
+  await tx.$executeRawUnsafe(
+    `update public.group_members k set role = 'admin'
+       from public.group_members t, unnest($1::text[], $2::text[]) as m(email, id)
+      where t.email = m.email and k.email = m.id and k.group_id = t.group_id and t.role = 'admin'`,
+    emails,
+    ids,
+  );
+  return tx.$executeRawUnsafe(
+    `delete from public.group_members t
+      using unnest($1::text[], $2::text[]) as m(email, id)
+      where t.email = m.email
+        and exists (select 1 from public.group_members k where k.group_id = t.group_id and k.email = m.id)`,
+    emails,
+    ids,
+  );
 }
 
 async function migrateInvites(tx: Tx, emails: string[], ids: string[], encs: string[]) {
