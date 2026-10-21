@@ -349,6 +349,8 @@ export function StatementImport({
       setResult({ count: 0, replaced: 0, skipped: skip.size, ctx });
       return;
     }
+    // The import saves all or nothing, so a failure (thrown, as a dropped
+    // connection is) leaves nothing half added.
     const res = await importStatementAction({
       ctx,
       summary: summaryInput && !summarySaved ? summaryInput : undefined,
@@ -358,7 +360,7 @@ export function StatementImport({
           : undefined,
       lineage: lineage ?? undefined,
       rows: sending.map((r) => ({ ...payloadOf(r, categories[r.id] ?? r.category, occ), replaceId: replace.get(r.id) ?? null })),
-    });
+    }).catch(() => ({ ok: false as const, error: "Could not save these rows, so nothing was added. Try again." }));
     if (!res.ok) {
       setError(res.error);
       return;
@@ -380,6 +382,7 @@ export function StatementImport({
       else if (c === "skip") skip.add(id);
       // "add": a likely match the user knows is a separate spend; sent as new.
     }
+    setError(null);
     startImport(() => send(review.rows, replace, skip));
   }
 
@@ -475,6 +478,7 @@ export function StatementImport({
           review={review}
           destination={ctxLabel}
           pending={importing}
+          error={error}
           onChoice={(id, c) => setReview((r) => (r ? { ...r, choice: new Map(r.choice).set(id, c) } : r))}
           onAll={(c) => setReview((r) => (r ? { ...r, choice: new Map([...r.choice.keys()].map((id) => [id, c])) } : r))}
           onCancel={() => setReview(null)}
@@ -1201,6 +1205,7 @@ function DuplicatesDialog({
   review,
   destination,
   pending,
+  error,
   onChoice,
   onAll,
   onCancel,
@@ -1209,6 +1214,8 @@ function DuplicatesDialog({
   review: { rows: StatementRow[]; dups: Map<string, DuplicateView>; choice: Map<string, Choice> };
   destination: string;
   pending: boolean;
+  /** Why adding failed: shown here, as the page's own message sits behind the dialog. */
+  error: string | null;
   onChoice: (rowId: string, c: Choice) => void;
   onAll: (c: Choice) => void;
   onCancel: () => void;
@@ -1312,6 +1319,12 @@ function DuplicatesDialog({
             );
           })}
         </ul>
+
+        {error ? (
+          <div className="alert-error" role="alert">
+            {error}
+          </div>
+        ) : null}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <span className="text-xs text-muted sm:mr-auto" aria-live="polite">
