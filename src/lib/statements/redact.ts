@@ -54,7 +54,9 @@ const SPACED_CARD = /\b(?:\d{4}[ -]){2,4}\d{2,4}\b|\b\d{4}[ -]\d{6}[ -]\d{5}\b/g
 // account numbers, Aadhaar, serial and reference numbers. Spaces are not
 // bridged, so a year followed by a serial number stays two tokens.
 const LONG_DIGITS = /(?<!\d)\d{8,}(?!\d)/g;
-const PHONE = /(?:\+91[ -]?|\b0)?[6-9]\d{4}[ -]?\d{5}\b/g;
+// Not the tail of a longer run of digits: "VPS2607987654321098" is one
+// reference (tagged below), not a reference with a phone number at its end.
+const PHONE = /(?<!\d)(?:\+91[ -]?|\b0)?[6-9]\d{4}[ -]?\d{5}\b/g;
 const PAN = /\b[A-Z]{5}\d{4}[A-Z]\b/g;
 
 export function redactLine(line: string, tagRef: RefTagger = () => "[ref]"): string {

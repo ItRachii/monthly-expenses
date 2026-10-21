@@ -11,6 +11,7 @@ import { itemsToPage, type PageText, type PositionedText } from "../../src/lib/s
 import { detectBank, parseStatement } from "../../src/lib/statements/parse";
 import { amountCell, parseCsv, parseSheet, type Grid } from "../../src/lib/statements/sheet";
 import { readXlsx } from "../../src/lib/statements/xlsx";
+import { redactLine } from "../../src/lib/statements/redact";
 import { applyKeys, canonicalDigits, gstLineageName, lineagePayload, lineageWarnings, loanKeyFor, refKeyFor, resolveLineage, type KnownInstalment } from "../../src/lib/statements/lineage";
 
 const dir = join(__dirname, "fixtures");
@@ -437,6 +438,12 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   ];
   const gg = parseSheet([gstGap]);
   check("sheet: a GST summary that disagrees with the lines read is flagged", gg.gstBilled === 105.92 && gg.warnings.some((w) => /GST summary says ₹105\.92.*₹34\.74/.test(w)), JSON.stringify(gg.warnings));
+
+  // A phone number is ten digits on their own, not the tail of a longer reference.
+  const longRef = redactLine("08/07/2026 IGST-VPS2607987654321098 0 110.25");
+  check("redact: a long reference stays one token, not a reference plus [phone]", longRef === "08/07/2026 IGST-VPS[ref] 0 110.25", longRef);
+  const phones = ["call 9876543210", "VPS9876543210", "+91 98765 43210", "09876543210"].map((l) => redactLine(l));
+  check("redact: phone numbers on their own or glued to letters are still masked", phones.every((l) => l.endsWith("[phone]")), JSON.stringify(phones));
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
   process.exit(failures === 0 ? 0 : 1);

@@ -16,7 +16,7 @@ import { cleanDescription, isDateLed, isHeading, keepLine, makeRefTagger, redact
 import { readDate } from "./dates";
 import { cardIdentity, parseSummary } from "./summary";
 import type { PageText } from "./lines";
-import type { Bank, CardIdentity, ForeignInfo, ParsedStatement, RowKind, RowPart, StatementLoan, StatementRow, StatementSummary } from "./types";
+import type { Bank, CardIdentity, ParsedStatement, RowKind, RowPart, StatementLoan, StatementRow, StatementSummary } from "./types";
 
 const CURRENCIES = new Set([
   "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD", "JPY", "CHF", "THB", "MYR",

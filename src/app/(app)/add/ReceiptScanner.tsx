@@ -13,7 +13,7 @@ import type { ShotRow, Stitched } from "@/lib/receipt/stitch";
 import { addReceiptAction } from "@/lib/actions/receipts";
 import { CategorySelect } from "@/components/CategorySelect";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
-import { formatINR, todayISO } from "@/lib/format";
+import { formatINR, localISO, todayISO } from "@/lib/format";
 
 /** What seems to be missing from the order's screenshots, with a way to add them. */
 function MissingParts({ stitched, onAdd }: { stitched: Stitched & { complete: Completeness }; onAdd: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
@@ -22,7 +22,7 @@ function MissingParts({ stitched, onAdd }: { stitched: Stitched & { complete: Co
   if (expected != null && found < expected) lines.push(`The order lists ${expected} items, but ${found} were found in your screenshots.`);
   if (short != null) lines.push(`The items come to ${formatINR(short)} less than the bill's item total.`);
   if (noTotal) lines.push("The bill total isn't in these screenshots.");
-  const gap = stitched.joins.find((j) => j.overlap === 0);
+  const gap = stitched.joins.find((j) => j.how === "none");
   if (gap && (short != null || (expected != null && found < expected)))
     lines.push(`Part of the list seems to be missing between screenshot ${gap.from + 1} and ${gap.to + 1}.`);
   return (
@@ -149,6 +149,8 @@ export function ReceiptScanner({
 
   const [merchant, setMerchant] = useState("");
   const [purchasedOn, setPurchasedOn] = useState(todayISO());
+  // Once in the browser, default to the local day rather than the server's UTC one.
+  useEffect(() => setPurchasedOn((d) => (d === todayISO() ? localISO() : d)), []);
   const [items, setItems] = useState<EditItem[]>([]);
   // Quick-commerce orders only: the charges and total under the items.
   const [bill, setBill] = useState<EditBill | null>(null);
@@ -587,13 +589,13 @@ export function ReceiptScanner({
           ) : null}
 
           {stitched?.complete.missing ? <MissingParts stitched={stitched} onAdd={addMissing} /> : null}
-          {stitched && !stitched.complete.missing && !stitched.complete.checked && stitched.joins.some((j) => j.overlap === 0) ? (
+          {stitched && !stitched.complete.missing && !stitched.complete.checked && stitched.joins.some((j) => j.how === "none") ? (
             // Nothing on the order to check the items against, and two
             // screenshots that share no row: they may or may not meet.
             <div className="text-sm text-muted" data-unsure>
               Check nothing is missing between screenshot{" "}
               {stitched.joins
-                .filter((j) => j.overlap === 0)
+                .filter((j) => j.how === "none")
                 .map((j) => `${j.from + 1} and ${j.to + 1}`)
                 .join(", ")}
               : they share no rows, and this order shows no item count or item total to check against.

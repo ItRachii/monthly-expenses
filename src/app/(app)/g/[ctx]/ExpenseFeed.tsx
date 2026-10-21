@@ -10,7 +10,7 @@ import type { ExpenseDTO } from "@/lib/expenses";
 import { SETTLE_EPS, paidFor, payersOf, round2, shareFor } from "@/lib/settlementMath";
 import { formatINR, listNames } from "@/lib/format";
 import { deleteExpenseAction } from "@/lib/actions/expenses";
-import { EditExpenseModal } from "../../log/ExpenseLog";
+import { EditExpenseModal } from "@/components/EditExpenseModal";
 import { ExportButton } from "./ExportDialog";
 import { PersonAvatar, PersonAvatars } from "@/components/Person";
 import type { DeletedExpense, NotificationFocus } from "@/lib/notifications";
@@ -459,12 +459,8 @@ export function ExpenseFeed({
                   paidBy={isPersonal ? null : payerLabel(r)}
                   category={r.category || "Uncategorised"}
                   inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
-                  isDesktop={false}
                   isNew={fresh.has(r.id)}
-                  pending={pending}
                   onOpenActions={() => setActionsFor({ expense: r, confirm: false })}
-                  onEdit={() => setEditing(r)}
-                  onDelete={() => setActionsFor({ expense: r, confirm: true })}
                 />
               );
             })}
@@ -679,12 +675,8 @@ function ExpenseRow({
   paidBy,
   category,
   inv,
-  isDesktop,
   isNew,
-  pending,
   onOpenActions,
-  onEdit,
-  onDelete,
 }: {
   id: number;
   /** The record a notification is about: highlighted, with what happened. */
@@ -700,13 +692,9 @@ function ExpenseRow({
   paidBy: string | null;
   category: string;
   inv: ReturnType<typeof involvement> | null;
-  isDesktop: boolean;
   /** Just added: highlighted for a few seconds. */
   isNew: boolean;
-  pending: boolean;
   onOpenActions: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
 }) {
   const [flagOpen, setFlagOpen] = useState(false);
   const timer = useRef<number | null>(null);
@@ -719,9 +707,6 @@ function ExpenseRow({
     origin.current = null;
   }
   useEffect(() => cancel, []);
-  useEffect(() => {
-    if (isDesktop) cancel();
-  }, [isDesktop]);
 
   const pressable = {
     role: "button",
@@ -771,16 +756,12 @@ function ExpenseRow({
     // fade-out of the "just added" highlight, not a reply to a tap. Faster
     // and the eye misses which row was new.
     <div
-      {...(isDesktop ? {} : pressable)}
+      {...pressable}
       data-expense-id={id}
       data-landing={mark ? "" : undefined}
       className={`flex items-center gap-3 px-3 py-2.5 transition-colors duration-700 ${
         isNew ? "bg-primary/15" : ""
-      } ${mark ? "landing-mark" : ""} ${
-        isDesktop
-          ? ""
-          : "cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-ink/5 active:bg-ink/5"
-      }`}
+      } ${mark ? "landing-mark" : ""} cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-ink/5 active:bg-ink/5`}
     >
       <DateBadge iso={date} />
       <div className="min-w-0 flex-1">
@@ -798,51 +779,23 @@ function ExpenseRow({
           {flag ? <PendingFlagButton reason={flag} open={flagOpen} onToggle={() => setFlagOpen((o) => !o)} /> : null}
         </div>
         {flag && flagOpen ? <PendingFlagNote reason={flag} /> : null}
-        {/* Phones: the payer and the category each shorten on their own; the
-            amount, the one figure that must stay readable, never does. */}
+        {/* The payer and the category each shorten on their own; the amount,
+            the one figure that must stay readable, never does. */}
         <div className="mt-0.5 flex min-w-0 items-baseline gap-1 text-xs text-muted">
-          {paidBy ? <span className="min-w-0 truncate md:hidden">{paidBy} paid</span> : null}
-          <span className="shrink-0 text-sm font-semibold text-ink md:hidden">{formatINR(amount)}</span>
-          <span className="shrink-0 md:hidden">·</span>
+          {paidBy ? <span className="min-w-0 truncate">{paidBy} paid</span> : null}
+          <span className="shrink-0 text-sm font-semibold text-ink">{formatINR(amount)}</span>
+          <span className="shrink-0">·</span>
           <span className="min-w-0 truncate">{category}</span>
         </div>
       </div>
-      {/* Desktop only: who paid and the full amount as its own column. */}
-      <div className="hidden w-28 shrink-0 text-right md:block">
-        <div className="truncate text-[11px] text-muted">{paidBy ? `${paidBy} paid` : "spent"}</div>
-        <div className="text-sm font-semibold text-ink">{formatINR(amount)}</div>
-      </div>
       {inv ? (
-        <div className="w-24 shrink-0 text-right md:w-28">
+        <div className="w-24 shrink-0 text-right">
           <div className={`truncate text-[11px] ${TONE[inv.tone]}`}>{inv.label}</div>
           <div className={`text-sm font-semibold ${TONE[inv.tone]}`}>
             {formatINR(inv.amount ?? 0)}
           </div>
         </div>
       ) : null}
-      {/* Desktop only: inline edit/delete. Phones use the long-press sheet. */}
-      <div className="hidden shrink-0 items-center gap-1 md:flex">
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={onEdit}
-          disabled={pending}
-          aria-label={`Edit ${item}`}
-          title="Edit"
-        >
-          <PencilIcon />
-        </button>
-        <button
-          type="button"
-          className="icon-btn text-negative hover:text-negative"
-          onClick={onDelete}
-          disabled={pending}
-          aria-label={`Delete ${item}`}
-          title="Delete"
-        >
-          <TrashIcon />
-        </button>
-      </div>
     </div>
   );
 }

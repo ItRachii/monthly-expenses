@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { AlertTriangleIcon } from "./Icons";
 
 /**
@@ -36,13 +35,3 @@ export function PendingFlagNote({ reason }: { reason: string }) {
   );
 }
 
-/** Icon and note together, with their own open state. */
-export function PendingFlag({ reason }: { reason: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <PendingFlagButton reason={reason} open={open} onToggle={() => setOpen((o) => !o)} />
-      {open ? <PendingFlagNote reason={reason} /> : null}
-    </>
-  );
-}
