@@ -134,6 +134,23 @@ check("blocks only: the name is tagged and masked", bo[0].pii?.kind === "name" &
 check("blocks only: other blocks are left alone", !bo[2].pii && bo[2].text === "Milk ₹30");
 check("blocks only: the details never reach the text", JSON.stringify(scanToLines(withoutPii(blocksOnly))) === JSON.stringify(["Milk ₹30"]), JSON.stringify(scanToLines(withoutPii(blocksOnly))));
 
+// "+91-9123456780": the country code and a hyphen, not a reference number.
+check("a phone written +91-…", JSON.stringify(tiny(["Asha Verma", "+91-9123456780"])) === JSON.stringify(["name", "phone"]), JSON.stringify(tiny(["Asha Verma", "+91-9123456780"])));
+check("order numbers glued to letters or hyphens stay order numbers", JSON.stringify(tiny(["ORD9876543210", "BNN-9876543210-20260607"])) === JSON.stringify(["order-id", "order-id"]));
+// Blocks only: an order-number block overlapping an address block is masked
+// in the developer view like any block that touches a personal detail.
+const overlapping: ScanResult = {
+  pages: [{ page: 1, width: 1080, height: 2400 }],
+  items: [
+    { text: "Deliver to", page: 1, box: [20, 100, 400, 140] },
+    { text: "ORD9876543210", page: 1, box: [20, 150, 420, 190] },
+    { text: "Flat 12, Prestige Lakeside, Bengaluru 560087", page: 1, box: [20, 187, 1000, 227] },
+  ],
+};
+const ov = withoutPii(overlapping, true).items;
+check("blocks only: the address is tagged", ov[2].pii?.kind === "address", JSON.stringify(ov[2]));
+check("blocks only: an order number touching it is masked, still marked as an order number", ov[1].text !== "ORD9876543210" && ov[1].ref?.kind === "order-id", JSON.stringify(ov[1]));
+
 if (failures) {
   console.error(`${failures} check(s) failed`);
   process.exit(1);
