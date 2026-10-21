@@ -13,7 +13,7 @@
 // and the same reference key the same way in every statement, while the
 // numbers themselves never leave the page.
 
-import { formatINR } from "@/lib/format";
+import { formatINR, monthLabel } from "@/lib/format";
 import type { ParsedStatement, StatementRow } from "./types";
 
 /** An instalment on record for this user, from an earlier statement. */
@@ -139,11 +139,8 @@ function close(a: number, b: number, tolerance: number): boolean {
   return b > 0 && Math.abs(a - b) / b <= tolerance;
 }
 
-/** "Aug 2026" for "2026-08". */
-export function monthLabel(period: string): string {
-  const [y, m] = period.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
-}
+/** "Aug 2026" for "2026-08", as the rest of the app prints it. */
+export { monthLabel };
 
 /** The expense name of a GST charge traced to an instalment. */
 export function gstLineageName(inst: { instalmentNo: number | null; loanLast4: string | null; period: string }): string {

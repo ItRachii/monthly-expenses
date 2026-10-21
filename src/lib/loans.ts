@@ -3,7 +3,7 @@
 
 import { createHmac } from "crypto";
 import { inTransaction, prisma, type Db } from "./prisma";
-import { formatDate, formatINR } from "./format";
+import { formatDate, formatINR, shortDate } from "./format";
 import { piiSecret } from "./piiCrypto";
 import { gstLineageName, monthLabel, type KnownInstalment, type LineagePayload } from "./statements/lineage";
 
@@ -105,7 +105,7 @@ export async function recordPendingGst(ownerEmail: string, input: PendingGstInpu
 /** The reason shown on the expense while its GST charge is untraced. */
 export function pendingGstReason(p: { amount: number; date: Date }): string {
   const iso = formatDate(p.date);
-  const day = new Date(p.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const day = shortDate(iso, { padDay: false });
   return (
     `This GST charge of ${formatINR(p.amount)} dated ${day} cites a reference that is not on record. ` +
     `It is most likely GST on an EMI instalment billed in the ${monthLabel(iso.slice(0, 7))} statement. ` +

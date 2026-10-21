@@ -4,17 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteLoanAction } from "@/lib/actions/cards";
 import type { LoanView } from "@/lib/loans";
-import { formatINR } from "@/lib/format";
-
-function monthLabel(period: string): string {
-  const [y, m] = period.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
-}
-
-function dayLabel(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
-}
+import { formatINR, monthLabel, shortDate as dayLabel } from "@/lib/format";
 
 /**
  * Every EMI on record, instalment by instalment, with the GST the bank

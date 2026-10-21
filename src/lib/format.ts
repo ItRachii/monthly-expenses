@@ -19,11 +19,25 @@ export function monthKey(d: Date | string): string {
   return `${y}-${m}`;
 }
 
+/**
+ * Month names as the app prints them, everywhere: "Sep", never "Sept".
+ * Dates are built from these by hand rather than with the locale's
+ * formatter, which prints "Sept" for en-IN on some systems and "Sep" on
+ * others, so the server and every browser show the same.
+ */
+export const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 /** "2026-09" to "Sep 2026". */
 export function monthLabel(key: string): string {
-  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const [y, m] = key.split("-").map(Number);
-  return m >= 1 && m <= 12 ? `${MONTHS[m - 1]} ${y}` : key;
+  return m >= 1 && m <= 12 ? `${MONTH_SHORT[m - 1]} ${y}` : key;
+}
+
+/** "2026-09-05" to "05 Sep 2026"; without the year, "05 Sep"; unpadded, "5 Sep 2026". */
+export function shortDate(iso: string, { year = true, padDay = true }: { year?: boolean; padDay?: boolean } = {}): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const day = padDay ? String(d).padStart(2, "0") : String(d);
+  return `${day} ${MONTH_SHORT[m - 1]}${year ? ` ${y}` : ""}`;
 }
 
 export function formatDate(d: Date | string): string {

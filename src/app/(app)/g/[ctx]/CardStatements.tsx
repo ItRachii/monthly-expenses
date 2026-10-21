@@ -16,7 +16,7 @@ import { AlertTriangleIcon, CalendarIcon, CreditCardIcon, DownloadIcon } from "@
 import { PendingFlagNote } from "@/components/PendingFlag";
 import { LoansPanel } from "@/components/LoansPanel";
 import { DateBadge } from "@/components/DateBadge";
-import { formatINR, monthLabel } from "@/lib/format";
+import { MONTH_SHORT, formatINR, monthLabel } from "@/lib/format";
 import { tableDate } from "@/components/table/Table";
 
 const ALL = "all";
@@ -261,7 +261,7 @@ function StatementBlock({ cardId, statement: s }: { cardId: string; statement: C
   );
 }
 
-const shortMonth = (ym: string) => new Date(`${ym}-01T00:00:00.000Z`).toLocaleDateString("en-IN", { month: "short", timeZone: "UTC" });
+const shortMonth = (ym: string) => MONTH_SHORT[Number(ym.slice(5, 7)) - 1];
 
 /**
  * One imported expense. A GST charge whose instalment is not on record yet

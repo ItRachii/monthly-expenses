@@ -21,7 +21,7 @@ import { FileDropzone } from "@/components/FileDropzone";
 import { EyeIcon, LabelIcon, ReceiptIcon, XIcon } from "@/components/Icons";
 import { RowCheckbox, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { findCategory, formatCategory, mergeCategories } from "@/lib/constants";
-import { formatINR } from "@/lib/format";
+import { formatINR, monthLabel, shortDate } from "@/lib/format";
 
 interface Opt {
   value: string;
@@ -49,11 +49,6 @@ const BANK_LABEL: Record<ParsedStatement["bank"], string> = {
   unknown: "Card statement",
 };
 
-function monthLabel(period: string | null): string {
-  if (!period) return "";
-  const [y, m] = period.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
-}
 
 /** How to read a file: by extension first, then by type. */
 function fileKind(f: File): "pdf" | "xlsx" | "csv" | "xls" {
@@ -64,10 +59,7 @@ function fileKind(f: File): "pdf" | "xlsx" | "csv" | "xls" {
   return "pdf";
 }
 
-function dayLabel(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" });
-}
+const dayLabel = (iso: string) => shortDate(iso, { year: false });
 
 /** What to do with a ticked row that is already on record. "add" is only offered for likely matches. */
 type Choice = "skip" | "replace" | "add";
@@ -805,8 +797,7 @@ function SummaryGrid({ summary }: { summary: NonNullable<ParsedStatement["summar
   const money = (n: number | null) => (n === null ? "not printed" : formatINR(n));
   const date = (iso: string | null) => {
     if (!iso) return "not printed";
-    const [y, m, d] = iso.split("-").map(Number);
-    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+    return shortDate(iso);
   };
   const cells: [string, string, boolean?][] = [
     ["Total amount due", money(summary.totalDue), true],
