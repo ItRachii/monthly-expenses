@@ -97,6 +97,18 @@ export function scanToLines(result: ScanResult, opts: { order?: boolean } = {}):
   return scanToRows(result, opts).map((r) => r.text);
 }
 
+/**
+ * Put after a row whose last number is part of its text, not a price of its
+ * own ("Rock and Quarry - UK 9", "Exchange/Return till Oct 24"), so the
+ * parser does not take that number for an amount. Invisible; plainText
+ * takes it off for showing.
+ */
+export const NOT_A_PRICE = "\u2063";
+export const plainText = (text: string) => text.split(NOT_A_PRICE).join("").trimEnd();
+
+// A piece that is only an amount: "₹831", "149", "-50", "+₹12".
+const AMOUNT_PIECE = /^[-−+]?\s*(?:₹|rs\.?\s*)?\d[\d,]*(?:\.\d{1,2})?$/i;
+
 /** A rebuilt row and where it sits: `y` is its top, as a share of the page height (0 top, 1 bottom). */
 export interface ScanRow {
   text: string;
@@ -129,10 +141,15 @@ export function scanToRows(result: ScanResult, opts: { order?: boolean } = {}): 
     .sort((a, b) => a - b)
     .flatMap((page) => {
       const height = heights.get(page) ?? 1;
-      return itemsToRows(byPage.get(page)!).map((r) => ({
-        text: r.text,
-        page,
-        y: Math.min(1, Math.max(0, (height - r.y - r.h) / height)),
-      }));
+      const width = result.pages.find((p) => p.page === page)?.width ?? 1;
+      return itemsToRows(byPage.get(page)!).map((r) => {
+        // On an order screen a price is a piece of its own in the right-hand
+        // column; a number ending a piece of text is part of that text.
+        const last = r.spans[r.spans.length - 1];
+        const lastText = last ? r.text.slice(last.at, last.end).trim() : "";
+        const priced = !!last && AMOUNT_PIECE.test(lastText) && last.x0 >= 0.5 * width;
+        const text = opts.order && /\d\W*$/.test(r.text) && !priced ? `${r.text} ${NOT_A_PRICE}` : r.text;
+        return { text, page, y: Math.min(1, Math.max(0, (height - r.y - r.h) / height)) };
+      });
     });
 }

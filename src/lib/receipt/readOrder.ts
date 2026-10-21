@@ -10,9 +10,14 @@ import { FOOD_APPS, cleanOrderItem, repeatedRows } from "./quickCommerce";
 import type { ParsedReceipt } from "./types";
 import { TOLERANCE, orderRows, orderedCount, readOrderBill, type OrderBill } from "./orderBill";
 import { stitch, type ShotRow, type Stitched } from "./stitch";
+import { plainText } from "../scanner/lines";
 
 // A row that is only the pack size and count: "6 x 330 ml x 1", "1 pack (1 kg) · 1 unit".
-const PACK = /^\d+(?:\.\d+)?\s*(?:[x×]\s*\d+(?:\.\d+)?\s*)?(?:ml|l|ltr|litre|g|gm|gms|kg|pcs?|packs?|units?)\b/i;
+const PACK = /^\d+(?:\.\d+)?\s*(?:[x×]\s*\d+(?:\.\d+)?\s*)?(?:ml|l|ltr|litre|g|gm|gms|kg|pcs?|packs?|pairs?|tablets?|units?)\b/i;
+// Lines under an item that are not its name: what the app lets you do with it.
+const AFTER_ITEM = /\b(?:exchange|return|eligible|refund(?:ed)?|replace|rate|rated|review|deducted|delivered|cancel(?:led)?|customi[sz]|unavailable)\b/i;
+// A name long enough to wrap onto a second line (shorter ones fit on one).
+const WRAPS_AT = 28;
 const PACK_COUNT = /[x×]\s*(\d{1,3})\s*$|(\d{1,3})\s*units?\b/i;
 // "Chatpata Double Egg Roll x 1 ₹119": the parser takes "x 1" for a column.
 const ROW_COUNT = /\s[x×]\s*(\d{1,3})\s+(?:₹|rs\.?\s*)?\d[\d,]*(?:\.\d{1,2})?\s*$/i;
@@ -41,12 +46,39 @@ export function readOrder(texts: string[], app?: string): { items: OrderItem[]; 
   // ("Coca-Cola Diet-Coke" / "6 x 330 ml x 1 ₹297"): the name is the row above.
   const flat = rows.flat();
   let at = 0;
-  const items = parsed.items.map((it, n) => {
+  const rowOf = parsed.items.map((it) => {
     const row = flat.findIndex((r, i) => i >= at && r.startsWith(it.description));
-    const above = row > 0 && row - 1 >= at ? flat[row - 1] : null;
     if (row !== -1) at = row + 1;
+    return row;
+  });
+  const itemRows = new Set(rowOf);
+  const items = parsed.items.map((it, n) => {
+    const row = rowOf[n];
+    const prev = n > 0 ? rowOf[n - 1] : -1;
+    const above = row > 0 && row - 1 > prev ? flat[row - 1] : null;
     const pack = PACK.test(it.description) && above && !parseReceipt(above).items.length ? it.description : null;
-    const clean = cleanOrderItem(pack ? above! : it.description);
+    // A long name wraps onto the next row ("Lotto Men's Sliders Enduro TX |
+    // Castle" / "Rock and Quarry - UK 9"): that row, when it has words, no
+    // price of its own and is not the pack size or what you can do with the
+    // item, is the rest of the name. A name ending "x 1" (Swiggy food) is
+    // whole; the row under it is the dish's option.
+    // OCR also reads text off the product photo beside the name ("TATA"): a
+    // lone short word in capitals is that, so the name's next line is the one after.
+    const logo = (t: string | undefined) => t !== undefined && /^[A-Z0-9&'.-]{2,8}$/.test(t.trim());
+    const nextAt = row !== -1 && logo(flat[row + 1]) ? row + 2 : row + 1;
+    const next = row !== -1 && !pack ? flat[nextAt] : undefined;
+    const wrapped =
+      next !== undefined &&
+      !itemRows.has(nextAt) &&
+      it.description.length >= WRAPS_AT &&
+      !ROW_COUNT.test(flat[row]) &&
+      /[A-Za-z]{3}/.test(next) &&
+      !/₹/.test(next) &&
+      !PACK.test(next) &&
+      !AFTER_ITEM.test(next)
+        ? plainText(next)
+        : null;
+    const clean = cleanOrderItem(pack ? above! : wrapped ? `${it.description} ${wrapped}` : it.description);
     const count = pack?.match(PACK_COUNT) ?? (row !== -1 ? flat[row].match(ROW_COUNT) : null);
     return {
       read: it.description,
@@ -57,7 +89,16 @@ export function readOrder(texts: string[], app?: string): { items: OrderItem[]; 
       repeat: repeats[n],
     };
   });
-  return { items, bill: readOrderBill(texts) };
+  // Some apps (Zepto with a coupon) print item prices with the discount
+  // already taken off, and the item total before it: then the discount is not
+  // taken off again.
+  const bill = readOrderBill(texts);
+  const sum = items.filter((it) => !it.repeat).reduce((t, it) => t + it.amount, 0);
+  const discounts = bill.charges.filter((c) => c.amount < 0);
+  const off = discounts.reduce((t, c) => t + c.amount, 0);
+  if (bill.itemTotal != null && discounts.length && Math.abs(sum - bill.itemTotal) > TOLERANCE && Math.abs(sum - (bill.itemTotal + off)) <= TOLERANCE)
+    return { items, bill: { ...bill, charges: bill.charges.filter((c) => c.amount >= 0), inPrices: discounts } };
+  return { items, bill };
 }
 
 /** Whether the screenshots hold the whole order, as far as the order itself says. */
@@ -86,7 +127,7 @@ export function orderCompleteness(text: string, read: { items: OrderItem[]; bill
   const expected = orderedCount(text);
   const units = items.reduce((n, it) => n + (it.qty ?? 1), 0);
   const sum = Math.round(items.reduce((s, it) => s + it.amount, 0) * 100) / 100;
-  const itemTotal = read.bill.itemTotal;
+  const itemTotal = read.bill.itemTotal == null ? null : read.bill.itemTotal + (read.bill.inPrices ?? []).reduce((t, c) => t + c.amount, 0);
   const short = itemTotal != null && itemTotal - sum > TOLERANCE ? Math.round((itemTotal - sum) * 100) / 100 : null;
   const fewer = expected != null && items.length < expected && units < expected;
   const noTotal = read.bill.orderTotal == null;

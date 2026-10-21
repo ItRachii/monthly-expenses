@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FileDropzone } from "@/components/FileDropzone";
 import { prepareImage } from "@/lib/scanner/prepareImage";
 import { parseReceipt } from "@/lib/receipt/parse";
-import { struckPrices, unstrikePrice, type ScanItem, type ScanResult } from "@/lib/scanner/lines";
+import { NOT_A_PRICE, plainText, struckPrices, unstrikePrice, type ScanItem, type ScanResult } from "@/lib/scanner/lines";
 import type { Tag } from "@/lib/scanner/pii";
 import { ORDER_APPS, OTHER_APP } from "@/lib/receipt/quickCommerce";
 import { billRows, orderRows, settleOrder, type BillReading, type RowPart } from "@/lib/receipt/orderBill";
@@ -581,7 +581,13 @@ function OrderSections({ ov, complete }: { ov: ReturnType<typeof orderView>; com
   // A product row with a price is an item; one without is a detail line ("1 pc (250 ml)").
   const became = (line: string) => {
     const it = ov.order.items.find((x) => line.trim().startsWith(x.read));
-    return it ? `Item: ${it.description}, ${formatINR(it.amount)}` : "No price: not an item";
+    if (it) return `Item: ${it.description}, ${formatINR(it.amount)}`;
+    const text = plainText(line).trim();
+    const of = text.length > 2 ? ov.order.items.find((x) => x.description.endsWith(text)) : undefined;
+    if (of) return `Rest of the name above (it wraps): ${of.description}`;
+    // The row's last number was part of its text, not a price piece of its own.
+    if (line.includes(NOT_A_PRICE)) return `Not an item: its "${text.match(/[\d.,]+\W*$/)?.[0].trim()}" is part of the text, not a price in the price column`;
+    return "No price: not an item";
   };
   return (
     <>
@@ -596,7 +602,7 @@ function OrderSections({ ov, complete }: { ov: ReturnType<typeof orderView>; com
               {ov.parts.map((r, i) => (
                 <tr key={i} className={r.part === "product" ? "" : "text-muted"}>
                   <td>{i + 1}</td>
-                  <td className="font-mono text-xs">{r.line}</td>
+                  <td className="font-mono text-xs">{plainText(r.line)}</td>
                   <td>{PART[r.part]}</td>
                   <td>{r.part === "product" ? became(r.line) : reading(ov.bills[i].reading)}</td>
                 </tr>
@@ -641,15 +647,23 @@ function OrderSections({ ov, complete }: { ov: ReturnType<typeof orderView>; com
               <td>Items add up to</td>
               <td>
                 {formatINR(ov.itemsSum)}
-                {bill.itemTotal != null
-                  ? Math.abs(ov.itemsSum - bill.itemTotal) <= 1
+                {bill.itemTotal == null
+                  ? ", no item total on the bill"
+                  : Math.abs(ov.itemsSum - bill.itemTotal) <= 1
                     ? `, same as the bill's item total`
-                    : `, the bill's item total says ${formatINR(bill.itemTotal)}: an item is missed or extra`
-                  : ", no item total on the bill"}
+                    : bill.inPrices?.length && Math.abs(ov.itemsSum - bill.itemTotal - bill.inPrices.reduce((t, c) => t + c.amount, 0)) <= 1
+                      ? `, the bill's item total ${formatINR(bill.itemTotal)} less the discounts already in the prices`
+                      : `, the bill's item total says ${formatINR(bill.itemTotal)}: an item is missed or extra`}
               </td>
             </tr>
             {bill.charges.map((c, i) => (
               <tr key={i}><td>{c.label}</td><td>{c.amount < 0 ? formatINR(c.amount) : `+${formatINR(c.amount)}`}</td></tr>
+            ))}
+            {(bill.inPrices ?? []).map((c, i) => (
+              <tr key={`in${i}`} className="text-muted">
+                <td>{c.label}</td>
+                <td>{formatINR(c.amount)}: already taken off the item prices (they add up to the item total less this), so not counted again</td>
+              </tr>
             ))}
             <tr><td>Order total</td><td>{bill.orderTotal != null ? formatINR(bill.orderTotal) : "not found"}</td></tr>
           </tbody>
