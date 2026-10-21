@@ -454,6 +454,9 @@ const fmt = (r: { kind: string; date: string; description: string; total: number
   // Only days the month has: a misread "31/02/2026" is not a date.
   const day = (t: string) => readDate(t.split(" "), 0)?.date ?? null;
   check("dates: impossible days are not dates", ["31/02/2026", "30/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].every((t) => day(t) === null), JSON.stringify(["31/02/2026", "31/04/2026", "29/02/2025", "31-Jun-2026"].map(day)));
+  check("dates: a year cut short is not a date", day("12/08/202") === null, String(day("12/08/202")));
+  const isoBad = parseSheet([parseCsv("Date,Description,Amount\n2026-07-18,SWIGGY,350.00\n2026-02-31,ZOMATO,120.00\n2026-13-45,UBER,99.00\n2026-07-19,BLINKIT,80.00\n")]);
+  check("sheet: impossible ISO dates are listed as not read, not ticked rows", JSON.stringify(isoBad.rows.map((r) => r.date)) === JSON.stringify(["2026-07-18", "2026-07-19"]) && isoBad.unparsed.length === 2, JSON.stringify([isoBad.rows.map((r) => r.date), isoBad.unparsed.map((u) => u.text)]));
   check("dates: real ones still are", day("29/02/2028") === "2028-02-29" && day("31/12/2026") === "2026-12-31" && day("30/04/2026") === "2026-04-30" && day("12-Aug-26") === "2026-08-12" && day("12 Aug 2026") === "2026-08-12", JSON.stringify(["29/02/2028", "31/12/2026", "30/04/2026", "12-Aug-26", "12 Aug 2026"].map(day)));
 
   // A quote in the middle of a field (an inch mark) is a character, not the start of a quoted field.

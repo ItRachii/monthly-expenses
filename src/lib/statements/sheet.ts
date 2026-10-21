@@ -17,6 +17,7 @@
 // Descriptions pass through the same deny-list redaction as PDF lines. The
 // name, address, CKYC ID and account numbers in the header are never read.
 
+import { isRealDay } from "../format";
 import { readDate } from "./dates";
 import { makeRefTagger, redactLine } from "./redact";
 import { assembleStatement, buildRows, citedRef, detectBank, dropEmiBadge, readForeign, sectionOf, type Line, type Section } from "./parse";
@@ -121,7 +122,7 @@ function dateOf(v: CellValue): string | null {
   if (!t) return null;
   // ISO dates, common in generic CSV exports: 2026-07-18.
   const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})\b/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  if (iso) return isRealDay(+iso[1], +iso[2], +iso[3]) ? `${iso[1]}-${iso[2]}-${iso[3]}` : null;
   const tokens = t.split(" ");
   tokens[0] = tokens[0].replace(/\|+$/, "");
   return readDate(tokens, 0)?.date ?? null;

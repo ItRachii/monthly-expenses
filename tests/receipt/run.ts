@@ -157,6 +157,12 @@ check("a heading starting with an item's name is not its row", JSON.stringify(ro
 check("the dish's priced row gives its quantity (Swiggy)", JSON.stringify(rowsOf(["ITEM DETAILS", "Paneer Butter Masala", "Paneer Butter Masala x 1 ₹250", "Bill details", "Item total ₹250", "Grand total ₹250"], "Swiggy")) === JSON.stringify([["Paneer Butter Masala", 1, 1]]));
 check("a replaced item's priced row is its row", JSON.stringify(rowsOf(["2 items in this order", "Amul Butter 100 g", "Replaced with", "Amul Butter 100 g ₹56", "Bread ₹40", "Bill details", "Item total ₹96", "Grand total ₹96"]).map((r) => r[2])) === JSON.stringify([2, 3]));
 
+// A receipt's date must be a real day; a misread one is no date (it is
+// asked for) rather than one the save then refuses.
+check("receipt: 31/02 is no date", parseReceipt("BIG BAZAAR\nDate: 31/02/2026\nMilk 30.00\nTotal 30.00").purchasedOn === null, String(parseReceipt("BIG BAZAAR\nDate: 31/02/2026\nMilk 30.00\nTotal 30.00").purchasedOn));
+check("receipt: a real date still reads", parseReceipt("BIG BAZAAR\nDate: 28/02/2026\nMilk 30.00\nTotal 30.00").purchasedOn === "2026-02-28");
+check("receipt: a bad date, then a good one in another form", parseReceipt("Printed 31/02/2026\nBill date 2026-02-27\nMilk 30.00\nTotal 30.00").purchasedOn === "2026-02-27", String(parseReceipt("Printed 31/02/2026\nBill date 2026-02-27\nMilk 30.00\nTotal 30.00").purchasedOn));
+
 if (failures) {
   console.error(`${failures} check(s) failed`);
   process.exit(1);

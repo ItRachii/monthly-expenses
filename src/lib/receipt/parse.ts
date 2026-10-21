@@ -3,6 +3,7 @@
 // for "a good first draft the user then corrects in the review screen", not
 // perfection. Pure and dependency-light so it is unit-testable in isolation.
 
+import { isRealDay } from "../format";
 import { categorize } from "./categorize";
 import { GST_SLABS, type ParsedLineItem, type ParsedReceipt } from "./types";
 
@@ -68,12 +69,15 @@ function extractDate(text: string): string | null {
   if (dmy) {
     let [, d, m, y] = dmy.map(Number) as unknown as number[];
     if (y < 100) y += 2000;
-    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return iso(y, m, d);
+    const day = iso(y, m, d);
+    // Not a real day (a misread "31/02"): try the other ways a date is written.
+    if (day) return day;
   }
   const ymd = text.match(/\b(20\d{2})[/\-.](\d{1,2})[/\-.](\d{1,2})\b/);
   if (ymd) {
     const [, y, m, d] = ymd.map(Number) as unknown as number[];
-    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return iso(y, m, d);
+    const day = iso(y, m, d);
+    if (day) return day;
   }
   const named = text.match(/\b(\d{1,2})\s*([A-Za-z]{3,})\s*,?\s*(\d{2,4})\b/);
   if (named) {
@@ -81,14 +85,14 @@ function extractDate(text: string): string | null {
     const m = MONTHS[named[2].slice(0, 3).toLowerCase()];
     let y = Number(named[3]);
     if (y < 100) y += 2000;
-    if (m && d >= 1 && d <= 31) return iso(y, m, d);
+    if (m) return iso(y, m, d);
   }
   return null;
 }
 
+/** The ISO date, or null when there is no such day ("31/02/2026") or the year is cut short. */
 function iso(y: number, m: number, d: number): string | null {
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  if (Number.isNaN(dt.getTime())) return null;
+  if (!isRealDay(y, m, d)) return null;
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 

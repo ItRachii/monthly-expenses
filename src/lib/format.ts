@@ -54,6 +54,11 @@ export function formatDate(d: Date | string): string {
  * localISO() once mounted (in India the UTC day is still yesterday until
  * 05:30).
  */
+/** Whether there is such a day: not 31 Feb, 31 Apr or 29 Feb 2025, and a four-digit year. */
+export function isRealDay(y: number, m: number, d: number): boolean {
+  return y >= 1000 && y <= 9999 && m >= 1 && m <= 12 && d >= 1 && d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
