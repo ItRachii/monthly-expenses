@@ -11,6 +11,7 @@ import { SETTLE_EPS, paidFor, payersOf, round2, shareFor } from "@/lib/settlemen
 import { formatINR, listNames } from "@/lib/format";
 import { deleteExpenseAction, deleteExpensesAction } from "@/lib/actions/expenses";
 import { EditExpenseModal } from "@/components/EditExpenseModal";
+import { EditReceiptModal } from "@/components/EditReceiptModal";
 import { ExportButton } from "./ExportDialog";
 import { PersonAvatar, PersonAvatars } from "@/components/Person";
 import type { DeletedExpense, NotificationFocus } from "@/lib/notifications";
@@ -95,6 +96,7 @@ export function ExpenseFeed({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState<ExpenseDTO | null>(null);
+  const [editingReceipt, setEditingReceipt] = useState<ReceiptGroup<ExpenseDTO> | null>(null);
   const [actionsFor, setActionsFor] = useState<{ expense: ExpenseDTO; confirm: boolean } | null>(
     null,
   );
@@ -534,6 +536,7 @@ export function ExpenseFeed({
                       pending={pending}
                       onToggleOpen={() => toggleReceipt(group.receiptId)}
                       onPick={(on) => setMany(group.items.map((r) => r.id), on)}
+                      onEdit={() => setEditingReceipt(group)}
                       onDelete={() => askDeleteReceipt(group.items)}
                     />
                     {open
@@ -607,7 +610,11 @@ export function ExpenseFeed({
                             <GhostRow key={`gone-${k}`} ghost={g} branch={k === gone.length - 1 ? "last" : "mid"} />
                           ))}
                         </div>
-                        <div className="flex justify-end px-3 pb-2.5">
+                        <div className="flex justify-end gap-2 px-3 pb-2.5">
+                          <button type="button" className="chip-btn" disabled={pending} onClick={() => setEditingReceipt(group)}>
+                            <PencilIcon className="h-4 w-4 text-muted" />
+                            Edit receipt
+                          </button>
                           <button type="button" className="chip-btn text-negative" disabled={pending} onClick={() => askDeleteReceipt(group.items)}>
                             <TrashIcon className="h-4 w-4" />
                             {group.of > group.items.length ? `Delete these ${group.items.length}` : "Delete receipt"}
@@ -651,6 +658,17 @@ export function ExpenseFeed({
           }}
           onDelete={() => remove(actionsFor.expense.id)}
           onClose={closeActions}
+        />
+      ) : null}
+
+      {editingReceipt ? (
+        <EditReceiptModal
+          receiptId={editingReceipt.receiptId}
+          merchant={editingReceipt.merchant}
+          date={editingReceipt.date}
+          itemCount={editingReceipt.of}
+          onClose={() => setEditingReceipt(null)}
+          onSaved={() => router.refresh()}
         />
       ) : null}
 
@@ -813,6 +831,7 @@ function ReceiptTableRow({
   pending,
   onToggleOpen,
   onPick,
+  onEdit,
   onDelete,
 }: {
   group: ReceiptGroup<ExpenseDTO>;
@@ -825,6 +844,8 @@ function ReceiptTableRow({
   pending: boolean;
   onToggleOpen: () => void;
   onPick: (on: boolean) => void;
+  /** Opens the receipt's own details: the shop and the date. */
+  onEdit: () => void;
   /** Asks to delete the items on show, in one go. */
   onDelete: () => void;
 }) {
@@ -870,6 +891,19 @@ function ReceiptTableRow({
       <td className="whitespace-nowrap text-right font-semibold tabular-nums">{formatINR(sum.total)}</td>
       <td>
         <div className="flex items-center justify-center gap-1">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            disabled={pending}
+            aria-label={`Edit the receipt from ${sum.merchant}`}
+            title="Edit receipt"
+          >
+            <PencilIcon />
+          </button>
           <button
             type="button"
             className="icon-btn text-negative hover:text-negative"
