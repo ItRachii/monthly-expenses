@@ -5,6 +5,7 @@ import { PAYER_MULTIPLE, SPLIT_CUSTOM, canonicalCategory, mergeCategories } from
 import { parseShares, type Shares } from "./settlementMath";
 import type { Context } from "./context";
 import { pendingFlagsFor } from "./loans";
+import { settleReceipts } from "./receipts";
 
 export interface ExpenseDTO {
   id: number;
@@ -135,21 +136,39 @@ export async function updateExpense(
     payers: Shares | null;
   },
 ) {
-  await prisma.expense.update({
-    where: { id },
-    data: {
-      date: new Date(`${data.date}T00:00:00.000Z`),
-      category: data.category,
-      item: data.item,
-      amount: data.amount,
-      payer: data.payer,
-      split: data.split,
-      shares: data.shares ?? Prisma.DbNull,
-      payers: data.payers ?? Prisma.DbNull,
-    },
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.expense.findUnique({ where: { id }, select: { receiptId: true, amount: true } });
+    await tx.expense.update({
+      where: { id },
+      data: {
+        date: new Date(`${data.date}T00:00:00.000Z`),
+        category: data.category,
+        item: data.item,
+        amount: data.amount,
+        payer: data.payer,
+        split: data.split,
+        shares: data.shares ?? Prisma.DbNull,
+        payers: data.payers ?? Prisma.DbNull,
+      },
+    });
+    // A receipt's header total moves with its items.
+    if (before?.receiptId) await settleReceipts(tx, new Map([[before.receiptId, data.amount - before.amount]]));
+  });
+}
+
+/** Deletes expenses, and settles the receipt headers they leave behind (total moved, or removed when empty). */
+export async function deleteExpenses(ids: number[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.expense.findMany({ where: { id: { in: ids } }, select: { receiptId: true, amount: true } });
+    const { count } = await tx.expense.deleteMany({ where: { id: { in: ids } } });
+    const changes = new Map<string, number>();
+    for (const r of rows) if (r.receiptId) changes.set(r.receiptId, (changes.get(r.receiptId) ?? 0) - r.amount);
+    await settleReceipts(tx, changes);
+    return count;
   });
 }
 
 export async function deleteExpense(id: number) {
-  await prisma.expense.deleteMany({ where: { id } });
+  await deleteExpenses([id]);
 }

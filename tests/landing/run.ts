@@ -1,6 +1,8 @@
 // Unit checks for where opening a notification lands (no database). Run
 // with `npm run test:landing`.
 import { ALL_MONTHS, landingFor, placeGhosts, settlementLanding } from "../../src/lib/landing";
+import { sortRows } from "../../src/components/table/Table";
+import { entryValue, groupReceipts } from "../../src/lib/receiptGroups";
 import { notificationHref, parseTarget, type NotificationFocus } from "../../src/lib/notifications";
 
 let failures = 0;
@@ -76,6 +78,74 @@ check("parse: null", parseTarget(null) === null && parseTarget("x") === null);
 check("href: old notification opens the group", notificationHref({ id: 3, groupId: "g-1", target: null }) === "/g/g-1");
 check("href: expense", notificationHref({ id: 3, groupId: "g 1", target: { kind: "expenses", ids: [1] } }) === "/g/g%201?tab=expenses&n=3");
 check("href: payment", notificationHref({ id: 4, groupId: "g", target: { kind: "settlement", id: 1, month: "2026-08" } }) === "/g/g?tab=balances&n=4");
+
+// Scanned receipts fold into one entry, which sorts by its own values.
+{
+  const x = (id: number, receiptId: string | null, date: string, amount: number, category = "Groceries") => ({
+    id, date, amount, item: `item ${id}`, category, receiptId, receiptMerchant: receiptId ? `Shop ${receiptId}` : null,
+  });
+  const label = (e: ReturnType<typeof groupReceipts<ReturnType<typeof x>>>[number]) => (e.group ? `${e.group.receiptId}:${e.group.items.map((i) => i.id).join(",")}` : String(e.row.id));
+  const rows = [x(1, null, "2026-09-30", 900), x(5, "a", "2026-09-25", 40), x(3, "a", "2026-09-26", 1200, "Household"), x(4, "b", "2026-09-10", 20), x(2, "a", "2026-09-25", 300)];
+
+  const entries = groupReceipts(rows);
+  check("receipts: folded where the first row was", same(entries.map(label), ["1", "a:2,3,5", "4"]), JSON.stringify(entries.map(label)));
+  const a = entries[1].group!;
+  check("receipts: items in scan order", same(a.items.map((i) => i.id), [2, 3, 5]));
+  check("receipts: total, latest date, categories", a.total === 1540 && a.date === "2026-09-26" && a.category === "2 categories" && a.merchant === "Shop a");
+  check("receipts: one row on show stays a row", groupReceipts([x(1, "a", "2026-09-01", 5), x(2, null, "2026-09-01", 6)]).every((e) => e.row));
+
+  // The entry carries what the sorts read: the total, not an item's amount.
+  check("receipts: entry amount is the total", entries[1].amount === 1540 && entries[1].date === "2026-09-26");
+  check("receipts: one category reads as that category", groupReceipts([x(1, "c", "2026-09-01", 5), x(2, "c", "2026-09-01", 6)])[0].group?.category === "Groceries");
+  check("receipts: an empty category reads Uncategorised", groupReceipts([x(1, "c", "2026-09-01", 5, ""), x(2, "c", "2026-09-01", 6, "")])[0].group?.category === "Uncategorised");
+
+  // Deleting items: 3 -> 2 stays a receipt with the new total, 2 -> 1 is a plain row.
+  const three = [x(1, "d", "2026-09-01", 100), x(2, "d", "2026-09-01", 50), x(3, "d", "2026-09-01", 25)];
+  const afterOne = groupReceipts(three.filter((r) => r.id !== 2))[0];
+  check("delete 3 -> 2: still a receipt, total 125", afterOne.group?.items.length === 2 && afterOne.group.total === 125 && afterOne.group.of === 2);
+  const afterTwo = groupReceipts(three.filter((r) => r.id === 3));
+  check("delete 2 -> 1: a plain row", afterTwo.length === 1 && afterTwo[0].row?.id === 3);
+
+  // A date sort cannot pass by luck: the receipt's date is the latest, not the first item's.
+  const late = [x(1, "e", "2026-09-01", 10), x(2, "e", "2026-09-28", 1), x(3, null, "2026-09-15", 50)];
+  const lateSorted = sortRows(groupReceipts(late), { key: "date", dir: "desc" }, entryValue).map(label);
+  check("sort date: the latest item places the receipt", same(lateSorted, ["e:1,2", "3"]), JSON.stringify(lateSorted));
+
+  // A filter cuts a receipt down but it still knows its full size.
+  const cut = groupReceipts(rows, (r) => r.category === "Groceries" || r.id === 4);
+  const cutA = cut.find((e) => e.group)?.group;
+  check("filter: a receipt cut to 2 of 3", cutA?.items.length === 2 && cutA.of === 3 && cutA.total === 340, JSON.stringify(cutA && { n: cutA.items.length, of: cutA.of, total: cutA.total }));
+  check("filter: one matching item is a plain row", groupReceipts(rows, (r) => r.id === 3).every((e) => e.row));
+  check("filter: nothing matching is nothing", groupReceipts(rows, () => false).length === 0);
+
+  // Amount, high to low: the receipt is placed by its total, not by an item.
+  const byAmount = sortRows(entries, { key: "amount", dir: "desc" }, entryValue).map(label);
+  check("sort amount: by the receipt's total", same(byAmount, ["a:2,3,5", "1", "4"]), JSON.stringify(byAmount));
+  // Date, newest first: by the receipt's latest date.
+  const byDate = sortRows(entries, { key: "date", dir: "desc" }, entryValue).map(label);
+  check("sort date: by the receipt's latest date", same(byDate, ["1", "a:2,3,5", "4"]), JSON.stringify(byDate));
+  const byItem = sortRows(entries, { key: "item", dir: "asc" }, entryValue).map(label);
+  check("sort item: by the merchant", same(byItem, ["1", "4", "a:2,3,5"]), JSON.stringify(byItem));
+  check("sort category: by its label", entryValue(entries[1], "category") === "2 categories");
+
+  // A deleted-expense ghost lands between the entries by date, never inside a receipt.
+  const placed = placeGhosts(sortRows(entries, { key: "date", dir: "desc" }, entryValue), [{ date: "2026-09-26" }], "desc");
+  check("ghost: between entries", placed.map((p) => (p.ghost ? "ghost" : label(p.row))).join(" ") === "1 a:2,3,5 ghost 4", placed.map((p) => (p.ghost ? "ghost" : label(p.row))).join(" "));
+}
+
+// A deleted item remembers its receipt, and nothing else is trusted.
+{
+  const parsed = parseTarget({
+    kind: "deleted",
+    count: 2,
+    total: 30,
+    items: [
+      { date: "2026-09-01", item: "Milk", category: "Groceries", amount: 10, receiptId: "r1" },
+      { date: "2026-09-01", item: "Bread", category: "Groceries", amount: 20, receiptId: 7 },
+    ],
+  });
+  check("deleted target: receipt id kept, a bad one dropped", parsed?.kind === "deleted" && parsed.items[0].receiptId === "r1" && !("receiptId" in parsed.items[1]), JSON.stringify(parsed));
+}
 
 console.log(failures ? `\n${failures} failed` : "\nall passed");
 process.exit(failures ? 1 : 0);

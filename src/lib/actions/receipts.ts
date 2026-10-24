@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { createReceiptWithItems, type NewReceiptItem } from "@/lib/receipts";
+import { createReceiptWithItems, updateReceiptDetails, type NewReceiptItem } from "@/lib/receipts";
 import { canonicalCategoriesFor } from "@/lib/expenses";
 import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
@@ -158,4 +158,52 @@ export async function addReceiptAction(input: Parameters<typeof saveReceipt>[0])
     await track({ event: "save_result", outcome: "error", ms: Date.now() - t0 });
     throw e;
   }
+}
+
+/**
+ * Renames a scanned receipt and sets one date for it and all its items, so
+ * the merchant and the day can be fixed in one place instead of per item.
+ */
+export async function updateReceiptAction(
+  receiptId: string,
+  input: { merchant: string; date: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) return { ok: false, error: "Not signed in." };
+  if (typeof receiptId !== "string" || !receiptId) return { ok: false, error: "Receipt not found." };
+  const merchant = cleanText(input.merchant, 80);
+  if (!merchant) return { ok: false, error: "Please enter the shop name." };
+  if (!isValidDateISO(input.date)) return { ok: false, error: "Please enter a valid date." };
+
+  const receipt = await prisma.receipt.findUnique({ where: { id: receiptId } });
+  if (!receipt) return { ok: false, error: "Receipt not found." };
+  if (receipt.ownerEmail) {
+    if (receipt.ownerEmail !== email) return { ok: false, error: "Not authorized." };
+  } else if (receipt.groupId) {
+    if (!(await isGroupMember(receipt.groupId, email))) return { ok: false, error: "Not authorized." };
+  } else {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  const { changed, itemIds } = await updateReceiptDetails(receiptId, merchant, input.date);
+
+  if (changed && receipt.groupId && itemIds.length > 0) {
+    try {
+      const actor = await prisma.appUser.findUnique({ where: { email } });
+      const who = await nameForOthers(actor, email);
+      await notifyGroup({
+        groupId: receipt.groupId,
+        actorEmail: email,
+        type: "expense_updated",
+        message: `${who} edited the receipt from ${merchant}: ${itemIds.length} items`,
+        target: { kind: "expenses", ids: itemIds },
+      });
+    } catch {
+      // best-effort
+    }
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

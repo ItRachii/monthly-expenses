@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { prisma } from "./prisma";
+import { prisma, type Db } from "./prisma";
 
 export interface NewReceiptItem {
   description: string;
@@ -56,4 +56,50 @@ export async function createReceiptWithItems(data: {
     }),
   ]);
   return id;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Keeps receipt headers in line after their items change. `changes` maps a
+ * receipt id to how much its saved items moved (negative for a delete). A
+ * header with no items left is removed; the others have their total moved by
+ * the same amount, so it stays the printed total less what was dropped.
+ */
+export async function settleReceipts(db: Db, changes: Map<string, number>): Promise<void> {
+  for (const [id, delta] of changes) {
+    if ((await db.expense.count({ where: { receiptId: id } })) === 0) {
+      await db.receipt.deleteMany({ where: { id } });
+      continue;
+    }
+    if (!delta) continue;
+    const header = await db.receipt.findUnique({ where: { id }, select: { total: true } });
+    if (header) await db.receipt.update({ where: { id }, data: { total: Math.max(0, round2(header.total + delta)) } });
+  }
+}
+
+/**
+ * Renames a receipt and moves it to another day: the header, and every item
+ * under it, so the receipt reads as one purchase. Returns whether anything
+ * changed, and the ids of its items.
+ */
+export async function updateReceiptDetails(
+  id: string,
+  merchant: string,
+  date: string, // YYYY-MM-DD
+): Promise<{ changed: boolean; itemIds: number[] }> {
+  const day = new Date(`${date}T00:00:00.000Z`);
+  return prisma.$transaction(async (tx) => {
+    const header = await tx.receipt.findUnique({ where: { id }, select: { merchant: true, purchasedOn: true } });
+    const items = await tx.expense.findMany({ where: { receiptId: id }, select: { id: true, date: true } });
+    const same =
+      header?.merchant === merchant &&
+      header.purchasedOn?.getTime() === day.getTime() &&
+      items.every((i) => i.date.getTime() === day.getTime());
+    if (!same) {
+      await tx.receipt.update({ where: { id }, data: { merchant, purchasedOn: day } });
+      await tx.expense.updateMany({ where: { receiptId: id }, data: { date: day } });
+    }
+    return { changed: !same, itemIds: items.map((i) => i.id) };
+  });
 }

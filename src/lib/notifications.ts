@@ -15,6 +15,8 @@ export interface DeletedExpense {
   item: string;
   category: string;
   amount: number;
+  /** The receipt it belonged to, so its crossed-out row can sit under that receipt. */
+  receiptId?: string;
 }
 
 /**
@@ -47,7 +49,12 @@ export function parseTarget(raw: unknown): NotificationTarget | null {
       (i): i is DeletedExpense =>
         !!i && typeof i === "object" && isYmd((i as DeletedExpense).date) && isStr((i as DeletedExpense).item) && isStr((i as DeletedExpense).category) && isNum((i as DeletedExpense).amount),
     );
-    return { kind: "deleted", items, count: t.count, total: t.total };
+    return {
+      kind: "deleted",
+      items: items.map((i) => ({ date: i.date, item: i.item, category: i.category, amount: i.amount, ...(isStr(i.receiptId) ? { receiptId: i.receiptId } : {}) })),
+      count: t.count,
+      total: t.total,
+    };
   }
   if (t.kind === "settlement" && isInt(t.id) && isStr(t.month) && /^\d{4}-\d{2}$/.test(t.month)) {
     return { kind: "settlement", id: t.id, month: t.month };
