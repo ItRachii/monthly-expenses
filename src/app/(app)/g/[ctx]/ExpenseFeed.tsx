@@ -478,11 +478,12 @@ export function ExpenseFeed({
             <tbody>
               {placed.map(({ row: entry, ghost }, i) => {
                 if (ghost) return <GhostTableRow key={`ghost-${i}`} ghost={ghost} columns={isPersonal ? 6 : 8} />;
-                const tableRow = (r: ExpenseDTO, branch?: Branch) => (
+                const tableRow = (r: ExpenseDTO, branch?: Branch, showDate?: boolean) => (
                   <ExpenseTableRow
                     key={r.id}
                     row={r}
                     branch={branch}
+                    showDate={showDate}
                     mark={marked.has(r.id) && landing?.kind === "expenses" ? landing.verb : null}
                     checked={selected.has(r.id)}
                     isNew={fresh.has(r.id)}
@@ -512,7 +513,7 @@ export function ExpenseFeed({
                       onToggleOpen={() => toggleReceipt(group.receiptId)}
                       onPick={(on) => setMany(group.items.map((r) => r.id), on)}
                     />
-                    {open ? group.items.map((r, k) => tableRow(r, k === group.items.length - 1 ? "last" : "mid")) : null}
+                    {open ? group.items.map((r, k) => tableRow(r, k === group.items.length - 1 ? "last" : "mid", r.date !== group.date)) : null}
                   </Fragment>
                 );
               })}
@@ -528,11 +529,12 @@ export function ExpenseFeed({
           <div className="card divide-y divide-ink/5 p-0">
             {placed.map(({ row: entry, ghost }, i) => {
               if (ghost) return <GhostRow key={`ghost-${i}`} ghost={ghost} />;
-              const phoneRow = (r: ExpenseDTO, branch?: Branch) => (
+              const phoneRow = (r: ExpenseDTO, branch?: Branch, showDate?: boolean) => (
                 <ExpenseRow
                   key={r.id}
                   id={r.id}
                   branch={branch}
+                  showDate={showDate}
                   mark={marked.has(r.id) && landing?.kind === "expenses" ? landing.verb : null}
                   item={r.item}
                   receiptMerchant={branch ? null : r.receiptMerchant}
@@ -564,7 +566,7 @@ export function ExpenseFeed({
                   {open ? (
                     <div className="expand-in">
                       <div className="min-h-0 overflow-hidden">
-                        <div className="pb-1">{group.items.map((r, k) => phoneRow(r, k === group.items.length - 1 ? "last" : "mid"))}</div>
+                        <div className="pb-1">{group.items.map((r, k) => phoneRow(r, k === group.items.length - 1 ? "last" : "mid", r.date !== group.date))}</div>
                       </div>
                     </div>
                   ) : null}
@@ -626,6 +628,7 @@ export function ExpenseFeed({
 function ExpenseTableRow({
   row,
   branch,
+  showDate = false,
   mark,
   checked,
   isNew,
@@ -639,6 +642,8 @@ function ExpenseTableRow({
   row: ExpenseDTO;
   /** One item of an opened receipt, hung off it like a tree. */
   branch?: Branch;
+  /** An item dated differently from the receipt row: its date shows. */
+  showDate?: boolean;
   /** The record a notification is about: highlighted, with what happened. */
   mark: "added" | "edited" | null;
   checked: boolean;
@@ -665,7 +670,7 @@ function ExpenseTableRow({
       <td>
         <RowCheckbox checked={checked} onChange={onToggle} label={`Select ${row.item}`} />
       </td>
-      <td className="whitespace-nowrap text-muted">{branch ? null : tableDate(row.date)}</td>
+      <td className="whitespace-nowrap text-muted">{branch && !showDate ? null : tableDate(row.date)}</td>
       {/* The cell holds the branch line, so it runs the row's full height. */}
       <td className={`max-w-0 ${branch ? "relative" : ""}`}>
         {branch ? <BranchLine last={branch === "last"} left={TREE_LEFT} /> : null}
@@ -982,6 +987,7 @@ const MOVE_TOLERANCE_PX = 10;
 function ExpenseRow({
   id,
   branch,
+  showDate = false,
   mark,
   item,
   receiptMerchant,
@@ -995,8 +1001,10 @@ function ExpenseRow({
   onOpenActions,
 }: {
   id: number;
-  /** One item of an opened receipt, hung off it like a tree: one compact line, no date. */
+  /** One item of an opened receipt, hung off it like a tree: compact, no date unless it differs. */
   branch?: Branch;
+  /** An item of a receipt dated differently from the receipt row: say so. */
+  showDate?: boolean;
   /** The record a notification is about: highlighted, with what happened. */
   mark: "added" | "edited" | null;
   item: string;
@@ -1091,9 +1099,18 @@ function ExpenseRow({
           <div className="truncate text-xs text-muted">
             {category}
             {paidBy ? ` · ${paidBy} paid` : ""}
+            {showDate ? ` · ${tableDate(date)}` : ""}
           </div>
         </div>
-        <span className="shrink-0 text-sm font-semibold tabular-nums">{formatINR(amount)}</span>
+        <div className="shrink-0 text-right">
+          <div className="text-sm font-semibold tabular-nums">{formatINR(amount)}</div>
+          {inv ? (
+            <div className={`text-[11px] tabular-nums ${TONE[inv.tone]}`}>
+              {inv.label}
+              {inv.amount !== null ? ` ${formatINR(inv.amount)}` : ""}
+            </div>
+          ) : null}
+        </div>
       </div>
     );
 
