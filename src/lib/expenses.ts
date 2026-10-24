@@ -99,6 +99,8 @@ export async function createExpense(data: {
   payers?: Shares | null;
   ownerEmail: string | null;
   groupId: string | null;
+  /** The scanned receipt the row is an item of. */
+  receiptId?: string | null;
   /** The card statement the row was imported from. */
   statementId?: number | null;
   /** Keyed hash of that statement row (see statementDuplicates). */
@@ -117,6 +119,7 @@ export async function createExpense(data: {
       payers: data.payers ?? Prisma.DbNull,
       ownerEmail: data.ownerEmail,
       groupId: data.groupId,
+      receiptId: data.receiptId ?? null,
       statementId: data.statementId ?? null,
       importKey: data.importKey ?? null,
     },

@@ -3,15 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { createReceiptWithItems, updateReceiptDetails, type NewReceiptItem } from "@/lib/receipts";
-import { canonicalCategoriesFor } from "@/lib/expenses";
+import { createReceiptWithItems, settleReceipts, updateReceiptDetails, type NewReceiptItem } from "@/lib/receipts";
+import { canonicalCategoriesFor, createExpense } from "@/lib/expenses";
 import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
 import { nameForOthers } from "@/lib/users";
 import { formatINR } from "@/lib/format";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { emailForKey } from "@/lib/wire";
-import { SPLIT_EQUAL } from "@/lib/constants";
+import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { recordScanEvent } from "@/lib/scanEvents";
 import { isAttemptId, type ScanEventInput } from "@/lib/scanTracking";
 
@@ -198,6 +198,88 @@ export async function updateReceiptAction(
         type: "expense_updated",
         message: `${who} edited the receipt from ${merchant}: ${itemIds.length} items`,
         target: { kind: "expenses", ids: itemIds },
+      });
+    } catch {
+      // best-effort
+    }
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/**
+ * Adds one item to a scanned receipt (one the scan missed, or a fix). It takes
+ * the receipt's own date and the payer and split of its other items, so it
+ * sits in the receipt like the rest; its amount moves the receipt's total.
+ * The item can be edited afterwards like any other.
+ */
+export async function addReceiptItemAction(
+  receiptId: string,
+  input: { item: string; category: string; amount: number },
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) return { ok: false, error: "Not signed in." };
+  if (typeof receiptId !== "string" || !receiptId) return { ok: false, error: "Receipt not found." };
+  const item = cleanText(input.item, 200);
+  if (!item) return { ok: false, error: "Please enter an item description." };
+  if (!isValidAmount(input.amount)) return { ok: false, error: "Amount must be a positive number." };
+
+  const receipt = await prisma.receipt.findUnique({ where: { id: receiptId } });
+  if (!receipt) return { ok: false, error: "Receipt not found." };
+  if (receipt.ownerEmail) {
+    if (receipt.ownerEmail !== email) return { ok: false, error: "Not authorized." };
+  } else if (receipt.groupId) {
+    if (!(await isGroupMember(receipt.groupId, email))) return { ok: false, error: "Not authorized." };
+  } else {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  // Who paid and how it is split come from an item that has one payer and an
+  // even or single-person split: custom amounts per person belong to their
+  // item's amount and cannot be copied to another.
+  const existing = await prisma.expense.findMany({ where: { receiptId }, orderBy: { id: "asc" } });
+  const template = existing.find((e) => e.split !== SPLIT_CUSTOM && e.payer !== PAYER_MULTIPLE);
+  if (!template)
+    return { ok: false, error: "This receipt's items are split by hand, so a new one cannot copy how. Add it as a normal expense." };
+
+  const [category] = await canonicalCategoriesFor(
+    receipt.groupId ? { kind: "group", groupId: receipt.groupId } : { kind: "personal", email },
+    [cleanText(input.category, 50)],
+  );
+  const date = (receipt.purchasedOn ?? template.date).toISOString().slice(0, 10);
+
+  const newId = await prisma.$transaction(async (tx) => {
+    const { id } = await createExpense(
+      {
+        date,
+        category,
+        item,
+        amount: input.amount,
+        payer: template.payer,
+        split: template.split,
+        shares: null,
+        ownerEmail: receipt.ownerEmail,
+        groupId: receipt.groupId,
+        receiptId,
+      },
+      tx,
+    );
+    await settleReceipts(tx, new Map([[receiptId, input.amount]]));
+    return id;
+  });
+
+  if (receipt.groupId) {
+    try {
+      const actor = await prisma.appUser.findUnique({ where: { email } });
+      const who = await nameForOthers(actor, email);
+      await notifyGroup({
+        groupId: receipt.groupId,
+        actorEmail: email,
+        type: "expense_added",
+        message: `${who} added "${item}" (${formatINR(input.amount)}) to the receipt from ${receipt.merchant}`,
+        target: { kind: "expenses", ids: [newId] },
       });
     } catch {
       // best-effort
