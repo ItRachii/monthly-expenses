@@ -94,6 +94,23 @@ check("href: payment", notificationHref({ id: 4, groupId: "g", target: { kind: "
   check("receipts: total, latest date, categories", a.total === 1540 && a.date === "2026-09-26" && a.category === "2 categories" && a.merchant === "Shop a");
   check("receipts: one row on show stays a row", groupReceipts([x(1, "a", "2026-09-01", 5), x(2, null, "2026-09-01", 6)]).every((e) => e.row));
 
+  // The entry carries what the sorts read: the total, not an item's amount.
+  check("receipts: entry amount is the total", entries[1].amount === 1540 && entries[1].date === "2026-09-26");
+  check("receipts: one category reads as that category", groupReceipts([x(1, "c", "2026-09-01", 5), x(2, "c", "2026-09-01", 6)])[0].group?.category === "Groceries");
+  check("receipts: an empty category reads Uncategorised", groupReceipts([x(1, "c", "2026-09-01", 5, ""), x(2, "c", "2026-09-01", 6, "")])[0].group?.category === "Uncategorised");
+
+  // Deleting items: 3 -> 2 stays a receipt with the new total, 2 -> 1 is a plain row.
+  const three = [x(1, "d", "2026-09-01", 100), x(2, "d", "2026-09-01", 50), x(3, "d", "2026-09-01", 25)];
+  const afterOne = groupReceipts(three.filter((r) => r.id !== 2))[0];
+  check("delete 3 -> 2: still a receipt, total 125", afterOne.group?.items.length === 2 && afterOne.group.total === 125 && afterOne.group.of === 2);
+  const afterTwo = groupReceipts(three.filter((r) => r.id === 3));
+  check("delete 2 -> 1: a plain row", afterTwo.length === 1 && afterTwo[0].row?.id === 3);
+
+  // A date sort cannot pass by luck: the receipt's date is the latest, not the first item's.
+  const late = [x(1, "e", "2026-09-01", 10), x(2, "e", "2026-09-28", 1), x(3, null, "2026-09-15", 50)];
+  const lateSorted = sortRows(groupReceipts(late), { key: "date", dir: "desc" }, entryValue).map(label);
+  check("sort date: the latest item places the receipt", same(lateSorted, ["e:1,2", "3"]), JSON.stringify(lateSorted));
+
   // A filter cuts a receipt down but it still knows its full size.
   const cut = groupReceipts(rows, (r) => r.category === "Groceries" || r.id === 4);
   const cutA = cut.find((e) => e.group)?.group;
@@ -114,6 +131,20 @@ check("href: payment", notificationHref({ id: 4, groupId: "g", target: { kind: "
   // A deleted-expense ghost lands between the entries by date, never inside a receipt.
   const placed = placeGhosts(sortRows(entries, { key: "date", dir: "desc" }, entryValue), [{ date: "2026-09-26" }], "desc");
   check("ghost: between entries", placed.map((p) => (p.ghost ? "ghost" : label(p.row))).join(" ") === "1 a:2,3,5 ghost 4", placed.map((p) => (p.ghost ? "ghost" : label(p.row))).join(" "));
+}
+
+// A deleted item remembers its receipt, and nothing else is trusted.
+{
+  const parsed = parseTarget({
+    kind: "deleted",
+    count: 2,
+    total: 30,
+    items: [
+      { date: "2026-09-01", item: "Milk", category: "Groceries", amount: 10, receiptId: "r1" },
+      { date: "2026-09-01", item: "Bread", category: "Groceries", amount: 20, receiptId: 7 },
+    ],
+  });
+  check("deleted target: receipt id kept, a bad one dropped", parsed?.kind === "deleted" && parsed.items[0].receiptId === "r1" && !("receiptId" in parsed.items[1]), JSON.stringify(parsed));
 }
 
 console.log(failures ? `\n${failures} failed` : "\nall passed");

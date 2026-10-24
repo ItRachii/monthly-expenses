@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { SETTLE_EPS, paidFor, payersOf, round2, shareFor } from "@/lib/settlementMath";
 import { formatINR, listNames } from "@/lib/format";
-import { deleteExpenseAction } from "@/lib/actions/expenses";
+import { deleteExpenseAction, deleteExpensesAction } from "@/lib/actions/expenses";
 import { EditExpenseModal } from "@/components/EditExpenseModal";
 import { ExportButton } from "./ExportDialog";
 import { PersonAvatar, PersonAvatars } from "@/components/Person";
@@ -211,18 +211,28 @@ export function ExpenseFeed({
   // Deleted expenses from the notification, in their month and only while
   // nothing narrows the list (they matched no filter; they no longer exist).
   const narrowed = Boolean(query.trim()) || filterCount > 0 || onlyFlagged;
+  // A deleted item of a receipt that is still a receipt row on show hangs
+  // crossed out inside it; any other sits between the rows, where it was.
+  const shownGhosts = narrowed ? [] : ghosts.filter((g) => month === ALL || g.date.startsWith(month));
+  const receiptsOnShow = new Set(entries.flatMap((e) => (e.group ? [e.group.receiptId] : [])));
+  const inTree = shownGhosts.filter((g) => g.receiptId && receiptsOnShow.has(g.receiptId));
   const placed = placeGhosts(
     entries,
-    narrowed ? [] : ghosts.filter((g) => month === ALL || g.date.startsWith(month)),
+    shownGhosts.filter((g) => !inTree.includes(g)),
     sort.key === "date" ? sort.dir : null,
   );
+  const ghostsOf = (receiptId: string) => inTree.filter((g) => g.receiptId === receiptId);
 
   // A receipt's items list under it when it is opened. One a notification
   // points into starts open (the space is remounted for each notification);
   // after that only a click opens or closes it, so deleting the highlighted
   // item or dismissing the banner never moves a receipt you did not touch.
   const [landed] = useState<Set<string>>(
-    () => new Set(rows.filter((r) => r.receiptId && marked.has(r.id)).map((r) => r.receiptId!)),
+    () =>
+      new Set([
+        ...rows.filter((r) => r.receiptId && marked.has(r.id)).map((r) => r.receiptId!),
+        ...ghosts.flatMap((g) => (g.receiptId && rows.some((r) => r.receiptId === g.receiptId) ? [g.receiptId] : [])),
+      ]),
   );
   const [open, setOpen] = useState<Set<string>>(() => new Set(landed));
   const isOpen = (id: string) => open.has(id);
@@ -308,28 +318,31 @@ export function ExpenseFeed({
   }
 
   /**
-   * Deletes the ticked expenses one by one, each with the same checks as a
-   * single delete. Any the server refuses stay ticked, and the dialog stays
-   * open to say how many and why.
+   * Deletes the ticked expenses in one request, each with the same checks as
+   * a single delete. Any the server refuses stay ticked, and the dialog
+   * stays open to say how many and why.
    */
   function removePicked() {
     const ids = picked.map((r) => r.id);
     setDeleteError(null);
     startTransition(async () => {
-      const failed: number[] = [];
-      let reason: string | null = null;
-      for (const id of ids) {
-        const res = await deleteExpenseAction(id).catch(() => null);
-        if (!res?.ok) {
-          failed.push(id);
-          reason ??= res?.error ?? "Something went wrong.";
-        }
+      const res = await deleteExpensesAction(ids).catch(() => null);
+      if (!res?.ok) {
+        setDeleteError({ from: "bulk", text: res?.error ?? "Something went wrong." });
+      } else {
+        setSelected(new Set(res.failed.map((f) => f.id)));
+        if (res.failed.length === 0) setConfirmBulk(false);
+        else setDeleteError({ from: "bulk", text: `${res.failed.length} of ${ids.length} could not be deleted. ${res.failed[0].error}` });
       }
-      setSelected(new Set(failed));
-      if (failed.length === 0) setConfirmBulk(false);
-      else setDeleteError({ from: "bulk", text: `${failed.length} of ${ids.length} could not be deleted. ${reason}` });
       router.refresh();
     });
+  }
+
+  /** Ticks every item of a receipt on show and asks to delete them. */
+  function askDeleteReceipt(items: ExpenseDTO[]) {
+    setSelected(new Set(items.map((r) => r.id)));
+    setDeleteError(null);
+    setConfirmBulk(true);
   }
 
   if (rows.length === 0 && !landing) {
@@ -508,6 +521,7 @@ export function ExpenseFeed({
                 if (entry.row) return tableRow(entry.row);
                 const group = entry.group;
                 const open = isOpen(group.receiptId);
+                const gone = ghostsOf(group.receiptId);
                 return (
                   <Fragment key={`receipt-${group.receiptId}`}>
                     <ReceiptTableRow
@@ -517,10 +531,21 @@ export function ExpenseFeed({
                       isNew={group.items.some((r) => fresh.has(r.id))}
                       paidBy={isPersonal ? null : Array.from(new Set(group.items.flatMap(payersOf)))}
                       inv={isPersonal ? null : involvement(group.items, selfKey, memberCount)}
+                      pending={pending}
                       onToggleOpen={() => toggleReceipt(group.receiptId)}
                       onPick={(on) => setMany(group.items.map((r) => r.id), on)}
+                      onDelete={() => askDeleteReceipt(group.items)}
                     />
-                    {open ? group.items.map((r, k) => tableRow(r, k === group.items.length - 1 ? "last" : "mid", r.date !== group.date)) : null}
+                    {open
+                      ? [
+                          ...group.items.map((r, k) =>
+                            tableRow(r, k === group.items.length - 1 && gone.length === 0 ? "last" : "mid", r.date !== group.date),
+                          ),
+                          ...gone.map((g, k) => (
+                            <GhostTableRow key={`gone-${k}`} ghost={g} columns={isPersonal ? 6 : 8} branch={k === gone.length - 1 ? "last" : "mid"} />
+                          )),
+                        ]
+                      : null}
                   </Fragment>
                 );
               })}
@@ -561,6 +586,7 @@ export function ExpenseFeed({
               if (entry.row) return phoneRow(entry.row);
               const group = entry.group;
               const open = isOpen(group.receiptId);
+              const gone = ghostsOf(group.receiptId);
               return (
                 <div key={`receipt-${group.receiptId}`}>
                   <ReceiptRow
@@ -575,7 +601,18 @@ export function ExpenseFeed({
                     // start: the scroll to its item must not measure it growing.
                     <div className={landed.has(group.receiptId) ? "grid" : "expand-in"}>
                       <div className="min-h-0 overflow-hidden">
-                        <div className="pb-1">{group.items.map((r, k) => phoneRow(r, k === group.items.length - 1 ? "last" : "mid", r.date !== group.date))}</div>
+                        <div className="pb-1">
+                          {group.items.map((r, k) => phoneRow(r, k === group.items.length - 1 && gone.length === 0 ? "last" : "mid", r.date !== group.date))}
+                          {gone.map((g, k) => (
+                            <GhostRow key={`gone-${k}`} ghost={g} branch={k === gone.length - 1 ? "last" : "mid"} />
+                          ))}
+                        </div>
+                        <div className="flex justify-end px-3 pb-2.5">
+                          <button type="button" className="chip-btn text-negative" disabled={pending} onClick={() => askDeleteReceipt(group.items)}>
+                            <TrashIcon className="h-4 w-4" />
+                            {group.of > group.items.length ? `Delete these ${group.items.length}` : "Delete receipt"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : null}
@@ -773,8 +810,10 @@ function ReceiptTableRow({
   isNew,
   paidBy,
   inv,
+  pending,
   onToggleOpen,
   onPick,
+  onDelete,
 }: {
   group: ReceiptGroup<ExpenseDTO>;
   open: boolean;
@@ -783,8 +822,11 @@ function ReceiptTableRow({
   isNew: boolean;
   paidBy: string[] | null;
   inv: ReturnType<typeof involvement> | null;
+  pending: boolean;
   onToggleOpen: () => void;
   onPick: (on: boolean) => void;
+  /** Asks to delete the items on show, in one go. */
+  onDelete: () => void;
 }) {
   const items = group.items;
   const sum = receiptSummary(group);
@@ -827,7 +869,20 @@ function ReceiptTableRow({
       ) : null}
       <td className="whitespace-nowrap text-right font-semibold tabular-nums">{formatINR(sum.total)}</td>
       <td>
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center gap-1">
+          <button
+            type="button"
+            className="icon-btn text-negative hover:text-negative"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            disabled={pending}
+            aria-label={`Delete the ${sum.count} from ${sum.merchant}`}
+            title="Delete receipt"
+          >
+            <TrashIcon />
+          </button>
           <button
             type="button"
             className="icon-btn"
@@ -1306,14 +1361,15 @@ function MarkPill({ mark, className = "" }: { mark: "added" | "edited"; classNam
   return <LandingPill className={className}>{mark === "added" ? "Added" : "Edited"}</LandingPill>;
 }
 
-/** A deleted expense from a notification, crossed out where it used to be (desktop). */
-function GhostTableRow({ ghost, columns }: { ghost: DeletedExpense; columns: number }) {
+/** A deleted expense from a notification, crossed out where it used to be (desktop); `branch` when it hangs inside its receipt. */
+function GhostTableRow({ ghost, columns, branch }: { ghost: DeletedExpense; columns: number; branch?: Branch }) {
   return (
     <tr data-landing="" data-ghost className="landing-mark text-muted">
       <td />
-      <td className="whitespace-nowrap">{tableDate(ghost.date)}</td>
-      <td className="max-w-0">
-        <div className="flex min-w-0 items-center gap-1.5">
+      <td className="whitespace-nowrap">{branch ? null : tableDate(ghost.date)}</td>
+      <td className={`max-w-0 ${branch ? "relative" : ""}`}>
+        {branch ? <BranchLine last={branch === "last"} left={TREE_LEFT} /> : null}
+        <div className={`flex min-w-0 items-center gap-1.5 ${branch ? "pl-7" : ""}`}>
           <span className="truncate line-through" title={ghost.item}>
             {ghost.item}
           </span>
@@ -1331,8 +1387,22 @@ function GhostTableRow({ ghost, columns }: { ghost: DeletedExpense; columns: num
   );
 }
 
-/** A deleted expense from a notification, crossed out where it used to be (phones). */
-function GhostRow({ ghost }: { ghost: DeletedExpense }) {
+/** A deleted expense from a notification, crossed out where it used to be (phones); `branch` when it hangs inside its receipt. */
+function GhostRow({ ghost, branch }: { ghost: DeletedExpense; branch?: Branch }) {
+  if (branch)
+    return (
+      <div data-landing="" data-ghost className="landing-mark relative flex items-center gap-2 py-2 pr-3 text-muted" style={{ paddingLeft: PHONE_TRUNK + 22 }}>
+        <BranchLine last={branch === "last"} left={PHONE_TRUNK} />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1 text-sm">
+            <span className="truncate line-through">{ghost.item}</span>
+            <DeletedPill />
+          </div>
+          <div className="truncate text-xs line-through">{ghost.category || "Uncategorised"}</div>
+        </div>
+        <span className="shrink-0 text-sm font-semibold tabular-nums line-through">{formatINR(ghost.amount)}</span>
+      </div>
+    );
   return (
     <div data-landing="" data-ghost className="landing-mark flex items-center gap-3 px-3 py-2.5 text-muted">
       <DateBadge iso={ghost.date} />
