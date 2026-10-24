@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ArrowLeftIcon } from "@/components/Icons";
+import { Dropdown } from "@/components/Dropdown";
 import { findCategory, formatCategory } from "@/lib/constants";
 
 // Sentinel option value that switches the control into "type a new category"
@@ -84,25 +85,21 @@ export function CategorySelect({
   const selected = (value && findCategory(categories, value)) || value;
 
   return (
-    <select
+    <Dropdown
       id={id}
-      className="select"
       value={selected}
-      onChange={(e) => {
-        if (e.target.value === NEW) {
+      options={[
+        ...options.map((c) => ({ value: c, label: c === "" ? "(uncategorized)" : c })),
+        { value: NEW, label: "+ Add new category…" },
+      ]}
+      onChange={(v) => {
+        if (v === NEW) {
           setCreating(true);
           onChange("");
         } else {
-          onChange(e.target.value);
+          onChange(v);
         }
       }}
-    >
-      {options.map((c) => (
-        <option key={c} value={c}>
-          {c === "" ? "(uncategorized)" : c}
-        </option>
-      ))}
-      <option value={NEW}>+ Add new category…</option>
-    </select>
+    />
   );
 }
