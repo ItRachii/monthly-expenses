@@ -185,10 +185,10 @@ export function ExpenseFeed({
   );
   const filterCount = (payer ? 1 : 0) + (category ? 1 : 0) + (range ? 1 : 0);
 
-  const shown = useMemo(() => {
+  // What the filters and the search let through, as a test per expense.
+  const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const inTab = rows.filter(
-      (r) =>
+    return (r: ExpenseDTO) =>
         (month === ALL || r.date.startsWith(month)) &&
         (!onlyFlagged || Boolean(r.flag)) &&
         (!payer || payersOf(r).includes(payer)) &&
@@ -199,14 +199,14 @@ export function ExpenseFeed({
           r.item.toLowerCase().includes(q) ||
           (r.category || "").toLowerCase().includes(q) ||
           (r.receiptMerchant ?? "").toLowerCase().includes(q) ||
-          (!isPersonal && payerLabel(r).toLowerCase().includes(q))),
-    );
-    return inTab;
+          (!isPersonal && payerLabel(r).toLowerCase().includes(q)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, month, onlyFlagged, payer, category, range, query, isPersonal, nameMap]);
-  // A scanned receipt's rows fold into one entry, then the entries are
-  // sorted, so a receipt sits where its own date, total or name puts it.
-  const entries = useMemo(() => sortRows(groupReceipts(shown), sort, entryValue), [shown, sort]);
+  }, [month, onlyFlagged, payer, category, range, query, isPersonal, nameMap]);
+  const shown = useMemo(() => rows.filter(matches), [rows, matches]);
+  // A scanned receipt's rows fold into one entry (read from all its rows, so
+  // a filter that cuts it down shows "2 of 5"), then the entries are sorted,
+  // so a receipt sits where its own date, total or name puts it.
+  const entries = useMemo(() => sortRows(groupReceipts(rows, matches), sort, entryValue), [rows, matches, sort]);
   const shownTotal = round2(shown.reduce((s, r) => s + r.amount, 0));
   // Deleted expenses from the notification, in their month and only while
   // nothing narrows the list (they matched no filter; they no longer exist).
@@ -751,7 +751,7 @@ function receiptSummary(group: ReceiptGroup<ExpenseDTO>) {
     merchant: group.merchant,
     total: group.total,
     category: group.category,
-    count: `${group.items.length} items`,
+    count: group.of > group.items.length ? `${group.items.length} of ${group.of} items` : `${group.items.length} items`,
     flagged: group.items.some((r) => r.flag),
   };
 }

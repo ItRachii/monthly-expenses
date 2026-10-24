@@ -94,6 +94,13 @@ check("href: payment", notificationHref({ id: 4, groupId: "g", target: { kind: "
   check("receipts: total, latest date, categories", a.total === 1540 && a.date === "2026-09-26" && a.category === "2 categories" && a.merchant === "Shop a");
   check("receipts: one row on show stays a row", groupReceipts([x(1, "a", "2026-09-01", 5), x(2, null, "2026-09-01", 6)]).every((e) => e.row));
 
+  // A filter cuts a receipt down but it still knows its full size.
+  const cut = groupReceipts(rows, (r) => r.category === "Groceries" || r.id === 4);
+  const cutA = cut.find((e) => e.group)?.group;
+  check("filter: a receipt cut to 2 of 3", cutA?.items.length === 2 && cutA.of === 3 && cutA.total === 340, JSON.stringify(cutA && { n: cutA.items.length, of: cutA.of, total: cutA.total }));
+  check("filter: one matching item is a plain row", groupReceipts(rows, (r) => r.id === 3).every((e) => e.row));
+  check("filter: nothing matching is nothing", groupReceipts(rows, () => false).length === 0);
+
   // Amount, high to low: the receipt is placed by its total, not by an item.
   const byAmount = sortRows(entries, { key: "amount", dir: "desc" }, entryValue).map(label);
   check("sort amount: by the receipt's total", same(byAmount, ["a:2,3,5", "1", "4"]), JSON.stringify(byAmount));

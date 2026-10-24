@@ -17,8 +17,10 @@ export interface GroupableExpense {
 
 export type ReceiptGroup<T> = {
   receiptId: string;
-  /** In the receipt's own (scan) order, whatever the list is sorted by. */
+  /** The items on show, in the receipt's own (scan) order, whatever the list is sorted by. */
   items: T[];
+  /** How many items the receipt has in all: more than `items` when a filter hides some. */
+  of: number;
   merchant: string;
   /** The latest of its items' dates: shown, and sorted by. */
   date: string;
@@ -34,13 +36,15 @@ export type Entry<T> =
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * The rows on show as list entries, a receipt's rows folded into one at the
- * place of its first row. A receipt with only one row on show (the rest
- * filtered out or deleted) stays a plain row.
+ * The rows as list entries, a receipt's rows folded into one at the place of
+ * its first row. The receipt is read from all its rows, and `keep` (the
+ * filters and search) then picks what shows, so a receipt a filter cuts down
+ * still knows how many items it has in all. A receipt with fewer than two
+ * rows on show stays a plain row.
  */
-export function groupReceipts<T extends GroupableExpense>(rows: T[]): Entry<T>[] {
+export function groupReceipts<T extends GroupableExpense>(all: T[], keep: (r: T) => boolean = () => true): Entry<T>[] {
   const byReceipt = new Map<string, T[]>();
-  for (const r of rows) {
+  for (const r of all) {
     if (!r.receiptId) continue;
     const items = byReceipt.get(r.receiptId);
     if (items) items.push(r);
@@ -48,8 +52,10 @@ export function groupReceipts<T extends GroupableExpense>(rows: T[]): Entry<T>[]
   }
   const out: Entry<T>[] = [];
   const done = new Set<string>();
-  for (const r of rows) {
-    const items = r.receiptId ? byReceipt.get(r.receiptId)! : [];
+  for (const r of all) {
+    if (!keep(r)) continue;
+    const full = r.receiptId ? byReceipt.get(r.receiptId)! : [];
+    const items = full.filter(keep);
     if (!r.receiptId || items.length < 2) {
       out.push({ date: r.date, amount: r.amount, row: r });
       continue;
@@ -61,6 +67,7 @@ export function groupReceipts<T extends GroupableExpense>(rows: T[]): Entry<T>[]
     const group: ReceiptGroup<T> = {
       receiptId: r.receiptId,
       items: sorted,
+      of: full.length,
       merchant: sorted[0].receiptMerchant || "Scanned receipt",
       date: sorted.reduce((d, i) => (i.date > d ? i.date : d), sorted[0].date),
       total: round2(sorted.reduce((s, i) => s + i.amount, 0)),
