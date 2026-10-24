@@ -785,9 +785,10 @@ function ReceiptTableRow({
       <td className="whitespace-nowrap text-muted">{tableDate(group.date)}</td>
       <td className="relative max-w-0">
         {open ? <TrunkStart left={TREE_LEFT} height={18} /> : null}
-        <div className="flex min-w-0 items-center gap-1.5">
+        {/* The chips wrap under the name rather than squeezing it out of sight. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
           <ReceiptIcon className="h-4 w-4 shrink-0 text-muted" />
-          <span className="truncate font-semibold" title={sum.merchant}>
+          <span className="max-w-full truncate font-semibold" title={sum.merchant}>
             {sum.merchant}
           </span>
           <span className="pill shrink-0 text-muted">{sum.count}</span>
