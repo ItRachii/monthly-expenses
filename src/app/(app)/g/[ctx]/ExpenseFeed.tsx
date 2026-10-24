@@ -15,7 +15,7 @@ import { ExportButton } from "./ExportDialog";
 import { PersonAvatar, PersonAvatars } from "@/components/Person";
 import type { DeletedExpense, NotificationFocus } from "@/lib/notifications";
 import { landingFor, placeGhosts, type Landing } from "@/lib/landing";
-import { groupReceipts } from "@/lib/receiptGroups";
+import { entryValue, groupReceipts, type ReceiptGroup } from "@/lib/receiptGroups";
 import { LandingNote, LandingPill, landedNotifications, useLandingScroll } from "@/components/Landing";
 
 interface Opt {
@@ -201,38 +201,39 @@ export function ExpenseFeed({
           (r.receiptMerchant ?? "").toLowerCase().includes(q) ||
           (!isPersonal && payerLabel(r).toLowerCase().includes(q))),
     );
-    return sortRows(inTab, sort, (r, k) =>
-      k === "date" ? r.date : k === "amount" ? r.amount : k === "category" ? r.category || "Uncategorised" : r.item,
-    );
+    return inTab;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, month, onlyFlagged, payer, category, range, query, sort, isPersonal, nameMap]);
+  }, [rows, month, onlyFlagged, payer, category, range, query, isPersonal, nameMap]);
+  // A scanned receipt's rows fold into one entry, then the entries are
+  // sorted, so a receipt sits where its own date, total or name puts it.
+  const entries = useMemo(() => sortRows(groupReceipts(shown), sort, entryValue), [shown, sort]);
   const shownTotal = round2(shown.reduce((s, r) => s + r.amount, 0));
   // Deleted expenses from the notification, in their month and only while
   // nothing narrows the list (they matched no filter; they no longer exist).
   const narrowed = Boolean(query.trim()) || filterCount > 0 || onlyFlagged;
   const placed = placeGhosts(
-    shown,
+    entries,
     narrowed ? [] : ghosts.filter((g) => month === ALL || g.date.startsWith(month)),
     sort.key === "date" ? sort.dir : null,
   );
 
-  // A scanned receipt's items show as one row with the total; opening it
-  // lists the items. One a notification points into starts open.
-  // Under the date sort its items keep the receipt's own order.
-  const listed = groupReceipts(placed).map((p) =>
-    p.group && sort.key === "date" ? { group: { ...p.group, items: [...p.group.items].sort((a, b) => a.id - b.id) } } : p,
-  );
-  const [openReceipts, setOpenReceipts] = useState<Set<string>>(
+  // A receipt's items list under it when it is opened. One a notification
+  // points into is open from the start, and follows the notification when it
+  // changes; a click flips whichever it was.
+  const landingOpen = useMemo(
     () => new Set(rows.filter((r) => r.receiptId && marked.has(r.id)).map((r) => r.receiptId!)),
+    [rows, marked],
   );
+  const [flipped, setFlipped] = useState<Set<string>>(() => new Set());
+  const isOpen = (id: string) => landingOpen.has(id) !== flipped.has(id);
   const toggleReceipt = (id: string) =>
-    setOpenReceipts((s) => {
+    setFlipped((s) => {
       const n = new Set(s);
       if (n.has(id)) n.delete(id);
       else n.add(id);
       return n;
     });
-
+  
   // Bring the highlighted (or crossed-out) record into view once.
   useLandingScroll(focus?.id ?? null, landing !== null);
 
@@ -476,7 +477,7 @@ export function ExpenseFeed({
               </tr>
             </thead>
             <tbody>
-              {listed.map(({ row, ghost, group }, i) => {
+              {placed.map(({ row: entry, ghost }, i) => {
                 if (ghost) return <GhostTableRow key={`ghost-${i}`} ghost={ghost} columns={isPersonal ? 6 : 8} />;
                 const tableRow = (r: ExpenseDTO, branch?: Branch) => (
                   <ExpenseTableRow
@@ -497,12 +498,13 @@ export function ExpenseFeed({
                     }}
                   />
                 );
-                if (row) return tableRow(row);
-                const open = openReceipts.has(group.receiptId);
+                if (entry.row) return tableRow(entry.row);
+                const group = entry.group;
+                const open = isOpen(group.receiptId);
                 return (
                   <Fragment key={`receipt-${group.receiptId}`}>
                     <ReceiptTableRow
-                      items={group.items}
+                      group={group}
                       open={open}
                       picked={group.items.filter((r) => selected.has(r.id)).length}
                       isNew={group.items.some((r) => fresh.has(r.id))}
@@ -522,10 +524,10 @@ export function ExpenseFeed({
         {/* Phones: compact rows; a long press opens edit and delete. */}
         <div className="space-y-2 md:hidden">
           <p className="text-xs text-muted">
-            Press and hold an expense to edit or delete it.{listed.some((p) => p.group) ? " Tap a receipt to see its items." : ""}
+            Press and hold an expense to edit or delete it.{placed.some((p) => p.row?.group) ? " Tap a receipt to see its items." : ""}
           </p>
           <div className="card divide-y divide-ink/5 p-0">
-            {listed.map(({ row, ghost, group }, i) => {
+            {placed.map(({ row: entry, ghost }, i) => {
               if (ghost) return <GhostRow key={`ghost-${i}`} ghost={ghost} />;
               const phoneRow = (r: ExpenseDTO, branch?: Branch) => (
                 <ExpenseRow
@@ -548,12 +550,13 @@ export function ExpenseFeed({
                   }}
                 />
               );
-              if (row) return phoneRow(row);
-              const open = openReceipts.has(group.receiptId);
+              if (entry.row) return phoneRow(entry.row);
+              const group = entry.group;
+              const open = isOpen(group.receiptId);
               return (
                 <div key={`receipt-${group.receiptId}`}>
                   <ReceiptRow
-                    items={group.items}
+                    group={group}
                     open={open}
                     isNew={group.items.some((r) => fresh.has(r.id))}
                     inv={isPersonal ? null : involvement(group.items, selfKey, memberCount)}
@@ -660,7 +663,7 @@ function ExpenseTableRow({
       <td className="whitespace-nowrap text-muted">{branch ? null : tableDate(row.date)}</td>
       {/* The cell holds the branch line, so it runs the row's full height. */}
       <td className={`max-w-0 ${branch ? "relative" : ""}`}>
-        {branch ? <BranchLine last={branch === "last"} left={19} /> : null}
+        {branch ? <BranchLine last={branch === "last"} left={TREE_LEFT} /> : null}
         <div className={`flex min-w-0 items-center gap-1.5 ${branch ? "pl-7" : ""}`}>
           <span className={`truncate ${branch ? "" : "font-semibold"}`} title={row.item}>
             {row.item}
@@ -731,21 +734,20 @@ function TrunkStart({ left, height }: { left: number; height: number }) {
   return <span aria-hidden className="pointer-events-none absolute bottom-0 border-l-2 border-ink/15" style={{ left, height }} />;
 }
 
-/** What a receipt's items add up to, for its one row. */
-function receiptSummary(items: ExpenseDTO[]) {
-  const categories = Array.from(new Set(items.map(categoryOf)));
+/** The words on a receipt's one row. */
+function receiptSummary(group: ReceiptGroup<ExpenseDTO>) {
   return {
-    merchant: items[0].receiptMerchant || "Scanned receipt",
-    total: round2(items.reduce((s, r) => s + r.amount, 0)),
-    category: categories.length === 1 ? categories[0] : `${categories.length} categories`,
-    count: `${items.length} items`,
-    flagged: items.some((r) => r.flag),
+    merchant: group.merchant,
+    total: group.total,
+    category: group.category,
+    count: `${group.items.length} items`,
+    flagged: group.items.some((r) => r.flag),
   };
 }
 
 /** A scanned receipt as one table row (desktop): the total, opening to its items. */
 function ReceiptTableRow({
-  items,
+  group,
   open,
   picked,
   isNew,
@@ -754,7 +756,7 @@ function ReceiptTableRow({
   onToggleOpen,
   onPick,
 }: {
-  items: ExpenseDTO[];
+  group: ReceiptGroup<ExpenseDTO>;
   open: boolean;
   /** How many of its items are ticked. */
   picked: number;
@@ -764,7 +766,8 @@ function ReceiptTableRow({
   onToggleOpen: () => void;
   onPick: (on: boolean) => void;
 }) {
-  const sum = receiptSummary(items);
+  const items = group.items;
+  const sum = receiptSummary(group);
   return (
     <tr
       data-receipt-id={items[0].receiptId}
@@ -774,15 +777,17 @@ function ReceiptTableRow({
       <td onClick={(e) => e.stopPropagation()}>
         <SelectAllCheckbox selected={picked} total={items.length} onChange={onPick} label={`Select all items from ${sum.merchant}`} />
       </td>
-      <td className="whitespace-nowrap text-muted">{tableDate(items[0].date)}</td>
+      <td className="whitespace-nowrap text-muted">{tableDate(group.date)}</td>
       <td className="relative max-w-0">
-        {open ? <TrunkStart left={19} height={18} /> : null}
+        {open ? <TrunkStart left={TREE_LEFT} height={18} /> : null}
         <div className="flex min-w-0 items-center gap-1.5">
           <ReceiptIcon className="h-4 w-4 shrink-0 text-muted" />
           <span className="truncate font-semibold" title={sum.merchant}>
             {sum.merchant}
           </span>
           <span className="pill shrink-0 text-muted">{sum.count}</span>
+          {/* Ticked items stay in the selection when it is closed: say so. */}
+          {!open && picked > 0 ? <span className="pill shrink-0 border-primary/30 bg-primary/10 text-ink">{picked} selected</span> : null}
           {sum.flagged ? <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" aria-label="An item needs attention" /> : null}
         </div>
       </td>
@@ -821,25 +826,33 @@ function ReceiptTableRow({
   );
 }
 
-// Where the tree's trunk runs on phones: under the receipt's pill (the row's
-// padding, the date and the gap put the title at 60px).
-const PHONE_TRUNK = 70;
+// Where the tree's trunk runs, from the left edge of its row. Worked out
+// from the sizes of what sits there, so a change to one shows up here:
+// desktop, under the receipt icon (cell padding plus half the icon);
+// phones, under the pill (row padding, date badge and gap, plus a little).
+const CELL_PAD = 12;
+const ICON = 16;
+const DATE_BADGE = 36;
+const ROW_GAP = 12;
+const TREE_LEFT = CELL_PAD + ICON / 2 - 1;
+const PHONE_TRUNK = CELL_PAD + DATE_BADGE + ROW_GAP + 10;
 
 /** A scanned receipt as one row on phones: the total; a tap lists its items. */
 function ReceiptRow({
-  items,
+  group,
   open,
   isNew,
   inv,
   onToggleOpen,
 }: {
-  items: ExpenseDTO[];
+  group: ReceiptGroup<ExpenseDTO>;
   open: boolean;
   isNew: boolean;
   inv: ReturnType<typeof involvement> | null;
   onToggleOpen: () => void;
 }) {
-  const sum = receiptSummary(items);
+  const items = group.items;
+  const sum = receiptSummary(group);
   return (
     <button
       type="button"
@@ -852,7 +865,7 @@ function ReceiptRow({
       } outline-none [-webkit-tap-highlight-color:transparent] focus-visible:bg-ink/5 active:bg-ink/5`}
     >
       {open ? <TrunkStart left={PHONE_TRUNK} height={8} /> : null}
-      <DateBadge iso={items[0].date} />
+      <DateBadge iso={group.date} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1 text-sm font-medium">
           <span className="truncate">{sum.merchant}</span>

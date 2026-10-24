@@ -1,7 +1,8 @@
 // Unit checks for where opening a notification lands (no database). Run
 // with `npm run test:landing`.
 import { ALL_MONTHS, landingFor, placeGhosts, settlementLanding } from "../../src/lib/landing";
-import { groupReceipts } from "../../src/lib/receiptGroups";
+import { sortRows } from "../../src/components/table/Table";
+import { entryValue, groupReceipts } from "../../src/lib/receiptGroups";
 import { notificationHref, parseTarget, type NotificationFocus } from "../../src/lib/notifications";
 
 let failures = 0;
@@ -78,14 +79,34 @@ check("href: old notification opens the group", notificationHref({ id: 3, groupI
 check("href: expense", notificationHref({ id: 3, groupId: "g 1", target: { kind: "expenses", ids: [1] } }) === "/g/g%201?tab=expenses&n=3");
 check("href: payment", notificationHref({ id: 4, groupId: "g", target: { kind: "settlement", id: 1, month: "2026-08" } }) === "/g/g?tab=balances&n=4");
 
-// Scanned receipts fold into one entry, where their first row was.
+// Scanned receipts fold into one entry, which sorts by its own values.
 {
-  const r = (id: number, receiptId: string | null) => ({ row: { id, receiptId } });
-  const listed = groupReceipts([r(1, null), r(2, "a"), { ghost: { id: 9 } }, r(3, "a"), r(4, "b"), r(5, "a")]);
-  const shape = listed.map((p) => (p.group ? `${p.group.receiptId}:${p.group.items.map((i) => i.id).join(",")}` : p.row ? p.row.id : "ghost"));
-  check("receipts: grouped in place", same(shape, [1, "a:2,3,5", "ghost", 4]), JSON.stringify(shape));
-  const single = groupReceipts([r(1, "a"), r(2, null)]);
-  check("receipts: one row on show stays a row", single.every((p) => p.row));
+  const x = (id: number, receiptId: string | null, date: string, amount: number, category = "Groceries") => ({
+    id, date, amount, item: `item ${id}`, category, receiptId, receiptMerchant: receiptId ? `Shop ${receiptId}` : null,
+  });
+  const label = (e: ReturnType<typeof groupReceipts<ReturnType<typeof x>>>[number]) => (e.group ? `${e.group.receiptId}:${e.group.items.map((i) => i.id).join(",")}` : String(e.row.id));
+  const rows = [x(1, null, "2026-09-30", 900), x(5, "a", "2026-09-25", 40), x(3, "a", "2026-09-26", 1200, "Household"), x(4, "b", "2026-09-10", 20), x(2, "a", "2026-09-25", 300)];
+
+  const entries = groupReceipts(rows);
+  check("receipts: folded where the first row was", same(entries.map(label), ["1", "a:2,3,5", "4"]), JSON.stringify(entries.map(label)));
+  const a = entries[1].group!;
+  check("receipts: items in scan order", same(a.items.map((i) => i.id), [2, 3, 5]));
+  check("receipts: total, latest date, categories", a.total === 1540 && a.date === "2026-09-26" && a.category === "2 categories" && a.merchant === "Shop a");
+  check("receipts: one row on show stays a row", groupReceipts([x(1, "a", "2026-09-01", 5), x(2, null, "2026-09-01", 6)]).every((e) => e.row));
+
+  // Amount, high to low: the receipt is placed by its total, not by an item.
+  const byAmount = sortRows(entries, { key: "amount", dir: "desc" }, entryValue).map(label);
+  check("sort amount: by the receipt's total", same(byAmount, ["a:2,3,5", "1", "4"]), JSON.stringify(byAmount));
+  // Date, newest first: by the receipt's latest date.
+  const byDate = sortRows(entries, { key: "date", dir: "desc" }, entryValue).map(label);
+  check("sort date: by the receipt's latest date", same(byDate, ["1", "a:2,3,5", "4"]), JSON.stringify(byDate));
+  const byItem = sortRows(entries, { key: "item", dir: "asc" }, entryValue).map(label);
+  check("sort item: by the merchant", same(byItem, ["1", "4", "a:2,3,5"]), JSON.stringify(byItem));
+  check("sort category: by its label", entryValue(entries[1], "category") === "2 categories");
+
+  // A deleted-expense ghost lands between the entries by date, never inside a receipt.
+  const placed = placeGhosts(sortRows(entries, { key: "date", dir: "desc" }, entryValue), [{ date: "2026-09-26" }], "desc");
+  check("ghost: between entries", placed.map((p) => (p.ghost ? "ghost" : label(p.row))).join(" ") === "1 a:2,3,5 ghost 4", placed.map((p) => (p.ghost ? "ghost" : label(p.row))).join(" "));
 }
 
 console.log(failures ? `\n${failures} failed` : "\nall passed");
