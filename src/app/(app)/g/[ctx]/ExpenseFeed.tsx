@@ -877,7 +877,8 @@ function ReceiptRow({
           {sum.flagged ? <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" aria-hidden /> : null}
         </div>
         {/* The total and the count; who paid and the categories are on each item. */}
-        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+        {/* Wraps rather than runs under the balance when the column is narrow. */}
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
           <span className="pill inline-flex shrink-0 items-center gap-1 text-muted">
             <ReceiptIcon className="h-3.5 w-3.5" />
             {sum.count}
