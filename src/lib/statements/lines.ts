@@ -54,7 +54,12 @@ export function xAt(row: TextRow, index: number): number {
   return span.x0 + ((span.x1 - span.x0) * k) / n;
 }
 
-export function itemsToRows(items: PositionedText[]): TextRow[] {
+/**
+ * `separate`: each piece is a text of its own (an OCR piece), so two never
+ * run together however close their boxes are. PDF text pieces can be one
+ * word split in two, which is why this is not the default.
+ */
+export function itemsToRows(items: PositionedText[], opts: { separate?: boolean } = {}): TextRow[] {
   const rows: Row[] = [];
   for (const it of items) {
     if (!it.str || !it.str.trim()) continue;
@@ -78,7 +83,7 @@ export function itemsToRows(items: PositionedText[]): TextRow[] {
     for (const c of row.cells) {
       const str = c.str.replace(/\s+/g, " ");
       const gap = c.x - end;
-      if (out && (gap > c.h * 0.25 || out.endsWith(" ") === false && gap > 1)) out += " ";
+      if (out && (gap > c.h * 0.25 || (out.endsWith(" ") === false && (gap > 1 || opts.separate)))) out += " ";
       if (out.endsWith(" ") && str.startsWith(" ")) out = out.slice(0, -1);
       const at = out.length;
       out += str;

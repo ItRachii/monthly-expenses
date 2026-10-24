@@ -438,6 +438,29 @@ async function developerChecks() {
 }
 
 void developerChecks().then(() => {
+  // Zepto: the first product's name box ends exactly where its price box
+  // begins, so the row builder glued them ("Multi-use₹349.96") and the price
+  // was no longer a price: the item was lost.
+  {
+    const cell = (text: string, l: number, y: number, r: number) => ({ text, page: 1, box: [l, y - 14, r, y + 14] as [number, number, number, number] });
+    const touching: ScanResult = {
+      pages: [{ page: 1, width: 891, height: 2000 }],
+      items: [],
+      strikeCheck: true,
+      cells: [
+        cell("5 items in order", 57, 468, 288),
+        cell("Scotch Brite Sponge Wipe Multi-use", 230, 546, 648), cell("₹349.96", 648, 548, 760),
+        cell("1 pack (5 pcs)", 230, 586, 345), cell("1 unit", 380, 586, 441),
+        cell("Dermicool Prickly Heat Powder", 230, 697, 580), cell("₹133.64", 665, 699, 760),
+        cell("Bill Summary", 93, 1000, 330), cell("Item Total ₹229", 93, 1040, 700), cell("Total Bill ₹229", 93, 1100, 700),
+      ],
+    };
+    const rows = scanToRows(touching, { order: true }).map((r) => r.text);
+    check("touching boxes: the price stays apart from the name", rows.includes("Scotch Brite Sponge Wipe Multi-use ₹349.96"), JSON.stringify(rows));
+    const first = readOrder([rows.join("\n")], "Zepto").items.map((i) => [i.description, i.amount]);
+    check("touching boxes: the first product is read", JSON.stringify(first) === JSON.stringify([["Scotch Brite Sponge Wipe Multi-use", 349.96], ["Dermicool Prickly Heat Powder", 133.64]]), JSON.stringify(first));
+  }
+
   if (failures) {
     console.error(`${failures} check(s) failed`);
     process.exit(1);

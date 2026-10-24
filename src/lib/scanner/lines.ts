@@ -142,7 +142,7 @@ export function scanToRows(result: ScanResult, opts: { order?: boolean } = {}): 
     .flatMap((page) => {
       const height = heights.get(page) ?? 1;
       const width = result.pages.find((p) => p.page === page)?.width ?? 1;
-      return itemsToRows(byPage.get(page)!).map((r) => {
+      return itemsToRows(byPage.get(page)!, { separate: true }).map((r) => {
         // On an order screen a price is a piece of its own in the right-hand
         // column; a number ending a piece of text is part of that text.
         const last = r.spans[r.spans.length - 1];
