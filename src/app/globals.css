@@ -256,7 +256,28 @@
     transform 150ms var(--ease-out),
     opacity 150ms var(--ease-out);
 }
+/* A receipt's items open under it: on phones the block grows to its height,
+   in the table the rows fade in (a row cannot grow). Closing is instant. */
+.expand-in {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 200ms var(--ease-out),
+    opacity 200ms var(--ease-out);
+}
+.list-table tbody tr.row-in {
+  transition:
+    opacity 150ms var(--ease-out),
+    background-color 700ms;
+}
 @starting-style {
+  .expand-in {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  .list-table tbody tr.row-in {
+    opacity: 0;
+  }
   .sheet-backdrop {
     opacity: 0;
   }
@@ -294,7 +315,8 @@
   .sheet,
   .modal-pop,
   .toast-in,
-  .menu-pop {
+  .menu-pop,
+  .expand-in {
     transition: opacity 150ms ease-out;
   }
   @starting-style {

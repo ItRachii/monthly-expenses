@@ -562,7 +562,13 @@ export function ExpenseFeed({
                     inv={isPersonal ? null : involvement(group.items, selfKey, memberCount)}
                     onToggleOpen={() => toggleReceipt(group.receiptId)}
                   />
-                  {open ? <div className="pb-1">{group.items.map((r, k) => phoneRow(r, k === group.items.length - 1 ? "last" : "mid"))}</div> : null}
+                  {open ? (
+                    <div className="expand-in">
+                      <div className="min-h-0 overflow-hidden">
+                        <div className="pb-1">{group.items.map((r, k) => phoneRow(r, k === group.items.length - 1 ? "last" : "mid"))}</div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -655,7 +661,7 @@ function ExpenseTableRow({
       data-expense-id={row.id}
       data-landing={mark ? "" : undefined}
       data-nested={branch ? "" : undefined}
-      className={`duration-700 hover:bg-ink/[0.03] ${isNew ? "!bg-primary/15" : ""} ${mark ? "landing-mark" : ""}`}
+      className={`duration-700 hover:bg-ink/[0.03] ${branch ? "row-in" : ""} ${isNew ? "!bg-primary/15" : ""} ${mark ? "landing-mark" : ""}`}
     >
       <td>
         <RowCheckbox checked={checked} onChange={onToggle} label={`Select ${row.item}`} />

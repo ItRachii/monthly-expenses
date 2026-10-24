@@ -36,7 +36,7 @@ export function Dropdown({
   const list = useRef<HTMLUListElement>(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [box, setBox] = useState<{ left: number; width: number; top?: number; bottom?: number; max: number } | null>(null);
+  const [box, setBox] = useState<{ left: number; width: number; top?: number; bottom?: number; max: number; up: boolean } | null>(null);
   const current = options.find((o) => o.value === value);
 
   function show() {
@@ -49,6 +49,7 @@ export function Dropdown({
       width: r.width,
       ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
       max: Math.max(120, Math.min(MAX_HEIGHT, up ? above : below)),
+      up,
     });
     setActive(Math.max(0, options.findIndex((o) => o.value === value)));
     setOpen(true);
@@ -131,8 +132,9 @@ export function Dropdown({
               ref={list}
               id={listId}
               role="listbox"
-              className="fixed z-[70] overflow-y-auto overscroll-contain rounded-lg border border-ink/10 bg-surface py-1 shadow-xl"
-              style={{ left: box.left, width: box.width, top: box.top, bottom: box.bottom, maxHeight: box.max }}
+              className="menu-pop fixed z-[70] overflow-y-auto overscroll-contain rounded-lg border border-ink/10 bg-surface py-1 shadow-xl"
+              // Grows from the field it opens off, whichever side it opens on.
+              style={{ left: box.left, width: box.width, top: box.top, bottom: box.bottom, maxHeight: box.max, transformOrigin: box.up ? "bottom left" : "top left" }}
             >
               {options.map((o, i) => (
                 <li
