@@ -357,3 +357,31 @@ model UserActivityDay {
   @@index([day], map: "user_activity_days_day_idx")
   @@map("user_activity_days")
 }
+
+/// A step of one scanner attempt (see db/2026_10_scan_events.sql): counts and
+/// fixed codes only, never content.
+model ScanEvent {
+  id            BigInt   @id @default(autoincrement())
+  attempt       String
+  seq           Int      @default(1)
+  userId        String   @map("user_id")
+  event         String
+  outcome       String?
+  detail        String?
+  kind          String?
+  app           String?
+  n             Int?
+  ms            Int?
+  flagMissing   Boolean? @map("flag_missing")
+  flagMismatch  Boolean? @map("flag_mismatch")
+  edited        Int?
+  removed       Int?
+  added         Int?
+  test          Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([attempt, event, seq], map: "scan_events_attempt_event_seq_key")
+  @@index([createdAt], map: "scan_events_created_idx")
+  @@index([userId, createdAt], map: "scan_events_user_idx")
+  @@map("scan_events")
+}

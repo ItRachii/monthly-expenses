@@ -2,7 +2,9 @@ import Link from "next/link";
 import type { Metrics } from "@/lib/metrics/queries";
 import type { Window } from "@/lib/metrics/math";
 import { formatINR } from "@/lib/format";
+import type { ScanMetrics } from "@/lib/metrics/scanMath";
 import { ActiveUsersChart, CountBars, ExpenseSourcesChart } from "./MetricsCharts";
+import { ScanSections } from "./ScanSections";
 
 // The metrics page's content, given the loaded numbers (page.tsx loads them).
 
@@ -58,7 +60,7 @@ function Section({ title, note, children }: { title: string; note?: string; chil
   );
 }
 
-export function MetricsView({ m }: { m: Metrics }) {
+export function MetricsView({ m, scan }: { m: Metrics; scan: ScanMetrics | null }) {
   const u = m.usage;
   const g = m.groups;
   const answered = g.invites.accepted + g.invites.declined;
@@ -213,6 +215,8 @@ export function MetricsView({ m }: { m: Metrics }) {
         </div>
         <ExpenseSourcesChart data={m.expensesWeekly} />
       </Section>
+
+      <ScanSections scan={scan} />
     </div>
   );
 }

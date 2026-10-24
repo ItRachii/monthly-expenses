@@ -12,6 +12,8 @@ import { formatINR } from "@/lib/format";
 import { cleanText, isValidAmount, isValidDateISO } from "@/lib/validate";
 import { emailForKey } from "@/lib/wire";
 import { SPLIT_EQUAL } from "@/lib/constants";
+import { recordScanEvent } from "@/lib/scanEvents";
+import { isAttemptId, type ScanEventInput } from "@/lib/scanTracking";
 
 export interface ReceiptItemInput {
   description: string;
@@ -33,13 +35,15 @@ function gstOrNull(v: number | null, max: number): number | null {
   return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max ? v : null;
 }
 
-export async function addReceiptAction(input: {
+async function saveReceipt(input: {
   ctx: string; // "personal" or a group id
   merchant: string;
   purchasedOn: string; // YYYY-MM-DD, applied to every line item
   payer: string; // wire participant key
   split: string; // "equal" or a wire participant key
   items: ReceiptItemInput[];
+  /** The scanner attempt this save ends, for the usage metrics. */
+  attempt?: string;
 }): Promise<ActionResult> {
   const session = await auth();
   const email = session?.user?.email;
@@ -131,4 +135,27 @@ export async function addReceiptAction(input: {
 
   revalidatePath("/", "layout");
   return { ok: true, count: items.length };
+}
+
+/** How a save's answer is counted: refusals that are the person's to fix, ones the server made, and a crash. */
+function saveOutcome(res: ActionResult): "ok" | "invalid" | "refused" {
+  if (res.ok) return "ok";
+  return /not a member|not signed in/i.test(res.error ?? "") ? "refused" : "invalid";
+}
+
+export async function addReceiptAction(input: Parameters<typeof saveReceipt>[0]): Promise<ActionResult> {
+  const attempt = isAttemptId(input?.attempt) ? input.attempt : null;
+  // Who is saving, for the usage metrics (a save with nobody signed in is refused below, and not counted).
+  const user = attempt ? (await auth())?.user?.email ?? null : null;
+  const track = (e: Omit<ScanEventInput, "attempt">) => (attempt && user ? recordScanEvent({ ...e, attempt }, user) : Promise.resolve());
+  const t0 = Date.now();
+  await track({ event: "save_attempted", n: Array.isArray(input.items) ? input.items.length : 0 });
+  try {
+    const res = await saveReceipt(input);
+    await track({ event: "save_result", outcome: saveOutcome(res), ms: Date.now() - t0 });
+    return res;
+  } catch (e) {
+    await track({ event: "save_result", outcome: "error", ms: Date.now() - t0 });
+    throw e;
+  }
 }

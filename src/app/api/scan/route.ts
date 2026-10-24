@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { scanFile, scannerAvailable } from "@/lib/scanner/client";
+import { scanFile, scannerStatus } from "@/lib/scanner/client";
+import { recordScanEvent } from "@/lib/scanEvents";
+import { isAttemptId, type ScanEventInput } from "@/lib/scanTracking";
 import { isDeveloper } from "@/lib/features";
 
 // GET /api/scan: is the receipt scanner reachable right now?
@@ -52,10 +54,22 @@ function isImage(head: Uint8Array): boolean {
   );
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user?.email) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
-  return NextResponse.json({ available: await scannerAvailable() }, { headers: noStore });
+  const email = session?.user?.email;
+  if (!email) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const t0 = Date.now();
+  const status = await scannerStatus();
+  // The scanner screen opening is one step of an attempt (the inspector sends no attempt id, so is not counted).
+  const attempt = new URL(req.url).searchParams.get("attempt");
+  if (isAttemptId(attempt)) {
+    await recordScanEvent({ attempt, event: "opened" }, email);
+    await recordScanEvent(
+      { attempt, event: "availability_checked", outcome: status.available ? "up" : "down", detail: status.why, ms: Date.now() - t0 },
+      email,
+    );
+  }
+  return NextResponse.json({ available: status.available }, { headers: noStore });
 }
 
 export async function POST(req: Request) {
@@ -64,16 +78,34 @@ export async function POST(req: Request) {
   if (!email) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   const params = new URL(req.url).searchParams;
   const debug = params.get("debug") === "1" && (await isDeveloper(email));
+  // One image of an attempt: counted by its place in the attempt. A developer's
+  // inspector scans are tracked as test traffic, which the metrics leave out.
+  const attemptParam = params.get("attempt");
+  const attempt = isAttemptId(attemptParam) ? attemptParam : debug ? crypto.randomUUID() : null;
+  const seq = Number(params.get("n") ?? 1);
+  const track = (e: Omit<ScanEventInput, "attempt" | "seq" | "test">) =>
+    attempt ? recordScanEvent({ attempt, seq: Number.isInteger(seq) && seq > 0 ? seq : undefined, test: debug, ...e }, email) : Promise.resolve();
+  const refuse = async (error: string, status: number, outcome: string, headers?: Record<string, string>) => {
+    await track({ event: "scan_requested" });
+    await track({ event: "scan_result", outcome });
+    return NextResponse.json({ error }, { status, headers });
+  };
 
-  if (Number(req.headers.get("content-length") ?? 0) > MAX_BYTES)
-    return NextResponse.json({ error: "too-large" }, { status: 413 });
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BYTES) return refuse("too-large", 413, "too-large");
   const data = new Uint8Array(await req.arrayBuffer());
-  if (data.length === 0) return NextResponse.json({ error: "empty" }, { status: 400 });
-  if (data.length > MAX_BYTES) return NextResponse.json({ error: "too-large" }, { status: 413 });
-  if (!isImage(data)) return NextResponse.json({ error: "unsupported" }, { status: 415, headers: noStore });
-  if (overBudget(email)) return NextResponse.json({ error: "rate-limited" }, { status: 429, headers: noStore });
+  if (data.length === 0) return refuse("empty", 400, "empty");
+  if (data.length > MAX_BYTES) return refuse("too-large", 413, "too-large");
+  if (!isImage(data)) return refuse("unsupported", 415, "unsupported", noStore);
+  if (overBudget(email)) return refuse("rate-limited", 429, "rate-limited", noStore);
 
+  await track({ event: "scan_requested", n: data.length });
+  const t0 = Date.now();
   const out = await scanFile(data, { order: params.get("order") === "1" });
+  await track(
+    out.ok
+      ? { event: "scan_result", outcome: "ok", ms: Date.now() - t0 }
+      : { event: "scan_result", outcome: out.reason === "unavailable" ? "down" : out.reason, detail: out.why, ms: Date.now() - t0 },
+  );
   if (out.ok)
     return NextResponse.json(
       // rows: each line with its height on the page, so screenshots of one
