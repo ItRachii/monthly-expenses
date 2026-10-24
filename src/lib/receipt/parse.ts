@@ -16,6 +16,9 @@ const MONTHS: Record<string, number> = {
 const SUMMARY_RE =
   /\b(sub\s*total|subtotal|grand\s*total|total|amount|payable|balance|tender|cash|card|upi|change|round|discount|savings|taxable|net|qty|invoice|gstin|gst\s*no|bill\s*no|cgst|sgst|igst|gst|tax|vat|cess|gross|gratuity|service\s*charge)\b/i;
 
+// A row that is only a pack size with a one-letter unit: "120 g", "2 x 1 l".
+const PACK_ONLY = /^\d+(?:\.\d+)?\s*(?:[x×]\s*\d+(?:\.\d+)?\s*)?(?:g|l)$/i;
+
 function cleanNum(s: string): number {
   return parseFloat(s.replace(/[₹,\s]/g, "").replace(/rs\.?/i, ""));
 }
@@ -197,7 +200,9 @@ export function parseReceipt(rawText: string): ParsedReceipt {
     const split = splitItemLine(line);
     if (!split) continue;
     const { desc, nums } = split;
-    if (desc.replace(/[^a-z]/gi, "").length < 2) continue; // need a real name
+    // Need a real name: two letters, or a pack size ("120 g x 1 ₹100"), which
+    // an order's reader names from the rows above it.
+    if (desc.replace(/[^a-z]/gi, "").length < 2 && !PACK_ONLY.test(desc)) continue;
     const amount = nums[nums.length - 1];
     if (!(amount > 0) || amount > 1_000_000) continue;
 

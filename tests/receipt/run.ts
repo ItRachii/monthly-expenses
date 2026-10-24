@@ -163,6 +163,13 @@ check("receipt: 31/02 is no date", parseReceipt("BIG BAZAAR\nDate: 31/02/2026\nM
 check("receipt: a real date still reads", parseReceipt("BIG BAZAAR\nDate: 28/02/2026\nMilk 30.00\nTotal 30.00").purchasedOn === "2026-02-28");
 check("receipt: a bad date, then a good one in another form", parseReceipt("Printed 31/02/2026\nBill date 2026-02-27\nMilk 30.00\nTotal 30.00").purchasedOn === "2026-02-27", String(parseReceipt("Printed 31/02/2026\nBill date 2026-02-27\nMilk 30.00\nTotal 30.00").purchasedOn));
 
+// Blinkit: names wrap over two rows above the pack-size row, which carries the
+// price; a pack size with a one-letter unit ("120 g x 1 ₹100") is an item too.
+const blinkitWrapped = readOrder([["Download Invoice", "3 items in this order", "HAZEL Silicone Brush for Baking", "(Silicone)", "1 pc x 1 ₹111", "Yoga Bar 26% High Protein Instant", "Oats (Dark Chocolate)", "3 x 50 g x 1 ₹99", "Maggi Masala-ae-Magic Sabzi Masala (20", "Sachets)", "120 g x 1 ₹100", "How were your ordered items?", "Rate now", "Bill details", "MRP ₹504", "Product discount -₹194", "Item total ₹310", "Handling charge +₹13", "Delivery charges FREE", "Bill total ₹323"].join("\n")], "Blinkit");
+check("blinkit: three items, names in full, prices", JSON.stringify(blinkitWrapped.items.map((i) => [i.description, i.amount])) === JSON.stringify([["HAZEL Silicone Brush for Baking (Silicone)", 111], ["Yoga Bar 26% High Protein Instant Oats (Dark Chocolate)", 99], ["Maggi Masala-ae-Magic Sabzi Masala (20 Sachets)", 100]]), JSON.stringify(blinkitWrapped.items.map((i) => [i.description, i.amount])));
+check("blinkit: items 310 + handling 13 = bill total 323", settleOrder(blinkitWrapped.items.map((i) => i.amount), blinkitWrapped.bill.charges.map((c) => c.amount), blinkitWrapped.bill.orderTotal).check.status === "matched");
+check("a weight pack row is an item on a receipt too", parseReceipt("Sugar\n1 kg x 1 45.00\n120 g x 1 100.00").items.some((i) => i.amount === 100));
+
 if (failures) {
   console.error(`${failures} check(s) failed`);
   process.exit(1);

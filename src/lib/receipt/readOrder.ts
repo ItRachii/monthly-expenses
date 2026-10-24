@@ -72,8 +72,19 @@ export function readOrder(texts: string[], app?: string): { items: OrderItem[]; 
   const items = parsed.items.map((it, n) => {
     const row = rowOf[n];
     const prev = n > 0 ? rowOf[n - 1] : -1;
-    const above = row > 0 && row - 1 > prev ? flat[row - 1] : null;
-    const pack = PACK.test(it.description) && above && !parseReceipt(above).items.length ? it.description : null;
+    // The name above a pack row: up to two rows (a long name wraps), back to
+    // the previous item, none of them priced, a pack size, what you can do
+    // with an item, or a logo read off the product photo.
+    const logoRow = (t: string) => /^[A-Z0-9&'.-]{2,8}$/.test(t.trim());
+    const nameRows: string[] = [];
+    for (let k = row - 1; row > 0 && k > prev && nameRows.length < 2; k--) {
+      const r = flat[k];
+      if (logoRow(r)) continue;
+      if (!/[A-Za-z]{2}/.test(r) || /₹/.test(r) || PACK.test(r) || AFTER_ITEM.test(r) || parseReceipt(r).items.length) break;
+      nameRows.unshift(r);
+    }
+    const above = nameRows.length ? nameRows.join(" ") : null;
+    const pack = PACK.test(it.description) && above ? it.description : null;
     // A long name wraps onto the next row ("Lotto Men's Sliders Enduro TX |
     // Castle" / "Rock and Quarry - UK 9"): that row, when it has words, no
     // price of its own and is not the pack size or what you can do with the
