@@ -221,9 +221,10 @@ export function ExpenseFeed({
   // points into starts open (the space is remounted for each notification);
   // after that only a click opens or closes it, so deleting the highlighted
   // item or dismissing the banner never moves a receipt you did not touch.
-  const [open, setOpen] = useState<Set<string>>(
+  const [landed] = useState<Set<string>>(
     () => new Set(rows.filter((r) => r.receiptId && marked.has(r.id)).map((r) => r.receiptId!)),
   );
+  const [open, setOpen] = useState<Set<string>>(() => new Set(landed));
   const isOpen = (id: string) => open.has(id);
   const toggleReceipt = (id: string) =>
     setOpen((s) => {
@@ -265,6 +266,7 @@ export function ExpenseFeed({
   // member's picked up by the live refresh) glow briefly.
   const seen = useRef<Set<number> | null>(null);
   const [fresh, setFresh] = useState<Set<number>>(() => new Set());
+  const freshTimer = useRef<number | null>(null);
   useEffect(() => {
     const ids = rows.map((r) => r.id);
     if (seen.current === null) {
@@ -276,9 +278,14 @@ export function ExpenseFeed({
     seen.current = new Set(ids);
     if (added.length === 0) return;
     setFresh(new Set(added));
-    const t = window.setTimeout(() => setFresh(new Set()), 4000);
-    return () => window.clearTimeout(t);
+    if (freshTimer.current !== null) window.clearTimeout(freshTimer.current);
+    freshTimer.current = window.setTimeout(() => setFresh(new Set()), 4000);
   }, [rows]);
+  // Cleared on unmount only: a later update of the rows must not cancel the
+  // timer and leave the glow on for good.
+  useEffect(() => () => {
+    if (freshTimer.current !== null) window.clearTimeout(freshTimer.current);
+  }, []);
 
   // rows arrive newest first, so the range bounds are the ends of the list.
   const maxDate = rows[0]?.date ?? "";
@@ -335,7 +342,7 @@ export function ExpenseFeed({
 
   return (
     <div className="space-y-4">
-      {landing ? <LandingBanner landing={landing} month={month} onDismiss={() => setLanding(null)} /> : null}
+      {landing ? <LandingBanner landing={landing} live={new Set(rows.map((r) => r.id))} month={month} onDismiss={() => setLanding(null)} /> : null}
       {/* Toolbar: count and total (or the selection's), bulk delete, export, search. */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-1 text-sm text-muted" aria-live="polite">
@@ -564,7 +571,9 @@ export function ExpenseFeed({
                     onToggleOpen={() => toggleReceipt(group.receiptId)}
                   />
                   {open ? (
-                    <div className="expand-in">
+                    // A notification's receipt is open at full height from the
+                    // start: the scroll to its item must not measure it growing.
+                    <div className={landed.has(group.receiptId) ? "grid" : "expand-in"}>
                       <div className="min-h-0 overflow-hidden">
                         <div className="pb-1">{group.items.map((r, k) => phoneRow(r, k === group.items.length - 1 ? "last" : "mid", r.date !== group.date))}</div>
                       </div>
@@ -1347,12 +1356,13 @@ function DeletedPill() {
 }
 
 /** Says what the notification was about and where it is, with a way to clear it. */
-function LandingBanner({ landing, month, onDismiss }: { landing: Landing; month: string; onDismiss: () => void }) {
+function LandingBanner({ landing, live, month, onDismiss }: { landing: Landing; live: Set<number>; month: string; onDismiss: () => void }) {
   const where = month === ALL ? "" : ` in ${monthTab(month)}`;
   let text: string;
   if (landing.kind === "expenses") {
-    const n = landing.ids.length;
-    const gone = landing.missing;
+    // Counted against the expenses there now, so a delete since opening shows.
+    const n = landing.ids.filter((id) => live.has(id)).length;
+    const gone = landing.missing + landing.ids.length - n;
     if (n === 0) {
       text =
         gone === 1
