@@ -7,7 +7,7 @@ import {
   canonicalCategoriesFor,
   createExpense,
   updateExpense,
-  deleteExpense,
+  deleteExpenses,
 } from "@/lib/expenses";
 import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
@@ -315,42 +315,80 @@ export async function updateExpenseAction(
   return { ok: true };
 }
 
-export async function deleteExpenseAction(id: number): Promise<ActionResult> {
+/** Most expenses one batch delete takes: a receipt or a page of ticked rows. */
+const MAX_DELETE_BATCH = 500;
+/** How many of a batch's items a notification keeps by name; the rest are only counted. */
+const MAX_DELETED_SNAPSHOTS = 100;
+
+export type DeleteManyResult =
+  | { ok: false; error: string }
+  | { ok: true; deleted: number[]; failed: { id: number; error: string }[] };
+
+/**
+ * Deletes expenses in one go: one sign-in check, one transaction, one
+ * notification per group (not one per item). Each expense is checked on its
+ * own, as a single delete would; any refused are returned with why and the
+ * rest still go. Receipt headers are settled in the same transaction.
+ */
+export async function deleteExpensesAction(ids: number[]): Promise<DeleteManyResult> {
   const session = await auth();
   const email = session?.user?.email;
   if (!email) return { ok: false, error: "Not signed in." };
-  if (!Number.isInteger(id)) return { ok: false, error: "Expense not found." };
+  if (!Array.isArray(ids) || ids.some((n) => !Number.isInteger(n))) return { ok: false, error: "Expense not found." };
+  const wanted = Array.from(new Set(ids));
+  if (wanted.length > MAX_DELETE_BATCH) return { ok: false, error: `Delete at most ${MAX_DELETE_BATCH} at a time.` };
 
-  const exp = await prisma.expense.findUnique({ where: { id } });
-  if (!exp) return { ok: false, error: "Expense not found." };
-
-  if (exp.ownerEmail) {
-    if (exp.ownerEmail !== email) return { ok: false, error: "Not authorized." };
-  } else if (exp.groupId) {
-    if (!(await isGroupMember(exp.groupId, email)))
-      return { ok: false, error: "Not authorized." };
-  } else {
-    // Legacy row with neither owner nor group: nobody may delete it blindly.
-    return { ok: false, error: "Not authorized." };
+  const found = await prisma.expense.findMany({ where: { id: { in: wanted } } });
+  const byId = new Map(found.map((e) => [e.id, e]));
+  const member = new Map<string, boolean>();
+  const allowed: typeof found = [];
+  const failed: { id: number; error: string }[] = [];
+  for (const id of wanted) {
+    const exp = byId.get(id);
+    if (!exp) {
+      failed.push({ id, error: "Expense not found." });
+    } else if (exp.ownerEmail) {
+      if (exp.ownerEmail === email) allowed.push(exp);
+      else failed.push({ id, error: "Not authorized." });
+    } else if (exp.groupId) {
+      if (!member.has(exp.groupId)) member.set(exp.groupId, await isGroupMember(exp.groupId, email));
+      if (member.get(exp.groupId)) allowed.push(exp);
+      else failed.push({ id, error: "Not authorized." });
+    } else {
+      // Legacy row with neither owner nor group: nobody may delete it blindly.
+      failed.push({ id, error: "Not authorized." });
+    }
   }
 
-  await deleteExpense(id);
+  await deleteExpenses(allowed.map((e) => e.id));
 
-  // Notify other group members about the deletion. Best-effort.
-  if (exp.groupId) {
+  // Tell each group once what went. Best-effort.
+  const byGroup = new Map<string, typeof found>();
+  for (const e of allowed) if (e.groupId) byGroup.set(e.groupId, [...(byGroup.get(e.groupId) ?? []), e]);
+  for (const [groupId, gone] of byGroup) {
     try {
       const who = await actorName(email);
+      const total = round2(gone.reduce((s, e) => s + e.amount, 0));
       await notifyGroup({
-        groupId: exp.groupId,
+        groupId,
         actorEmail: email,
         type: "expense_deleted",
-        message: `${who} deleted "${exp.item}" (${formatINR(exp.amount)})`,
-        // The row is gone, so the notification keeps what it was.
+        message:
+          gone.length === 1
+            ? `${who} deleted "${gone[0].item}" (${formatINR(gone[0].amount)})`
+            : `${who} deleted ${gone.length} expenses (${formatINR(total)})`,
+        // The rows are gone, so the notification keeps what they were.
         target: {
           kind: "deleted",
-          items: [{ date: formatDate(exp.date), item: exp.item, category: exp.category, amount: exp.amount }],
-          count: 1,
-          total: exp.amount,
+          items: gone.slice(0, MAX_DELETED_SNAPSHOTS).map((e) => ({
+            date: formatDate(e.date),
+            item: e.item,
+            category: e.category,
+            amount: e.amount,
+            ...(e.receiptId ? { receiptId: e.receiptId } : {}),
+          })),
+          count: gone.length,
+          total,
         },
       });
     } catch {
@@ -359,7 +397,14 @@ export async function deleteExpenseAction(id: number): Promise<ActionResult> {
   }
 
   revalidateExpenseViews();
-  return { ok: true };
+  return { ok: true, deleted: allowed.map((e) => e.id), failed };
+}
+
+export async function deleteExpenseAction(id: number): Promise<ActionResult> {
+  if (!Number.isInteger(id)) return { ok: false, error: "Expense not found." };
+  const res = await deleteExpensesAction([id]);
+  if (!res.ok) return res;
+  return res.deleted.length > 0 ? { ok: true } : { ok: false, error: res.failed[0]?.error ?? "Expense not found." };
 }
 
 /** Loads the Add Expense form's options for one context (overlay use). */

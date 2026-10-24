@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { prisma } from "./prisma";
+import { prisma, type Db } from "./prisma";
 
 export interface NewReceiptItem {
   description: string;
@@ -56,4 +56,24 @@ export async function createReceiptWithItems(data: {
     }),
   ]);
   return id;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Keeps receipt headers in line after their items change. `changes` maps a
+ * receipt id to how much its saved items moved (negative for a delete). A
+ * header with no items left is removed; the others have their total moved by
+ * the same amount, so it stays the printed total less what was dropped.
+ */
+export async function settleReceipts(db: Db, changes: Map<string, number>): Promise<void> {
+  for (const [id, delta] of changes) {
+    if ((await db.expense.count({ where: { receiptId: id } })) === 0) {
+      await db.receipt.deleteMany({ where: { id } });
+      continue;
+    }
+    if (!delta) continue;
+    const header = await db.receipt.findUnique({ where: { id }, select: { total: true } });
+    if (header) await db.receipt.update({ where: { id }, data: { total: Math.max(0, round2(header.total + delta)) } });
+  }
 }
