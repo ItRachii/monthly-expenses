@@ -77,3 +77,29 @@ export async function settleReceipts(db: Db, changes: Map<string, number>): Prom
     if (header) await db.receipt.update({ where: { id }, data: { total: Math.max(0, round2(header.total + delta)) } });
   }
 }
+
+/**
+ * Renames a receipt and moves it to another day: the header, and every item
+ * under it, so the receipt reads as one purchase. Returns whether anything
+ * changed, and the ids of its items.
+ */
+export async function updateReceiptDetails(
+  id: string,
+  merchant: string,
+  date: string, // YYYY-MM-DD
+): Promise<{ changed: boolean; itemIds: number[] }> {
+  const day = new Date(`${date}T00:00:00.000Z`);
+  return prisma.$transaction(async (tx) => {
+    const header = await tx.receipt.findUnique({ where: { id }, select: { merchant: true, purchasedOn: true } });
+    const items = await tx.expense.findMany({ where: { receiptId: id }, select: { id: true, date: true } });
+    const same =
+      header?.merchant === merchant &&
+      header.purchasedOn?.getTime() === day.getTime() &&
+      items.every((i) => i.date.getTime() === day.getTime());
+    if (!same) {
+      await tx.receipt.update({ where: { id }, data: { merchant, purchasedOn: day } });
+      await tx.expense.updateMany({ where: { receiptId: id }, data: { date: day } });
+    }
+    return { changed: !same, itemIds: items.map((i) => i.id) };
+  });
+}
