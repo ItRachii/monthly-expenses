@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangleIcon, CalendarIcon, ChevronDownIcon, DownloadIcon, PeopleIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
+import { AlertTriangleIcon, CalendarIcon, ChevronDownIcon, DownloadIcon, PeopleIcon, PencilIcon, PlusIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
 import { ActiveFilters, DateRangeHeader, FilterHeader, RowCheckbox, rangeLabel, type DateRange, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
 import { DateBadge } from "@/components/DateBadge";
@@ -12,6 +12,7 @@ import { formatINR, listNames } from "@/lib/format";
 import { deleteExpenseAction, deleteExpensesAction } from "@/lib/actions/expenses";
 import { EditExpenseModal } from "@/components/EditExpenseModal";
 import { EditReceiptModal } from "@/components/EditReceiptModal";
+import { AddReceiptItemModal } from "@/components/AddReceiptItemModal";
 import { ExportButton } from "./ExportDialog";
 import { PersonAvatar, PersonAvatars } from "@/components/Person";
 import type { DeletedExpense, NotificationFocus } from "@/lib/notifications";
@@ -97,6 +98,7 @@ export function ExpenseFeed({
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState<ExpenseDTO | null>(null);
   const [editingReceipt, setEditingReceipt] = useState<ReceiptGroup<ExpenseDTO> | null>(null);
+  const [addingTo, setAddingTo] = useState<ReceiptGroup<ExpenseDTO> | null>(null);
   const [actionsFor, setActionsFor] = useState<{ expense: ExpenseDTO; confirm: boolean } | null>(
     null,
   );
@@ -536,6 +538,7 @@ export function ExpenseFeed({
                       pending={pending}
                       onToggleOpen={() => toggleReceipt(group.receiptId)}
                       onPick={(on) => setMany(group.items.map((r) => r.id), on)}
+                      onAdd={() => setAddingTo(group)}
                       onEdit={() => setEditingReceipt(group)}
                       onDelete={() => askDeleteReceipt(group.items)}
                     />
@@ -610,7 +613,11 @@ export function ExpenseFeed({
                             <GhostRow key={`gone-${k}`} ghost={g} branch={k === gone.length - 1 ? "last" : "mid"} />
                           ))}
                         </div>
-                        <div className="flex justify-end gap-2 px-3 pb-2.5">
+                        <div className="flex flex-wrap justify-end gap-2 px-3 pb-2.5">
+                          <button type="button" className="chip-btn" disabled={pending} onClick={() => setAddingTo(group)}>
+                            <PlusIcon className="h-4 w-4 text-muted" />
+                            Add item
+                          </button>
                           <button type="button" className="chip-btn" disabled={pending} onClick={() => setEditingReceipt(group)}>
                             <PencilIcon className="h-4 w-4 text-muted" />
                             Edit receipt
@@ -658,6 +665,17 @@ export function ExpenseFeed({
           }}
           onDelete={() => remove(actionsFor.expense.id)}
           onClose={closeActions}
+        />
+      ) : null}
+
+      {addingTo ? (
+        <AddReceiptItemModal
+          receiptId={addingTo.receiptId}
+          merchant={addingTo.merchant}
+          categories={categories}
+          defaultCategory={addingTo.items[0]?.category ?? ""}
+          onClose={() => setAddingTo(null)}
+          onSaved={() => router.refresh()}
         />
       ) : null}
 
@@ -831,6 +849,7 @@ function ReceiptTableRow({
   pending,
   onToggleOpen,
   onPick,
+  onAdd,
   onEdit,
   onDelete,
 }: {
@@ -844,6 +863,8 @@ function ReceiptTableRow({
   pending: boolean;
   onToggleOpen: () => void;
   onPick: (on: boolean) => void;
+  /** Adds an item the scan missed. */
+  onAdd: () => void;
   /** Opens the receipt's own details: the shop and the date. */
   onEdit: () => void;
   /** Asks to delete the items on show, in one go. */
@@ -891,6 +912,19 @@ function ReceiptTableRow({
       <td className="whitespace-nowrap text-right font-semibold tabular-nums">{formatINR(sum.total)}</td>
       <td>
         <div className="flex items-center justify-center gap-1">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd();
+            }}
+            disabled={pending}
+            aria-label={`Add an item to the receipt from ${sum.merchant}`}
+            title="Add item"
+          >
+            <PlusIcon />
+          </button>
           <button
             type="button"
             className="icon-btn"
