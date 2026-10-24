@@ -1161,9 +1161,9 @@ function ExpenseRow({
           </div>
           {flag && flagOpen ? <PendingFlagNote reason={flag} /> : null}
           <div className="truncate text-xs text-muted">
+            {showDate ? `${tableDate(date)} · ` : ""}
             {category}
             {paidBy ? ` · ${paidBy} paid` : ""}
-            {showDate ? ` · ${tableDate(date)}` : ""}
           </div>
         </div>
         <div className="shrink-0 text-right">
