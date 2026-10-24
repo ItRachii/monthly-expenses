@@ -3,6 +3,8 @@
 // Postgres by hand; this pins down the definitions.
 import { addDays, computeUsage, weekOf, type UserDay } from "../../src/lib/metrics/math";
 import { istDay } from "../../src/lib/activity";
+import { computeScanMetrics, type ScanEventRow } from "../../src/lib/metrics/scanMath";
+import { cleanScanEvent, clientMayReport } from "../../src/lib/scanTracking";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -58,6 +60,80 @@ check("empty cohort has no rates", u.cohorts[u.cohorts.length - 1].retention[0] 
 
 const empty = computeUsage([], new Map(), today);
 check("no data", empty.mau.value === 0 && empty.stickiness === null && empty.activation.users === 0);
+
+// ---- the scanner's usage events -------------------------------------------
+const NOW = Date.parse("2026-10-18T12:00:00Z");
+const MIN = 60_000;
+let tick = 0;
+const ev = (attempt: string, user: string, event: string, o: Partial<ScanEventRow> = {}, day = today, minutesAgo = 300 - tick++): ScanEventRow => ({
+  attempt, user, event, outcome: null, detail: null, kind: null, app: null, n: null, ms: null, flagMissing: null, flagMismatch: null,
+  edited: null, removed: null, added: null, at: NOW - minutesAgo * MIN, day, ...o,
+});
+const up = (a: string, u: string) => [ev(a, u, "opened"), ev(a, u, "availability_checked", { outcome: "up", ms: 40 })];
+const scanned = (a: string, u: string, app: string) => [
+  ev(a, u, "images_picked", { outcome: "ok", n: 2, app, kind: "order" }),
+  ev(a, u, "scan_requested", { n: 100 }), ev(a, u, "scan_result", { outcome: "ok", ms: 10_000 }),
+  ev(a, u, "scan_requested", { n: 100 }), ev(a, u, "scan_result", { outcome: "ok", ms: 20_000 }),
+  ev(a, u, "read_result", { outcome: "ok", n: 5 }),
+];
+const events: ScanEventRow[] = [
+  // A (u1, Zepto): the clean run, saved with 1 edit and 1 item removed.
+  ...up("A", "u1"), ...scanned("A", "u1", "Zepto"),
+  ev("A", "u1", "review_changes", { edited: 1, removed: 1, added: 0 }), ev("A", "u1", "save_attempted", { n: 4 }), ev("A", "u1", "save_result", { outcome: "ok", ms: 300 }),
+  // B (u2): the scanner was down when opened.
+  ev("B", "u2", "opened"), ev("B", "u2", "availability_checked", { outcome: "down", detail: "unreachable" }),
+  // C (u2, Blinkit, 2 days ago): one image failed, rescanned, read twice, saved: not clean.
+  ...up("C", "u2").map((e) => ({ ...e, day: addDays(today, -2) })),
+  ev("C", "u2", "images_picked", { outcome: "ok", n: 1, app: "Blinkit", kind: "order" }, addDays(today, -2)),
+  ev("C", "u2", "scan_requested", {}, addDays(today, -2)), ev("C", "u2", "scan_result", { outcome: "no-text" }, addDays(today, -2)),
+  ev("C", "u2", "scan_requested", {}, addDays(today, -2)), ev("C", "u2", "scan_result", { outcome: "ok", ms: 30_000 }, addDays(today, -2)),
+  ev("C", "u2", "read_result", { outcome: "ok", n: 3, flagMissing: true }, addDays(today, -2)),
+  ev("C", "u2", "read_result", { outcome: "ok", n: 3, flagMismatch: true }, addDays(today, -2)),
+  ev("C", "u2", "save_attempted", {}, addDays(today, -2)), ev("C", "u2", "save_result", { outcome: "invalid" }, addDays(today, -2)),
+  ev("C", "u2", "save_attempted", {}, addDays(today, -2)), ev("C", "u2", "save_result", { outcome: "ok" }, addDays(today, -2)),
+  // D (u3, Zepto): picked and left, long ago.
+  ...up("D", "u3"), ev("D", "u3", "images_picked", { outcome: "ok", n: 1, app: "Zepto", kind: "order" }),
+  // E (u3, receipt): up at the start, went down in the middle of the scan.
+  ...up("E", "u3"), ev("E", "u3", "images_picked", { outcome: "ok", n: 1, kind: "receipt" }), ev("E", "u3", "scan_requested"), ev("E", "u3", "scan_result", { outcome: "down", detail: "timeout" }),
+  // Not in the window / not counted.
+  ...up("OLD", "u9").map((e) => ({ ...e, day: addDays(today, -60) })),
+  ev("00000000-0000-0000-0000-000000000000", "u1", "tracking_dropped", { n: 3 }),
+];
+const sm = computeScanMetrics(events, { today, now: NOW, activeUsers: 6 });
+check("scan: attempts opened in the window (the old one is left out)", sm.attempts === 5, String(sm.attempts));
+check("scan: users today / this week / this month", sm.usage.today === 3 && sm.usage.week === 3 && sm.usage.month === 3, JSON.stringify([sm.usage.today, sm.usage.week, sm.usage.month]));
+check("scan: share of the people active in the app", sm.usage.share?.active === 6 && sm.usage.share.pct === 0.5, JSON.stringify(sm.usage.share));
+check("scan: attempts per user", sm.usage.attemptsPerUser === 5 / 3);
+check("scan: new users (u1, u2, u3 all first opened this month)", sm.usage.newUsers === 3 && sm.usage.returningUsers === 0);
+check("scan: down on open: 1 of 5 checks, 1 person, unreachable", sm.availability.checks === 5 && sm.availability.down === 1 && sm.availability.downRate === 0.2 && sm.availability.usersHit === 1 && sm.availability.reasons[0].reason === "unreachable", JSON.stringify(sm.availability));
+check("scan: went down mid-scan (E only)", sm.availability.midScan === 1, String(sm.availability.midScan));
+check("scan: end to end 2 of 5, and of attempts that found it up 2 of 4", sm.endToEnd.saved === 2 && sm.endToEnd.rate === 0.4 && sm.endToEnd.ratePerUp === 0.5, JSON.stringify(sm.endToEnd));
+check("scan: clean success is A only (C failed, rescanned and read twice)", sm.clean.saved === 1 && sm.clean.rate === 0.2, JSON.stringify(sm.clean));
+check("scan: funnel counts", JSON.stringify(sm.funnel.map((f) => f.attempts)) === JSON.stringify([5, 4, 2, 2, 2, 2]), JSON.stringify(sm.funnel.map((f) => [f.key, f.attempts])));
+check("scan: abandoned = not saved and still for 30 minutes (B, D, E)", sm.abandoned.attempts === 3, JSON.stringify(sm.abandoned));
+const stage = (s: string) => sm.failures.find((f) => f.stage === s)!;
+check("scan: failures per stage", stage("availability").failed === 1 && stage("scan").failed === 2 && stage("scan").total === 5 && stage("save").failed === 1 && stage("save").total === 3, JSON.stringify(sm.failures.map((f) => [f.stage, f.failed, f.total])));
+check("scan: scan failure codes", JSON.stringify(stage("scan").codes) === JSON.stringify([{ code: "down", n: 1 }, { code: "no-text", n: 1 }]), JSON.stringify(stage("scan").codes));
+check("scan: read warnings (missing parts, bill mismatch)", stage("read").warnings.length === 2 && stage("read").failed === 0, JSON.stringify(stage("read").warnings));
+check("scan: by app", sm.byApp.find((a) => a.app === "Zepto")?.attempts === 2 && sm.byApp.find((a) => a.app === "Zepto")?.saved === 1 && sm.byApp.find((a) => a.app === "Blinkit")?.saved === 1, JSON.stringify(sm.byApp));
+check("scan: corrections per saved attempt (only A reported them)", sm.quality.edited === 1 && sm.quality.removed === 1 && sm.quality.added === 0 && sm.quality.savedWithReview === 1, JSON.stringify(sm.quality));
+check("scan: re-scans per attempt that was read (C read twice, A once: 1 over 2)", sm.quality.rescansPerAttempt === 0.5, String(sm.quality.rescansPerAttempt));
+check("scan: scan time median and p90", sm.quality.scanMs?.median === 20_000 && sm.quality.scanMs.p90 === 30_000 && sm.quality.scanMs.n === 3, JSON.stringify(sm.quality.scanMs));
+check("scan: tracking drops are reported", sm.tracking.dropped === 3);
+const none = computeScanMetrics([], { today, now: NOW, activeUsers: null });
+check("scan: no data at all", none.attempts === 0 && none.endToEnd.rate === null && none.availability.downRate === null && none.usage.share === null && none.quality.scanMs === null);
+
+// What may be stored: fixed lists only.
+const ATT = "11111111-2222-3333-4444-555555555555";
+const okRow = cleanScanEvent({ attempt: ATT, event: "save_result", outcome: "ok", ms: 120 }, "u_x");
+check("track: a valid event is kept", okRow?.event === "save_result" && okRow.outcome === "ok" && okRow.ms === 120 && okRow.userId === "u_x");
+check("track: an outcome that is not on the list is refused", cleanScanEvent({ attempt: ATT, event: "save_result", outcome: "Invalid amount for Milk" }, "u_x") === null);
+check("track: an event that does not exist is refused", cleanScanEvent({ attempt: ATT, event: "drop table" }, "u_x") === null);
+check("track: an attempt id that is not a uuid is refused", cleanScanEvent({ attempt: "milk", event: "opened" }, "u_x") === null);
+const stripped = cleanScanEvent({ attempt: ATT, event: "images_picked", outcome: "ok", app: "Totally Unknown App", detail: "my phone is 9876543210", kind: "x", n: -4, edited: 1.5 }, "u_x");
+check("track: free text, unknown apps, odd numbers are dropped", stripped?.app === null && stripped.detail === null && stripped.kind === null && stripped.n === null && stripped.edited === null, JSON.stringify(stripped));
+check("track: a known app and a real reason are kept", cleanScanEvent({ attempt: ATT, event: "availability_checked", outcome: "down", detail: "timeout", app: "Zepto" }, "u")?.detail === "timeout" && cleanScanEvent({ attempt: ATT, event: "images_picked", outcome: "ok", app: "Zepto" }, "u")?.app === "Zepto");
+check("track: a browser may report its steps but not the server's", clientMayReport({ event: "read_result" }) && clientMayReport({ event: "scan_result", outcome: "network" }) && !clientMayReport({ event: "scan_result", outcome: "ok" }) && !clientMayReport({ event: "save_result" }) && !clientMayReport({ event: "availability_checked" }));
 
 if (failures) {
   console.error(`${failures} check(s) failed`);

@@ -6,10 +6,11 @@
 import { deriveKey, openResponse, sealRequest } from "./envelope";
 import { scanToRows, type ScanResult, type ScanRow } from "./lines";
 import { withoutPii } from "./pii";
+import type { DownReason } from "../scanTracking";
 
 export type ScanOutcome =
   | { ok: true; lines: string[]; rows: ScanRow[]; /** Personal details masked. */ result: ScanResult & { ms?: number } }
-  | { ok: false; reason: "unavailable" | "unsupported" | "too-large" | "no-text" };
+  | { ok: false; reason: "unavailable" | "unsupported" | "too-large" | "no-text"; /** Why "unavailable", for the usage metrics. */ why?: DownReason };
 
 const HEALTH_TIMEOUT_MS = 5_000;
 // One image takes 10 to 30 seconds on the laptop's CPU. Kept under the
@@ -18,7 +19,7 @@ const SCAN_TIMEOUT_MS = 55_000;
 // The health answer is reused briefly: opening the scan screen should not
 // cost a request through the tunnel every time.
 const HEALTH_CACHE_MS = 15_000;
-let lastHealth: { at: number; ok: boolean } | null = null;
+let lastHealth: { at: number; ok: boolean; why?: DownReason } | null = null;
 
 // ngrok's free plan puts a warning page in front of browser requests; this
 // header (and a non-browser user agent) keeps it out of the way.
@@ -34,28 +35,33 @@ function config(): { url: string; key: Buffer } | null {
   return { url, key: cached.key };
 }
 
-/** Whether the scanner is configured and answering right now. */
-export async function scannerAvailable(): Promise<boolean> {
+/** Whether the scanner is configured and answering right now, and if not, why. */
+export async function scannerStatus(): Promise<{ available: boolean; why?: DownReason }> {
   const cfg = config();
-  if (!cfg) return false;
-  if (lastHealth && Date.now() - lastHealth.at < HEALTH_CACHE_MS) return lastHealth.ok;
-  const ok = await checkHealth(cfg.url);
-  lastHealth = { at: Date.now(), ok };
-  return ok;
+  if (!cfg) return { available: false, why: "not-configured" };
+  if (lastHealth && Date.now() - lastHealth.at < HEALTH_CACHE_MS) return { available: lastHealth.ok, why: lastHealth.why };
+  const h = await checkHealth(cfg.url);
+  lastHealth = { at: Date.now(), ...h };
+  return { available: h.ok, why: h.why };
 }
 
-async function checkHealth(url: string): Promise<boolean> {
+/** Whether the scanner is configured and answering right now. */
+export async function scannerAvailable(): Promise<boolean> {
+  return (await scannerStatus()).available;
+}
+
+async function checkHealth(url: string): Promise<{ ok: boolean; why?: DownReason }> {
   try {
     const res = await fetch(`${url}/health`, {
       headers: HEADERS,
       cache: "no-store",
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
     });
-    if (!res.ok) return false;
+    if (!res.ok) return { ok: false, why: "error" };
     const body = (await res.json()) as { ok?: unknown };
-    return body.ok === true;
-  } catch {
-    return false;
+    return body.ok === true ? { ok: true } : { ok: false, why: "error" };
+  } catch (e) {
+    return { ok: false, why: (e as Error)?.name === "TimeoutError" ? "timeout" : "unreachable" };
   }
 }
 
@@ -65,7 +71,7 @@ async function checkHealth(url: string): Promise<boolean> {
  */
 export async function scanFile(data: Uint8Array, opts: { order?: boolean } = {}): Promise<ScanOutcome> {
   const cfg = config();
-  if (!cfg) return { ok: false, reason: "unavailable" };
+  if (!cfg) return { ok: false, reason: "unavailable", why: "not-configured" };
   const sealed = sealRequest(cfg.key, data);
   let res: Response;
   try {
@@ -81,8 +87,8 @@ export async function scanFile(data: Uint8Array, opts: { order?: boolean } = {})
       cache: "no-store",
       signal: AbortSignal.timeout(SCAN_TIMEOUT_MS),
     });
-  } catch {
-    return { ok: false, reason: "unavailable" };
+  } catch (e) {
+    return { ok: false, reason: "unavailable", why: (e as Error)?.name === "TimeoutError" ? "timeout" : "unreachable" };
   }
 
   if (res.status === 415) return { ok: false, reason: "unsupported" };
@@ -91,7 +97,7 @@ export async function scanFile(data: Uint8Array, opts: { order?: boolean } = {})
   if (res.status === 401)
     console.error("Scanner refused the request: DOCLING_SECRET differs from the scanner's, or the laptop clock is off.");
   const replyNonce = res.headers.get("x-ledger-nonce");
-  if (!res.ok || !replyNonce) return { ok: false, reason: "unavailable" };
+  if (!res.ok || !replyNonce) return { ok: false, reason: "unavailable", why: res.status === 401 ? "refused" : "error" };
 
   try {
     const plain = openResponse(cfg.key, Buffer.from(await res.arrayBuffer()), replyNonce, sealed.nonce);
@@ -103,6 +109,6 @@ export async function scanFile(data: Uint8Array, opts: { order?: boolean } = {})
     return { ok: true, lines: rows.map((r) => r.text), rows, result: withoutPii(result, true) };
   } catch {
     console.error("Scanner reply could not be decrypted or read.");
-    return { ok: false, reason: "unavailable" };
+    return { ok: false, reason: "unavailable", why: "error" };
   }
 }

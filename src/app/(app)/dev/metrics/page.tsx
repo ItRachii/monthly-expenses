@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { isDeveloper } from "@/lib/features";
 import { loadMetrics, type Metrics } from "@/lib/metrics/queries";
+import { loadScanMetrics } from "@/lib/metrics/scan";
 import { MetricsView } from "./MetricsView";
 
 // Developer-only product metrics: is the app growing, do people come back,
@@ -27,5 +28,10 @@ export default async function DevMetricsPage({ searchParams }: { searchParams: P
       </div>
     );
   }
-  return <MetricsView m={m} />;
+  // The scanner's usage is its own section: it failing to load leaves the rest of the page.
+  const scan = await loadScanMetrics({ includeDevelopers }).catch((e) => {
+    console.error("Scanner metrics failed to load:", e);
+    return null;
+  });
+  return <MetricsView m={m} scan={scan} />;
 }

@@ -11,6 +11,7 @@ import { settleOrder } from "@/lib/receipt/orderBill";
 import { readOrderShots, readReceiptShots, type Completeness } from "@/lib/receipt/readOrder";
 import type { ShotRow, Stitched } from "@/lib/receipt/stitch";
 import { addReceiptAction } from "@/lib/actions/receipts";
+import { trackScanAction } from "@/lib/actions/scanTracking";
 import { CategorySelect } from "@/components/CategorySelect";
 import { SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR, localISO, todayISO } from "@/lib/format";
@@ -158,10 +159,22 @@ export function ReceiptScanner({
   const uid = useId();
   const [split, setSplit] = useState(SPLIT_EQUAL);
 
+  // One attempt runs from opening the scanner to saving or leaving: a random
+  // id ties its steps together for the usage metrics (counts and codes only).
+  const attempt = useRef("");
+  const scanSeq = useRef(0);
+  // The items as first read, to count what was changed before saving.
+  const initial = useRef<EditItem[]>([]);
+  const kind = app !== OTHER_APP ? "order" : "receipt";
+  const track = (e: { event: string; outcome?: string; n?: number; ms?: number; flagMissing?: boolean; flagMismatch?: boolean; edited?: number; removed?: number; added?: number }) => {
+    if (attempt.current) void trackScanAction({ ...e, attempt: attempt.current, kind, app: app !== OTHER_APP ? app : undefined }).catch(() => {});
+  };
+
   const checkService = useCallback(async () => {
     setService("checking");
+    attempt.current ||= crypto.randomUUID();
     try {
-      const res = await fetch("/api/scan", { cache: "no-store" });
+      const res = await fetch(`/api/scan?attempt=${attempt.current}`, { cache: "no-store" });
       const body = res.ok ? ((await res.json()) as { available?: boolean }) : null;
       setService(body?.available ? "up" : "down");
     } catch {
@@ -175,16 +188,22 @@ export function ReceiptScanner({
   }, []);
 
   // Ask once each time the scanner is opened, before anything is picked.
+  const [round, setRound] = useState(0);
   useEffect(() => {
     if (open) void checkService();
-  }, [open, checkService]);
+  }, [open, checkService, round]);
 
   // Which scan is current: closing or starting over mid-scan makes the one
   // still reading stop, so its results never fill a scanner it no longer owns.
   const scanNo = useRef(0);
 
-  function reset() {
+  /** Starts over. `again`: it stays open, so the new attempt checks the scanner afresh. */
+  function reset(again = true) {
     scanNo.current++;
+    attempt.current = "";
+    scanSeq.current = 0;
+    initial.current = [];
+    if (again) setRound((r) => r + 1);
     setPhase("pick");
     setFiles([]);
     scans.current.clear();
@@ -227,6 +246,7 @@ export function ReceiptScanner({
     if (list.length === 0) return;
     const mine = ++scanNo.current;
     const stale = () => mine !== scanNo.current;
+    track({ event: "images_picked", outcome: "ok", n: list.length });
     setError(null);
     setMessage(null);
     setPhase("reading");
@@ -245,8 +265,14 @@ export function ReceiptScanner({
           continue;
         }
         setProgress({ file: ++read, files: toRead });
-        const image = await prepareImage(list[i]);
-        const res = await fetch(app !== OTHER_APP ? "/api/scan?order=1" : "/api/scan", {
+        let image: File | Blob;
+        try {
+          image = await prepareImage(list[i]);
+        } catch {
+          track({ event: "images_picked", outcome: "prep-failed", n: list.length });
+          throw new Error("prep");
+        }
+        const res = await fetch(`/api/scan?${app !== OTHER_APP ? "order=1&" : ""}attempt=${attempt.current}&n=${++scanSeq.current}`, {
           method: "POST",
           headers: { "Content-Type": image.type || "application/octet-stream" },
           body: image,
@@ -270,8 +296,10 @@ export function ReceiptScanner({
         else setService("down");
         return;
       }
-    } catch {
+    } catch (e) {
       if (stale()) return;
+      // A request that never reached the server is only known here.
+      if ((e as Error)?.message !== "prep") track({ event: "scan_result", outcome: "network", n: scanSeq.current });
       setPhase("pick");
       setError("Scanning failed. Check your connection and try again.");
       return;
@@ -283,6 +311,8 @@ export function ReceiptScanner({
     setMerchant(fromApp ? app : whole.merchant);
     if (whole.purchasedOn) setPurchasedOn(whole.purchasedOn);
     let found: number;
+    let missing = false;
+    let mismatch = false;
     if (fromApp) {
       // Screenshots of one long order, in any order: put back together, each
       // shared row once. The bill summary (fees, discounts, totals) is read
@@ -304,37 +334,45 @@ export function ReceiptScanner({
         total: order.bill.orderTotal != null ? order.bill.orderTotal.toFixed(2) : "",
         inPrices: order.bill.inPrices ?? [],
       });
-      setItems(
-        order.items.map((it) => ({
-          description: it.description,
-          category: it.category,
-          qty: it.qty != null ? String(it.qty) : "",
-          amount: it.amount.toFixed(2),
-          gstRate: "",
-          gstAmount: "",
-          include: !it.repeat,
-          repeat: it.repeat,
-        })),
-      );
+      const built: EditItem[] = order.items.map((it) => ({
+        description: it.description,
+        category: it.category,
+        qty: it.qty != null ? String(it.qty) : "",
+        amount: it.amount.toFixed(2),
+        gstRate: "",
+        gstAmount: "",
+        include: !it.repeat,
+        repeat: it.repeat,
+      }));
+      setItems(built);
+      initial.current = built;
       found = order.items.length;
+      missing = complete.missing;
+      mismatch =
+        settleOrder(
+          order.items.filter((it) => !it.repeat).map((it) => it.amount),
+          order.bill.charges.map((c) => c.amount),
+          order.bill.orderTotal,
+        ).check.status !== "matched";
     } else {
       setBill(null);
       setStitched(null);
       const { repeats } = readReceiptShots(texts);
-      setItems(
-        whole.items.map((it, n) => ({
-          description: it.description,
-          category: it.category,
-          qty: it.qty != null ? String(it.qty) : "",
-          amount: it.amount.toFixed(2),
-          gstRate: it.gstRate != null ? String(it.gstRate) : "",
-          gstAmount: it.gstAmount != null ? it.gstAmount.toFixed(2) : "",
-          include: !repeats[n],
-          repeat: repeats[n],
-        })),
-      );
+      const built: EditItem[] = whole.items.map((it, n) => ({
+        description: it.description,
+        category: it.category,
+        qty: it.qty != null ? String(it.qty) : "",
+        amount: it.amount.toFixed(2),
+        gstRate: it.gstRate != null ? String(it.gstRate) : "",
+        gstAmount: it.gstAmount != null ? it.gstAmount.toFixed(2) : "",
+        include: !repeats[n],
+        repeat: repeats[n],
+      }));
+      setItems(built);
+      initial.current = built;
       found = whole.items.length;
     }
+    track({ event: "read_result", outcome: found === 0 ? "zero-items" : "ok", n: found, flagMissing: missing, flagMismatch: mismatch });
     setPhase("review");
     if (found === 0)
       setError("Couldn't read any line items. Add them manually below, or try a clearer photo.");
@@ -405,8 +443,22 @@ export function ReceiptScanner({
         return;
       }
     }
+    // What was changed from the first read: counts only, never the text.
+    const first = initial.current;
+    const changed = (i: number) => {
+      const a = first[i];
+      const b = items[i];
+      return a && b && (a.description !== b.description || a.amount !== b.amount || a.category !== b.category || a.qty !== b.qty);
+    };
+    track({
+      event: "review_changes",
+      edited: first.filter((a, i) => items[i]?.include && changed(i)).length,
+      removed: first.filter((a, i) => a.include && !items[i]?.include).length,
+      added: Math.max(0, items.length - first.length),
+    });
     startTransition(async () => {
       const res = await addReceiptAction({
+        attempt: attempt.current || undefined,
         ctx,
         merchant: merchant.trim() || "Receipt",
         purchasedOn,
@@ -416,7 +468,7 @@ export function ReceiptScanner({
       });
       if (res.ok) {
         const done = `Added ${res.count} item${res.count === 1 ? "" : "s"} from ${merchant.trim() || "the receipt"}.`;
-        reset();
+        reset(false);
         router.refresh();
         if (onSaved) onSaved(done);
         else {
@@ -452,7 +504,7 @@ export function ReceiptScanner({
             className="icon-btn"
             aria-label="Close"
             onClick={() => {
-              reset();
+              reset(false);
               setOpen(false);
             }}
           >
@@ -873,7 +925,7 @@ export function ReceiptScanner({
             <button type="button" className="btn-primary" disabled={pending || chosen.length === 0 || orderBlocked} onClick={save}>
               {pending ? "Saving…" : `Add ${chosen.length} expense${chosen.length === 1 ? "" : "s"}`}
             </button>
-            <button type="button" className="btn-secondary" disabled={pending} onClick={reset}>
+            <button type="button" className="btn-secondary" disabled={pending} onClick={() => reset()}>
               Rescan
             </button>
           </div>
