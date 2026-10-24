@@ -218,22 +218,21 @@ export function ExpenseFeed({
   );
 
   // A receipt's items list under it when it is opened. One a notification
-  // points into is open from the start, and follows the notification when it
-  // changes; a click flips whichever it was.
-  const landingOpen = useMemo(
+  // points into starts open (the space is remounted for each notification);
+  // after that only a click opens or closes it, so deleting the highlighted
+  // item or dismissing the banner never moves a receipt you did not touch.
+  const [open, setOpen] = useState<Set<string>>(
     () => new Set(rows.filter((r) => r.receiptId && marked.has(r.id)).map((r) => r.receiptId!)),
-    [rows, marked],
   );
-  const [flipped, setFlipped] = useState<Set<string>>(() => new Set());
-  const isOpen = (id: string) => landingOpen.has(id) !== flipped.has(id);
+  const isOpen = (id: string) => open.has(id);
   const toggleReceipt = (id: string) =>
-    setFlipped((s) => {
+    setOpen((s) => {
       const n = new Set(s);
       if (n.has(id)) n.delete(id);
       else n.add(id);
       return n;
     });
-  
+
   // Bring the highlighted (or crossed-out) record into view once.
   useLandingScroll(focus?.id ?? null, landing !== null);
 
