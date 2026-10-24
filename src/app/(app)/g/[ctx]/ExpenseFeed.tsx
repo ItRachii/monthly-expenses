@@ -729,7 +729,8 @@ function BranchLine({ last, left }: { last: boolean; left: number }) {
   return (
     <>
       <span aria-hidden className="pointer-events-none absolute top-0 h-1/2 w-3.5 rounded-bl-lg border-b-2 border-l-2 border-ink/15" style={{ left }} />
-      {last ? null : <span aria-hidden className="pointer-events-none absolute inset-y-0 border-l-2 border-ink/15" style={{ left }} />}
+      {/* From where the elbow's curve starts (its 8px radius), so the two never overlap and darken. */}
+      {last ? null : <span aria-hidden className="pointer-events-none absolute bottom-0 border-l-2 border-ink/15" style={{ left, top: "calc(50% - 8px)" }} />}
     </>
   );
 }
