@@ -1,10 +1,10 @@
 "use client";
 
-import { AlertTriangleIcon, CalendarIcon, DownloadIcon, PeopleIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
+import { AlertTriangleIcon, CalendarIcon, ChevronDownIcon, DownloadIcon, PeopleIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
 import { ActiveFilters, DateRangeHeader, FilterHeader, RowCheckbox, rangeLabel, type DateRange, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
 import { DateBadge } from "@/components/DateBadge";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { SETTLE_EPS, paidFor, payersOf, round2, shareFor } from "@/lib/settlementMath";
@@ -15,6 +15,7 @@ import { ExportButton } from "./ExportDialog";
 import { PersonAvatar, PersonAvatars } from "@/components/Person";
 import type { DeletedExpense, NotificationFocus } from "@/lib/notifications";
 import { landingFor, placeGhosts, type Landing } from "@/lib/landing";
+import { groupReceipts } from "@/lib/receiptGroups";
 import { LandingNote, LandingPill, landedNotifications, useLandingScroll } from "@/components/Landing";
 
 interface Opt {
@@ -27,16 +28,17 @@ const MONTH_SHORT = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-/** Your involvement in a group expense row, Splitwise-style. */
+/** Your involvement in a group expense row (or a receipt's rows together), Splitwise-style. */
 function involvement(
-  r: ExpenseDTO,
+  rows: ExpenseDTO | ExpenseDTO[],
   selfKey: string,
   memberCount: number,
 ): { label: string; amount: number | null; tone: "lent" | "borrowed" | "muted" } {
   // What you put in against your share. Paying exactly your share (the whole
   // cost when it was all yours) leaves no balance either way.
-  const share = shareFor(r, selfKey, memberCount);
-  const paid = paidFor(r, selfKey);
+  const list = Array.isArray(rows) ? rows : [rows];
+  const share = list.reduce((s, r) => s + shareFor(r, selfKey, memberCount), 0);
+  const paid = list.reduce((s, r) => s + paidFor(r, selfKey), 0);
   const net = round2(paid - share);
   if (net > SETTLE_EPS) return { label: "you lent", amount: net, tone: "lent" };
   if (net < -SETTLE_EPS) return { label: "you borrowed", amount: -net, tone: "borrowed" };
@@ -214,6 +216,23 @@ export function ExpenseFeed({
     sort.key === "date" ? sort.dir : null,
   );
 
+  // A scanned receipt's items show as one row with the total; opening it
+  // lists the items. One a notification points into starts open.
+  // Under the date sort its items keep the receipt's own order.
+  const listed = groupReceipts(placed).map((p) =>
+    p.group && sort.key === "date" ? { group: { ...p.group, items: [...p.group.items].sort((a, b) => a.id - b.id) } } : p,
+  );
+  const [openReceipts, setOpenReceipts] = useState<Set<string>>(
+    () => new Set(rows.filter((r) => r.receiptId && marked.has(r.id)).map((r) => r.receiptId!)),
+  );
+  const toggleReceipt = (id: string) =>
+    setOpenReceipts((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
   // Bring the highlighted (or crossed-out) record into view once.
   useLandingScroll(focus?.id ?? null, landing !== null);
 
@@ -225,6 +244,16 @@ export function ExpenseFeed({
       const n = new Set(s);
       if (n.has(id)) n.delete(id);
       else n.add(id);
+      return n;
+    });
+  }
+  function setMany(ids: number[], on: boolean) {
+    setSelected((s) => {
+      const n = new Set(s);
+      for (const id of ids) {
+        if (on) n.add(id);
+        else n.delete(id);
+      }
       return n;
     });
   }
@@ -447,45 +476,65 @@ export function ExpenseFeed({
               </tr>
             </thead>
             <tbody>
-              {placed.map(({ row: r, ghost }, i) =>
-                ghost ? (
-                  <GhostTableRow key={`ghost-${i}`} ghost={ghost} columns={isPersonal ? 6 : 8} />
-                ) : (
-                <ExpenseTableRow
-                  key={r.id}
-                  row={r}
-                  mark={marked.has(r.id) && landing?.kind === "expenses" ? landing.verb : null}
-                  checked={selected.has(r.id)}
-                  isNew={fresh.has(r.id)}
-                  paidBy={isPersonal ? null : payersOf(r)}
-                  inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
-                  pending={pending}
-                  onToggle={() => toggle(r.id)}
-                  onEdit={() => setEditing(r)}
-                  onDelete={() => {
-                    setDeleteError(null);
-                    setActionsFor({ expense: r, confirm: true });
-                  }}
-                />
-                ),
-              )}
+              {listed.map(({ row, ghost, group }, i) => {
+                if (ghost) return <GhostTableRow key={`ghost-${i}`} ghost={ghost} columns={isPersonal ? 6 : 8} />;
+                const tableRow = (r: ExpenseDTO, branch?: Branch) => (
+                  <ExpenseTableRow
+                    key={r.id}
+                    row={r}
+                    branch={branch}
+                    mark={marked.has(r.id) && landing?.kind === "expenses" ? landing.verb : null}
+                    checked={selected.has(r.id)}
+                    isNew={fresh.has(r.id)}
+                    paidBy={isPersonal ? null : payersOf(r)}
+                    inv={isPersonal ? null : involvement(r, selfKey, memberCount)}
+                    pending={pending}
+                    onToggle={() => toggle(r.id)}
+                    onEdit={() => setEditing(r)}
+                    onDelete={() => {
+                      setDeleteError(null);
+                      setActionsFor({ expense: r, confirm: true });
+                    }}
+                  />
+                );
+                if (row) return tableRow(row);
+                const open = openReceipts.has(group.receiptId);
+                return (
+                  <Fragment key={`receipt-${group.receiptId}`}>
+                    <ReceiptTableRow
+                      items={group.items}
+                      open={open}
+                      picked={group.items.filter((r) => selected.has(r.id)).length}
+                      isNew={group.items.some((r) => fresh.has(r.id))}
+                      paidBy={isPersonal ? null : Array.from(new Set(group.items.flatMap(payersOf)))}
+                      inv={isPersonal ? null : involvement(group.items, selfKey, memberCount)}
+                      onToggleOpen={() => toggleReceipt(group.receiptId)}
+                      onPick={(on) => setMany(group.items.map((r) => r.id), on)}
+                    />
+                    {open ? group.items.map((r, k) => tableRow(r, k === group.items.length - 1 ? "last" : "mid")) : null}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
         {/* Phones: compact rows; a long press opens edit and delete. */}
         <div className="space-y-2 md:hidden">
-          <p className="text-xs text-muted">Press and hold an expense to edit or delete it.</p>
+          <p className="text-xs text-muted">
+            Press and hold an expense to edit or delete it.{listed.some((p) => p.group) ? " Tap a receipt to see its items." : ""}
+          </p>
           <div className="card divide-y divide-ink/5 p-0">
-            {placed.map(({ row: r, ghost }, i) => {
+            {listed.map(({ row, ghost, group }, i) => {
               if (ghost) return <GhostRow key={`ghost-${i}`} ghost={ghost} />;
-              return (
+              const phoneRow = (r: ExpenseDTO, branch?: Branch) => (
                 <ExpenseRow
                   key={r.id}
                   id={r.id}
+                  branch={branch}
                   mark={marked.has(r.id) && landing?.kind === "expenses" ? landing.verb : null}
                   item={r.item}
-                  receiptMerchant={r.receiptMerchant}
+                  receiptMerchant={branch ? null : r.receiptMerchant}
                   flag={r.flag}
                   date={r.date}
                   amount={r.amount}
@@ -498,6 +547,20 @@ export function ExpenseFeed({
                     setActionsFor({ expense: r, confirm: false });
                   }}
                 />
+              );
+              if (row) return phoneRow(row);
+              const open = openReceipts.has(group.receiptId);
+              return (
+                <div key={`receipt-${group.receiptId}`}>
+                  <ReceiptRow
+                    items={group.items}
+                    open={open}
+                    isNew={group.items.some((r) => fresh.has(r.id))}
+                    inv={isPersonal ? null : involvement(group.items, selfKey, memberCount)}
+                    onToggleOpen={() => toggleReceipt(group.receiptId)}
+                  />
+                  {open ? <div className="pb-1">{group.items.map((r, k) => phoneRow(r, k === group.items.length - 1 ? "last" : "mid"))}</div> : null}
+                </div>
               );
             })}
           </div>
@@ -554,6 +617,7 @@ export function ExpenseFeed({
 /** One expense as a table row (desktop). */
 function ExpenseTableRow({
   row,
+  branch,
   mark,
   checked,
   isNew,
@@ -565,6 +629,8 @@ function ExpenseTableRow({
   onDelete,
 }: {
   row: ExpenseDTO;
+  /** One item of an opened receipt, hung off it like a tree. */
+  branch?: Branch;
   /** The record a notification is about: highlighted, with what happened. */
   mark: "added" | "edited" | null;
   checked: boolean;
@@ -585,19 +651,22 @@ function ExpenseTableRow({
       data-selected={checked || undefined}
       data-expense-id={row.id}
       data-landing={mark ? "" : undefined}
+      data-nested={branch ? "" : undefined}
       className={`duration-700 hover:bg-ink/[0.03] ${isNew ? "!bg-primary/15" : ""} ${mark ? "landing-mark" : ""}`}
     >
       <td>
         <RowCheckbox checked={checked} onChange={onToggle} label={`Select ${row.item}`} />
       </td>
-      <td className="whitespace-nowrap text-muted">{tableDate(row.date)}</td>
-      <td className="max-w-0">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate font-semibold" title={row.item}>
+      <td className="whitespace-nowrap text-muted">{branch ? null : tableDate(row.date)}</td>
+      {/* The cell holds the branch line, so it runs the row's full height. */}
+      <td className={`max-w-0 ${branch ? "relative" : ""}`}>
+        {branch ? <BranchLine last={branch === "last"} left={19} /> : null}
+        <div className={`flex min-w-0 items-center gap-1.5 ${branch ? "pl-7" : ""}`}>
+          <span className={`truncate ${branch ? "" : "font-semibold"}`} title={row.item}>
             {row.item}
           </span>
           {mark ? <MarkPill mark={mark} /> : null}
-          {row.receiptMerchant ? (
+          {row.receiptMerchant && !branch ? (
             <span className="shrink-0 rounded bg-ink/5 px-1 py-0.5 text-[10px] text-muted" title={`From scanned receipt: ${row.receiptMerchant}`}>
               <ReceiptIcon className="inline h-3 w-3 align-[-1px]" />
             </span>
@@ -619,7 +688,7 @@ function ExpenseTableRow({
           </StatusPill>
         </td>
       ) : null}
-      <td className="whitespace-nowrap text-right font-semibold tabular-nums">{formatINR(row.amount)}</td>
+      <td className={`whitespace-nowrap text-right tabular-nums ${branch ? "" : "font-semibold"}`}>{formatINR(row.amount)}</td>
       <td>
         <div className="flex items-center justify-center gap-1">
           <button type="button" className="icon-btn" onClick={onEdit} disabled={pending} aria-label={`Edit ${row.item}`} title="Edit">
@@ -638,6 +707,174 @@ function ExpenseTableRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+type Branch = "mid" | "last";
+
+/**
+ * The tree line on an opened receipt's item: the trunk down from the
+ * receipt, curving into the item; it stops at the last one. `left` is the
+ * trunk's place in px, inside a `relative` box as tall as the row.
+ */
+function BranchLine({ last, left }: { last: boolean; left: number }) {
+  return (
+    <>
+      <span aria-hidden className="pointer-events-none absolute top-0 h-1/2 w-3.5 rounded-bl-lg border-b-2 border-l-2 border-ink/15" style={{ left }} />
+      {last ? null : <span aria-hidden className="pointer-events-none absolute inset-y-0 border-l-2 border-ink/15" style={{ left }} />}
+    </>
+  );
+}
+
+/** The start of the trunk, under an opened receipt's title (`height` in px, from the row's bottom). */
+function TrunkStart({ left, height }: { left: number; height: number }) {
+  return <span aria-hidden className="pointer-events-none absolute bottom-0 border-l-2 border-ink/15" style={{ left, height }} />;
+}
+
+/** What a receipt's items add up to, for its one row. */
+function receiptSummary(items: ExpenseDTO[]) {
+  const categories = Array.from(new Set(items.map(categoryOf)));
+  return {
+    merchant: items[0].receiptMerchant || "Scanned receipt",
+    total: round2(items.reduce((s, r) => s + r.amount, 0)),
+    category: categories.length === 1 ? categories[0] : `${categories.length} categories`,
+    count: `${items.length} items`,
+    flagged: items.some((r) => r.flag),
+  };
+}
+
+/** A scanned receipt as one table row (desktop): the total, opening to its items. */
+function ReceiptTableRow({
+  items,
+  open,
+  picked,
+  isNew,
+  paidBy,
+  inv,
+  onToggleOpen,
+  onPick,
+}: {
+  items: ExpenseDTO[];
+  open: boolean;
+  /** How many of its items are ticked. */
+  picked: number;
+  isNew: boolean;
+  paidBy: string[] | null;
+  inv: ReturnType<typeof involvement> | null;
+  onToggleOpen: () => void;
+  onPick: (on: boolean) => void;
+}) {
+  const sum = receiptSummary(items);
+  return (
+    <tr
+      data-receipt-id={items[0].receiptId}
+      className={`cursor-pointer duration-700 hover:bg-ink/[0.03] ${isNew ? "!bg-primary/15" : ""}`}
+      onClick={onToggleOpen}
+    >
+      <td onClick={(e) => e.stopPropagation()}>
+        <SelectAllCheckbox selected={picked} total={items.length} onChange={onPick} label={`Select all items from ${sum.merchant}`} />
+      </td>
+      <td className="whitespace-nowrap text-muted">{tableDate(items[0].date)}</td>
+      <td className="relative max-w-0">
+        {open ? <TrunkStart left={19} height={18} /> : null}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <ReceiptIcon className="h-4 w-4 shrink-0 text-muted" />
+          <span className="truncate font-semibold" title={sum.merchant}>
+            {sum.merchant}
+          </span>
+          <span className="pill shrink-0 text-muted">{sum.count}</span>
+          {sum.flagged ? <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" aria-label="An item needs attention" /> : null}
+        </div>
+      </td>
+      <td className="truncate text-muted">{sum.category}</td>
+      {paidBy !== null ? (
+        <td onClick={(e) => e.stopPropagation()}>
+          <PersonAvatars ids={paidBy} />
+        </td>
+      ) : null}
+      {inv ? (
+        <td>
+          <StatusPill tone={inv.tone === "lent" ? "positive" : inv.tone === "borrowed" ? "negative" : "neutral"}>
+            {inv.amount !== null ? `${inv.label.replace(/^you/, "You")} ${formatINR(inv.amount)}` : inv.label.replace(/^./, (c) => c.toUpperCase())}
+          </StatusPill>
+        </td>
+      ) : null}
+      <td className="whitespace-nowrap text-right font-semibold tabular-nums">{formatINR(sum.total)}</td>
+      <td>
+        <div className="flex items-center justify-center">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-expanded={open}
+            aria-label={`${open ? "Hide" : "Show"} the ${sum.count} from ${sum.merchant}`}
+            title={open ? "Hide items" : "Show items"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleOpen();
+            }}
+          >
+            <ChevronDownIcon className={`h-5 w-5 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// Where the tree's trunk runs on phones: under the receipt's pill (the row's
+// padding, the date and the gap put the title at 60px).
+const PHONE_TRUNK = 70;
+
+/** A scanned receipt as one row on phones: the total; a tap lists its items. */
+function ReceiptRow({
+  items,
+  open,
+  isNew,
+  inv,
+  onToggleOpen,
+}: {
+  items: ExpenseDTO[];
+  open: boolean;
+  isNew: boolean;
+  inv: ReturnType<typeof involvement> | null;
+  onToggleOpen: () => void;
+}) {
+  const sum = receiptSummary(items);
+  return (
+    <button
+      type="button"
+      data-receipt-id={items[0].receiptId}
+      aria-expanded={open}
+      aria-label={`${sum.merchant}, ${sum.count}, ${formatINR(sum.total)}. ${open ? "Hide" : "Show"} items.`}
+      onClick={onToggleOpen}
+      className={`relative flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-700 ${
+        isNew ? "bg-primary/15" : ""
+      } outline-none [-webkit-tap-highlight-color:transparent] focus-visible:bg-ink/5 active:bg-ink/5`}
+    >
+      {open ? <TrunkStart left={PHONE_TRUNK} height={8} /> : null}
+      <DateBadge iso={items[0].date} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1 text-sm font-medium">
+          <span className="truncate">{sum.merchant}</span>
+          {sum.flagged ? <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" aria-hidden /> : null}
+        </div>
+        {/* The total and the count; who paid and the categories are on each item. */}
+        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+          <span className="pill inline-flex shrink-0 items-center gap-1 text-muted">
+            <ReceiptIcon className="h-3.5 w-3.5" />
+            {sum.count}
+          </span>
+          <span className="shrink-0 text-sm font-semibold">{formatINR(sum.total)}</span>
+        </div>
+      </div>
+      {inv ? (
+        <div className="w-24 shrink-0 text-right">
+          <div className={`truncate text-[11px] ${TONE[inv.tone]}`}>{inv.label}</div>
+          <div className={`text-sm font-semibold ${TONE[inv.tone]}`}>{formatINR(inv.amount ?? 0)}</div>
+        </div>
+      ) : null}
+      <ChevronDownIcon className={`h-5 w-5 shrink-0 text-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+    </button>
   );
 }
 
@@ -723,6 +960,7 @@ const MOVE_TOLERANCE_PX = 10;
  */
 function ExpenseRow({
   id,
+  branch,
   mark,
   item,
   receiptMerchant,
@@ -736,6 +974,8 @@ function ExpenseRow({
   onOpenActions,
 }: {
   id: number;
+  /** One item of an opened receipt, hung off it like a tree: one compact line, no date. */
+  branch?: Branch;
   /** The record a notification is about: highlighted, with what happened. */
   mark: "added" | "edited" | null;
   item: string;
@@ -807,6 +1047,34 @@ function ExpenseRow({
       }
     },
   };
+
+  const press = `cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-ink/5 active:bg-ink/5`;
+  if (branch)
+    return (
+      <div
+        {...pressable}
+        data-expense-id={id}
+        data-landing={mark ? "" : undefined}
+        data-nested=""
+        className={`relative flex items-center gap-2 py-2 pr-3 duration-700 ${isNew ? "bg-primary/15" : ""} ${mark ? "landing-mark" : ""} ${press}`}
+        style={{ paddingLeft: PHONE_TRUNK + 22 }}
+      >
+        <BranchLine last={branch === "last"} left={PHONE_TRUNK} />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1 text-sm">
+            {mark ? <MarkPill mark={mark} className="mr-1" /> : null}
+            <span className="truncate">{item}</span>
+            {flag ? <PendingFlagButton reason={flag} open={flagOpen} onToggle={() => setFlagOpen((o) => !o)} /> : null}
+          </div>
+          {flag && flagOpen ? <PendingFlagNote reason={flag} /> : null}
+          <div className="truncate text-xs text-muted">
+            {category}
+            {paidBy ? ` · ${paidBy} paid` : ""}
+          </div>
+        </div>
+        <span className="shrink-0 text-sm font-semibold tabular-nums">{formatINR(amount)}</span>
+      </div>
+    );
 
   return (
     // 700ms is on purpose: past the 300ms UI budget, but this is the slow

@@ -1,6 +1,7 @@
 // Unit checks for where opening a notification lands (no database). Run
 // with `npm run test:landing`.
 import { ALL_MONTHS, landingFor, placeGhosts, settlementLanding } from "../../src/lib/landing";
+import { groupReceipts } from "../../src/lib/receiptGroups";
 import { notificationHref, parseTarget, type NotificationFocus } from "../../src/lib/notifications";
 
 let failures = 0;
@@ -76,6 +77,16 @@ check("parse: null", parseTarget(null) === null && parseTarget("x") === null);
 check("href: old notification opens the group", notificationHref({ id: 3, groupId: "g-1", target: null }) === "/g/g-1");
 check("href: expense", notificationHref({ id: 3, groupId: "g 1", target: { kind: "expenses", ids: [1] } }) === "/g/g%201?tab=expenses&n=3");
 check("href: payment", notificationHref({ id: 4, groupId: "g", target: { kind: "settlement", id: 1, month: "2026-08" } }) === "/g/g?tab=balances&n=4");
+
+// Scanned receipts fold into one entry, where their first row was.
+{
+  const r = (id: number, receiptId: string | null) => ({ row: { id, receiptId } });
+  const listed = groupReceipts([r(1, null), r(2, "a"), { ghost: { id: 9 } }, r(3, "a"), r(4, "b"), r(5, "a")]);
+  const shape = listed.map((p) => (p.group ? `${p.group.receiptId}:${p.group.items.map((i) => i.id).join(",")}` : p.row ? p.row.id : "ghost"));
+  check("receipts: grouped in place", same(shape, [1, "a:2,3,5", "ghost", 4]), JSON.stringify(shape));
+  const single = groupReceipts([r(1, "a"), r(2, null)]);
+  check("receipts: one row on show stays a row", single.every((p) => p.row));
+}
 
 console.log(failures ? `\n${failures} failed` : "\nall passed");
 process.exit(failures ? 1 : 0);
