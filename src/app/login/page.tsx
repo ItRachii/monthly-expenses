@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { doSignIn } from "@/lib/actions/auth";
 import { WalletIcon } from "@/components/Icons";
+import { ClearAppBadge } from "@/components/AppBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,7 @@ export default async function LoginPage() {
     // The sign-in artwork is drawn for a dark page, so this screen keeps the
     // dark theme whatever the device is set to.
     <main data-theme="dark" className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background p-4 text-ink sm:p-6">
+      <ClearAppBadge />
       {/* Ambient gradient glows behind the card. */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div className="absolute -left-40 -top-40 h-96 w-96 rounded-full bg-primary/25 blur-3xl" />
