@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 // The Badging API: a number on the installed app's home-screen icon.
 // Android Chrome shows it for the installed app; iOS (16.4+) only for an app
 // added to the Home Screen, and only once notifications are allowed.
+// Web Push (public/sw.js) keeps it current while the app is closed.
 type BadgeNavigator = Navigator & {
   setAppBadge?: (count?: number) => Promise<void>;
   clearAppBadge?: () => Promise<void>;
@@ -23,17 +24,55 @@ function setBadge(count: number) {
   done?.catch(() => {});
 }
 
+/** Turns a VAPID public key (base64url) into the bytes subscribe() wants. */
+function keyBytes(base64url: string): Uint8Array<ArrayBuffer> {
+  const b64 = (base64url + "=".repeat((4 - (base64url.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  const out = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function pushSupported(): boolean {
+  return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+
+/**
+ * This device's push subscription, made if needed, saved for the signed-in
+ * user. Only once notifications are allowed; never asks by itself.
+ */
+async function syncPush(vapidKey: string): Promise<void> {
+  if (!pushSupported() || Notification.permission !== "granted") return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub =
+      (await reg.pushManager.getSubscription()) ??
+      (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(vapidKey) }));
+    await fetch("/api/push", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ subscription: sub.toJSON() }),
+    });
+  } catch {
+    // Push service unreachable or refused: the in-app list still has everything.
+  }
+}
+
 /**
  * Keeps the icon badge on the unread count. The layout passes the count it
  * rendered (so marking things read updates it on the next refresh), and
- * whenever the app comes back to the foreground it asks the server again,
- * since notifications may have arrived while it was in the background.
- * Without push it cannot update while the app is closed.
+ * whenever the app comes back to the foreground it asks the server again.
+ * While the app is closed, pushes set it instead. Also keeps this device's
+ * push subscription saved for whoever is signed in.
  */
-export function AppBadge({ unreadCount }: { unreadCount: number }) {
+export function AppBadge({ unreadCount, vapidKey }: { unreadCount: number; vapidKey: string | null }) {
   useEffect(() => {
     if (badgeSupported()) setBadge(unreadCount);
   }, [unreadCount]);
+
+  useEffect(() => {
+    if (vapidKey) void syncPush(vapidKey);
+  }, [vapidKey]);
 
   useEffect(() => {
     if (!badgeSupported()) return;
@@ -60,10 +99,20 @@ export function AppBadge({ unreadCount }: { unreadCount: number }) {
   return null;
 }
 
-/** Clears the icon badge, so a signed-out app shows no count from the last account. */
+/**
+ * Signed out: clears the icon badge and drops this device's push
+ * subscription, so the last account's notifications stop arriving here.
+ * Signing in again makes a new one (permission is remembered).
+ */
 export function ClearAppBadge() {
   useEffect(() => {
     if (badgeSupported()) setBadge(0);
+    if (!pushSupported()) return;
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => reg?.pushManager.getSubscription())
+      .then((sub) => sub?.unsubscribe())
+      .catch(() => {});
   }, []);
   return null;
 }
@@ -76,30 +125,40 @@ function isStandalone(): boolean {
 }
 
 /**
- * Offers to turn the icon badge on where the platform needs notification
- * permission for it (iOS Home Screen apps). Shown only in the installed app,
- * only when the badge is supported and permission has not been asked yet.
+ * Offers to turn notifications on for this device, until it has been asked.
+ * With push set up: group activity arrives as a phone notification and keeps
+ * the icon badge current. Without it, where the badge needs notification
+ * permission (iOS Home Screen apps), it offers just the badge.
  */
-export function AppBadgePermission({ unreadCount }: { unreadCount: number }) {
-  const [show, setShow] = useState(false);
+export function NotificationsPrompt({ unreadCount, vapidKey }: { unreadCount: number; vapidKey: string | null }) {
+  const [mode, setMode] = useState<"push" | "badge" | null>(null);
   useEffect(() => {
-    setShow(badgeSupported() && "Notification" in window && Notification.permission === "default" && isStandalone());
-  }, []);
-  if (!show) return null;
+    if (!("Notification" in window) || Notification.permission !== "default") return;
+    if (vapidKey && pushSupported()) setMode("push");
+    else if (badgeSupported() && isStandalone()) setMode("badge");
+  }, [vapidKey]);
+  if (!mode) return null;
 
   async function allow() {
     try {
       const result = await Notification.requestPermission();
-      if (result === "granted") setBadge(unreadCount);
+      if (result === "granted") {
+        setBadge(unreadCount);
+        if (mode === "push" && vapidKey) await syncPush(vapidKey);
+      }
     } catch {
       // Older Safari takes a callback instead; the prompt simply does not show.
     }
-    setShow(false);
+    setMode(null);
   }
 
   return (
     <div className="alert-info flex flex-wrap items-center justify-between gap-3">
-      <span>Show the unread count on the app icon? Your phone asks to allow notifications for this.</span>
+      <span>
+        {mode === "push"
+          ? "Get a notification on this device when someone in your groups adds, edits or settles an expense."
+          : "Show the unread count on the app icon? Your phone asks to allow notifications for this."}
+      </span>
       <button className="btn-secondary" onClick={allow}>Turn on</button>
     </div>
   );

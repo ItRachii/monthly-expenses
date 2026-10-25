@@ -385,3 +385,16 @@ model ScanEvent {
   @@index([userId, createdAt], map: "scan_events_user_idx")
   @@map("scan_events")
 }
+
+/// A device that turned notifications on (see db/2026_10_push_subscriptions.sql).
+model PushSubscription {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id")
+  endpoint  String   @unique(map: "push_subscriptions_endpoint_key")
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId], map: "push_subscriptions_user_idx")
+  @@map("push_subscriptions")
+}
