@@ -125,6 +125,9 @@ run it before deploying that code.
 `2026_10_expense_import_key.sql` adds `expenses.import_key`, a keyed hash of
 the statement row an expense was imported from, so a statement read twice
 is not added twice; run it before deploying that code.
+`2026_10_push_subscriptions.sql` adds `push_subscriptions`, the devices that
+turned notifications on; run it before deploying that code (until then the
+app saves no devices and sends no pushes).
 
 ## Google OAuth setup
 

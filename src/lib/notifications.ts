@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
+import { after } from "next/server";
 import { prisma } from "./prisma";
 import { getGroupMembers } from "./groups";
+import { pushToUsers } from "./push";
 
 export type NotificationType =
   | "expense_added"
@@ -108,7 +110,7 @@ export async function notifyGroup(params: {
     .filter((email) => email !== params.actorEmail);
   if (recipients.length === 0) return;
 
-  await prisma.notification.createMany({
+  const created = await prisma.notification.createManyAndReturn({
     data: recipients.map((recipientEmail) => ({
       recipientEmail,
       groupId: params.groupId,
@@ -117,7 +119,21 @@ export async function notifyGroup(params: {
       message: params.message,
       target: params.target ? (params.target as unknown as Prisma.InputJsonObject) : Prisma.DbNull,
     })),
+    select: { id: true, recipientEmail: true },
   });
+
+  // The same notification on their devices, opening where the in-app one
+  // does. Sent after the response, so a slow push service never holds up
+  // the save.
+  const target = params.target ?? null;
+  after(() => pushToUsers({
+    groupId: params.groupId,
+    message: params.message,
+    recipients: created.map((n) => ({
+      userId: n.recipientEmail,
+      url: notificationHref({ id: n.id, groupId: params.groupId, target }),
+    })),
+  }));
 }
 
 /** Unread notifications only: once seen, an item leaves the tab for good. */

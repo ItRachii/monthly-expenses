@@ -45,6 +45,12 @@ Numeric ids are integer-checked before any DB lookup.
   invite emails identify the inviter the same way — the raw address is never
   sent to a possibly-mistyped recipient. Notification DTOs exclude the actor's
   email entirely.
+- **Push notifications** (`src/lib/push.ts`): a push carries only what the
+  in-app notification shows (group name, the display-name message, a link
+  and the unread count), encrypted end to end for the device (RFC 8291), so
+  the push service (Google, Apple, Mozilla) relays it without reading it.
+  Devices are stored by user id, never address; a device that signs out drops
+  its subscription, and one that signs in as someone else moves to them.
 - `Referrer-Policy: no-referrer` so authenticated URLs never leak to external
   sites; CSP restricts scripts/connections to self.
 - Exception (deliberate): a group admin's *Pending Invites* panel shows the
@@ -86,7 +92,7 @@ Numeric ids are integer-checked before any DB lookup.
 
 - `.env` is gitignored; only `.env.example` (placeholders) is tracked.
 - `AUTH_SECRET` (also the HMAC key for member keys), Google OAuth secret, DB
-  password, and the SMTP app password live exclusively in environment
+  password, the SMTP app password and the VAPID private key live exclusively in environment
   variables (Vercel project settings in prod).
 - Rotate any secret that ever lands in a chat, commit, or log.
 

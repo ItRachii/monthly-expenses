@@ -14,6 +14,8 @@ import { redirect } from "next/navigation";
 import { getIncomeHistory } from "@/lib/income";
 import { incomePromptFor } from "@/lib/incomeMath";
 import { IncomePromptHost } from "@/components/IncomePrompt";
+import { AppBadge } from "@/components/AppBadge";
+import { vapidPublicKey } from "@/lib/push";
 
 // Every page in this group depends on the signed-in user, so never prerender.
 export const dynamic = "force-dynamic";
@@ -58,6 +60,9 @@ export default async function AppLayout({
               the user's email, so queue items carry no PII and never sync into
               a different account on a shared device. */}
           <OfflineSync ownerTag={offlineOwner} />
+          {/* The unread count on the installed app's home-screen icon, and this
+              device's push subscription once notifications are allowed. */}
+          <AppBadge unreadCount={unreadCount} vapidKey={vapidPublicKey()} />
           {incomePrompt === "popup" ? <IncomePromptHost /> : null}
         </div>
       </AddExpenseProvider>
