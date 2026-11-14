@@ -43,7 +43,7 @@ check("deleted: its month", del?.kind === "deleted" && del.month === "2026-08" &
 const bulk = landingFor(focus("expense_deleted", { kind: "deleted", items: [], count: 12, total: 9000 }), rows);
 check("bulk deleted: no month", bulk?.kind === "deleted" && bulk.month === null && bulk.count === 12);
 // Payments are not the feed's business.
-check("settlement: not the feed", landingFor(focus("settlement_recorded", { kind: "settlement", id: 7, month: "2026-08" }), rows) === null);
+check("settlement: not the feed", landingFor(focus("settlement_recorded", { kind: "settlement", id: 7 }), rows) === null);
 check("no focus", landingFor(null, rows) === null);
 
 // Ghosts slot in by date, after rows of the same day.
@@ -59,9 +59,9 @@ check("ghost: oldest goes last", last[3].ghost !== undefined);
 check("ghost: empty list", placeGhosts([], [{ date: "2026-08-15" }], "desc").length === 1);
 
 // Payments.
-const pay = settlementLanding(focus("settlement_recorded", { kind: "settlement", id: 7, month: "2026-08" }), [6, 7]);
-check("payment: present", same(pay, { id: 7, month: "2026-08", present: true }));
-const payGone = settlementLanding(focus("settlement_recorded", { kind: "settlement", id: 9, month: "2026-08" }), [6, 7]);
+const pay = settlementLanding(focus("settlement_recorded", { kind: "settlement", id: 7 }), [6, 7]);
+check("payment: present", same(pay, { id: 7, present: true }));
+const payGone = settlementLanding(focus("settlement_recorded", { kind: "settlement", id: 9 }), [6, 7]);
 check("payment: gone", payGone?.present === false);
 
 // Stored targets are validated on the way back.
@@ -71,13 +71,14 @@ check("parse: bad ids rejected", parseTarget({ kind: "expenses", ids: ["1"] }) =
 check("parse: bad snapshot dropped", parseTarget({ kind: "deleted", items: [ghost, { item: "x" }], count: 2, total: 5 })?.kind === "deleted");
 const dropped = parseTarget({ kind: "deleted", items: [ghost, { item: "x" }], count: 2, total: 5 });
 check("parse: only good snapshots kept", dropped?.kind === "deleted" && dropped.items.length === 1);
-check("parse: settlement month checked", parseTarget({ kind: "settlement", id: 3, month: "Aug" }) === null);
+check("parse: old settlement month dropped", same(parseTarget({ kind: "settlement", id: 3, month: "2026-08" }), { kind: "settlement", id: 3 }));
+check("parse: settlement id checked", parseTarget({ kind: "settlement", id: "3" }) === null);
 check("parse: null", parseTarget(null) === null && parseTarget("x") === null);
 
 // Links.
 check("href: old notification opens the group", notificationHref({ id: 3, groupId: "g-1", target: null }) === "/g/g-1");
 check("href: expense", notificationHref({ id: 3, groupId: "g 1", target: { kind: "expenses", ids: [1] } }) === "/g/g%201?tab=expenses&n=3");
-check("href: payment", notificationHref({ id: 4, groupId: "g", target: { kind: "settlement", id: 1, month: "2026-08" } }) === "/g/g?tab=balances&n=4");
+check("href: payment", notificationHref({ id: 4, groupId: "g", target: { kind: "settlement", id: 1 } }) === "/g/g?tab=balances&n=4");
 
 // Scanned receipts fold into one entry, which sorts by its own values.
 {

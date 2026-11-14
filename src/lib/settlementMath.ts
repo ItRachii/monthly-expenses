@@ -163,30 +163,53 @@ function totalFrom(transfers: Transfer[], from: string): number {
   );
 }
 
+/**
+ * What is still owed across a group's whole history: every expense and
+ * every recorded payment at once, netted per person, then reduced to the
+ * fewest transfers. A payment counts as money its payer put in and its
+ * recipient took out, so payments recorded against a month under the old
+ * monthly balances still count, whichever pair the netting now routes
+ * through. Legacy payments with no recipient fall back to the payer's
+ * largest debts, as applyPayments does.
+ */
+export function outstandingAllTime(rows: ExpenseLike[], memberIds: string[], payments: PaymentLike[]): Transfer[] {
+  const net = new Map(computeNets(rows, memberIds).map((n) => [n.id, n.net]));
+  const legacy: PaymentLike[] = [];
+  for (const p of payments) {
+    if (!(p.amount > 0)) continue;
+    if (!p.to) {
+      legacy.push(p);
+      continue;
+    }
+    net.set(p.from, round2((net.get(p.from) ?? 0) + p.amount));
+    net.set(p.to, round2((net.get(p.to) ?? 0) - p.amount));
+  }
+  const transfers = simplifyDebts(Array.from(net, ([id, n]) => ({ id, net: n })));
+  return legacy.length ? applyPayments(transfers, legacy) : transfers;
+}
+
 export interface LineageEntry {
-  /** What the payer owed (this pair; payer's total for legacy rows). */
+  /** What the payer owed the recipient just before this payment. */
   owed: number;
-  /** Cumulative amount recovered up to and including this payment. */
-  paidToDate: number;
-  /** Still outstanding after this payment. */
+  /** This payment. */
+  paid: number;
+  /** Still owed between them after it. */
   remaining: number;
 }
 
 /**
- * For each payment (chronological order), where it sits in the debt's
- * lifetime: what was owed, how much had been recovered including it, and what
- * remained after. Powers the lineage column in settlement history.
+ * For each payment (in the order given, oldest first), what the payer owed
+ * the recipient just before it and what was left after, on the all-time
+ * balance. Powers the progress column in settlement history.
  */
-export function paymentLineage(
-  expenseTransfers: Transfer[],
-  payments: PaymentLike[],
-): LineageEntry[] {
+export function paymentLineage(rows: ExpenseLike[], memberIds: string[], payments: PaymentLike[]): LineageEntry[] {
+  let before = outstandingAllTime(rows, memberIds, []);
   return payments.map((p, i) => {
-    const after = applyPayments(expenseTransfers, payments.slice(0, i + 1));
-    const owed = p.to
-      ? pairAmount(expenseTransfers, p.from, p.to)
-      : totalFrom(expenseTransfers, p.from);
-    const remaining = p.to ? pairAmount(after, p.from, p.to) : totalFrom(after, p.from);
-    return { owed, paidToDate: round2(owed - remaining), remaining };
+    const after = outstandingAllTime(rows, memberIds, payments.slice(0, i + 1));
+    const entry = p.to
+      ? { owed: pairAmount(before, p.from, p.to), paid: p.amount, remaining: pairAmount(after, p.from, p.to) }
+      : { owed: totalFrom(before, p.from), paid: p.amount, remaining: totalFrom(after, p.from) };
+    before = after;
+    return entry;
   });
 }

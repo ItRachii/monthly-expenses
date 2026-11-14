@@ -1,22 +1,23 @@
 import { prisma, type Db } from "./prisma";
 import type { Context } from "./context";
-import {
-  applyPayments,
-  computeNets,
-  parseShares,
-  simplifyDebts,
-  type Transfer,
-} from "./settlementMath";
+import { outstandingAllTime, parseShares, type Transfer } from "./settlementMath";
 
 export interface SettlementDTO {
   id: number;
-  month: string;
+  /** The month it was recorded against, on payments from before balances
+   * went all-time; null on newer ones. */
+  month: string | null;
   settledAt: string; // ISO
   settledBy: string;
   /** Who received the payment; null on legacy rows recorded without one. */
   settledTo: string | null;
   amount: number;
   note: string | null;
+}
+
+/** The day (YYYY-MM-DD, India time) a payment was recorded. */
+export function settledDay(iso: string): string {
+  return new Date(new Date(iso).getTime() + 330 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 export async function getSettlements(ctx: Context): Promise<SettlementDTO[]> {
@@ -38,7 +39,7 @@ export async function getSettlements(ctx: Context): Promise<SettlementDTO[]> {
 }
 
 export async function createSettlement(data: {
-  month: string;
+  month: string | null;
   settledBy: string;
   settledTo: string | null;
   amount: number;
@@ -62,43 +63,29 @@ export async function createSettlement(data: {
 }
 
 /**
- * What is still owed, pair-wise, for a group's month: expense-derived
- * transfers minus every settlement payment recorded so far. Used by the
- * settle action to reject overpayments server-side.
+ * What is still owed, pair-wise, across the group's whole history: every
+ * expense minus every payment, netted per person (outstandingAllTime). The
+ * same figure the group header, the home screen and the Balances tab show;
+ * the settle action checks payments against it.
  */
 export async function getOutstandingTransfers(
   groupId: string,
-  month: string, // YYYY-MM
   memberEmails: string[],
   db: Db = prisma,
 ): Promise<Transfer[]> {
-  const [y, m] = month.split("-").map(Number);
-  const start = new Date(Date.UTC(y, m - 1, 1));
-  const end = new Date(Date.UTC(y, m, 1));
-
   const [expenses, settlements] = await Promise.all([
     db.expense.findMany({
-      where: { groupId, date: { gte: start, lt: end } },
+      where: { groupId },
       select: { payer: true, split: true, amount: true, shares: true, payers: true },
     }),
     db.settlement.findMany({
-      where: { groupId, month },
+      where: { groupId },
       orderBy: { settledAt: "asc" },
     }),
   ]);
-
-  const transfers = simplifyDebts(
-    computeNets(
-      expenses.map((e) => ({ ...e, shares: parseShares(e.shares), payers: parseShares(e.payers) })),
-      memberEmails,
-    ),
-  );
-  return applyPayments(
-    transfers,
-    settlements.map((s) => ({
-      from: s.settledBy,
-      to: s.settledTo ?? null,
-      amount: s.amount,
-    })),
+  return outstandingAllTime(
+    expenses.map((e) => ({ ...e, shares: parseShares(e.shares), payers: parseShares(e.payers) })),
+    memberEmails,
+    settlements.map((s) => ({ from: s.settledBy, to: s.settledTo ?? null, amount: s.amount })),
   );
 }

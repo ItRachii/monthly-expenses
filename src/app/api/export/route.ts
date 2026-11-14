@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { resolveContext } from "@/lib/resolveContext";
 import { getExpenses } from "@/lib/expenses";
-import { getSettlements } from "@/lib/settlements";
+import { getOutstandingTransfers, getSettlements, settledDay } from "@/lib/settlements";
 import { getAppUser, displayNameFor } from "@/lib/users";
 import { buildWorkbook } from "@/lib/export";
 import { isValidDateISO } from "@/lib/validate";
@@ -34,10 +34,10 @@ export async function GET(req: Request) {
   const expenses = ranged
     ? allExpenses.filter((e) => e.date >= from && e.date <= to)
     : allExpenses;
-  const months = new Set(expenses.map((e) => e.date.slice(0, 7)));
   const settlements = ranged
-    ? allSettlements.filter((s) => months.has(s.month))
+    ? allSettlements.filter((s) => settledDay(s.settledAt) >= from && settledDay(s.settledAt) <= to)
     : allSettlements;
+  const outstanding = r.isPersonal ? [] : await getOutstandingTransfers(r.ctxValue, r.members.map((m) => m.email));
 
   const memberNames = new Map<string, string>();
   let title: string;
@@ -59,6 +59,7 @@ export async function GET(req: Request) {
     nameFor,
     expenses,
     settlements,
+    outstanding,
     range: ranged ? { from, to } : null,
     exportedAt: new Date(),
   });

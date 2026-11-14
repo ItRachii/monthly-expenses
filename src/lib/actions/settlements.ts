@@ -9,12 +9,11 @@ import { isGroupMember, getGroupParticipants } from "@/lib/groups";
 import { notifyGroup } from "@/lib/notifications";
 import { nameForOthers } from "@/lib/users";
 import { formatINR } from "@/lib/format";
-import { cleanText, isValidAmount, isValidMonth } from "@/lib/validate";
+import { cleanText, isValidAmount } from "@/lib/validate";
 import { emailForKey } from "@/lib/wire";
 
 export async function settleAction(input: {
   ctx: string;
-  month: string;
   settledBy: string; // wire participant key, resolved to an email server-side
   settledTo: string; // wire participant key of the recipient (groups only)
   amount: number;
@@ -23,8 +22,6 @@ export async function settleAction(input: {
   const session = await auth();
   const email = session?.user?.email;
   if (!email) return { ok: false, error: "Not signed in." };
-  if (!isValidMonth(input.month))
-    return { ok: false, error: "Please pick a valid month." };
   if (!isValidAmount(input.amount))
     return { ok: false, error: "Settlement amount must be a positive number." };
   const note = cleanText(input.note, 500);
@@ -57,25 +54,25 @@ export async function settleAction(input: {
 
   let created: { id: number };
   if (!groupId || !settledTo) {
-    created = await createSettlement({ month: input.month, settledBy, settledTo, amount: input.amount, note: note || null, ownerEmail, groupId });
+    created = await createSettlement({ month: null, settledBy, settledTo, amount: input.amount, note: note || null, ownerEmail, groupId });
   } else {
     const gid = groupId;
     const to = settledTo;
-    // Checked and recorded under a lock on this group's month: two payments
-    // sent at once must not both pass the check and together exceed the debt.
+    // Checked and recorded under a lock on this group: two payments sent at
+    // once must not both pass the check and together exceed the debt.
     const res = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`settle:${gid}:${input.month}`}))`;
-      // A payment can never exceed what this payer still owes this recipient,
-      // so a month can only close once the full amount has been recovered.
-      const outstanding = await getOutstandingTransfers(gid, input.month, memberEmails, tx);
+      await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`settle:${gid}`}))`;
+      // A payment can never exceed what this payer still owes this recipient
+      // on the all-time balance.
+      const outstanding = await getOutstandingTransfers(gid, memberEmails, tx);
       const due = pairAmount(outstanding, settledBy, to);
-      if (due <= SETTLE_EPS) return { error: "Nothing is outstanding between these members for this month." };
+      if (due <= SETTLE_EPS) return { error: "Nothing is outstanding between these members." };
       if (input.amount > due + SETTLE_EPS)
         return { error: `Amount exceeds the outstanding ${formatINR(due)}. Record at most what is still owed.` };
       remainingAfter = round2(Math.max(0, due - input.amount));
       return {
         created: await createSettlement(
-          { month: input.month, settledBy, settledTo: to, amount: input.amount, note: note || null, ownerEmail, groupId: gid },
+          { month: null, settledBy, settledTo: to, amount: input.amount, note: note || null, ownerEmail, groupId: gid },
           tx,
         ),
       };
@@ -100,8 +97,8 @@ export async function settleAction(input: {
         groupId,
         actorEmail: email,
         type: "settlement_recorded",
-        message: `${actorName} recorded a payment for ${input.month}: ${byName} paid ${toName} ${formatINR(input.amount)} (${status})`,
-        target: { kind: "settlement", id: created.id, month: input.month },
+        message: `${actorName} recorded a payment: ${byName} paid ${toName} ${formatINR(input.amount)} (${status})`,
+        target: { kind: "settlement", id: created.id },
       });
     } catch {
       // ignore notification errors
