@@ -72,12 +72,12 @@ Numeric ids are integer-checked before any DB lookup.
   through the normal server action (full validation + authorization). The
   service worker's page cache likewise holds only PII-masked payloads and is
   purged when a navigation is redirected to /login (sign-out / expiry).
-- **Known trade-off**: email addresses remain plaintext *columns* because they
-  are the join keys of the legacy schema (`payer`, `split`, `owner_email`,
-  `group_members.email`, ...). Encrypting them app-side would break lookups and
-  require a full data migration. If column-level protection becomes a
-  requirement, migrate to numeric user ids + a single encrypted email column
-  (or Supabase `pgsodium`/TCE) as a dedicated project.
+- **Email addresses at rest** (`db/2026_09_pii_email.sql`): every column that
+  used to hold an address (`payer`, `split`, `owner_email`,
+  `group_members.email`, ...) holds an opaque user id instead: `u_` plus an
+  HMAC-SHA256 of the lowercased address under `PII_SECRET`. The address itself
+  is kept once, AES-256-GCM encrypted, in `app_users.email_enc` (and
+  `group_invites.invited_email_enc` for people not signed up yet).
 
 ## Abuse controls
 

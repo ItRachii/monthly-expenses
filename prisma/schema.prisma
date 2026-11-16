@@ -1,5 +1,5 @@
-// Prisma schema mapped onto the EXISTING Postgres tables created by the
-// Streamlit/SQLAlchemy app (see legacy-streamlit/backend/models.py).
+// Prisma schema mapped onto the existing Postgres tables, first created by
+// the app's original Python version.
 // Model fields are camelCase in code and @map to the real snake_case columns,
 // so your existing data is read and written unchanged.
 //

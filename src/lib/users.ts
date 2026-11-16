@@ -3,9 +3,8 @@ import { emailId } from "./piiCrypto";
 import { decryptEmail, encryptEmail, maskedEmailFor } from "./piiStore";
 import { ensurePiiMigrated } from "./piiMigration";
 
-// Ported from legacy-streamlit/utils/auth.py (register_user_if_needed) and
-// pages/5_Profile.py. The legacy system-role concept has been removed:
-// Personal mode is now the logged-in user's own (solo) ledger.
+// Personal mode is the logged-in user's own (solo) ledger; there is no
+// system role.
 
 function splitName(name: string) {
   const parts = (name || "User").trim().split(/\s+/);
