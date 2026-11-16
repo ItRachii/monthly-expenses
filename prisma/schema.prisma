@@ -81,7 +81,9 @@ model Receipt {
 
 model Settlement {
   id         Int      @id @default(autoincrement())
-  month      String
+  /// The month a payment was recorded against, from before balances went
+  /// all-time. Null on newer payments (db/2026_11_settlement_any_month.sql).
+  month      String?
   settledAt  DateTime @map("settled_at")
   settledBy  String   @map("settled_by")
   /**

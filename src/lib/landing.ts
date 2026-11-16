@@ -82,7 +82,7 @@ export function placeGhosts<T extends { date: string }, G extends { date: string
 }
 
 /** The record a payment notification points at, against the payments on show. */
-export function settlementLanding(focus: NotificationFocus | null, ids: number[]): { id: number; month: string; present: boolean } | null {
+export function settlementLanding(focus: NotificationFocus | null, ids: number[]): { id: number; present: boolean } | null {
   if (!focus || focus.target.kind !== "settlement") return null;
-  return { id: focus.target.id, month: focus.target.month, present: ids.includes(focus.target.id) };
+  return { id: focus.target.id, present: ids.includes(focus.target.id) };
 }

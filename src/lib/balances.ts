@@ -1,22 +1,13 @@
-// Server-side "who owes whom, overall" computation for the Splitwise-style
-// home screen and the group hero header. Outstanding = expense-derived debts
-// minus recorded settlement payments, computed per month with the shared
-// settlementMath and aggregated pair-wise across ALL months.
+// Server-side "who owes whom, overall" for the Splitwise-style home screen
+// and the group hero header: every expense minus every recorded payment,
+// netted across the group's whole history (getOutstandingTransfers).
 
 import { prisma } from "./prisma";
 import { getUserGroups, getGroupParticipants } from "./groups";
 import { buildWire, type Wire } from "./wire";
 import { monthKey } from "./format";
-import {
-  SETTLE_EPS,
-  applyPayments,
-  computeNets,
-  parseShares,
-  round2,
-  simplifyDebts,
-  type ExpenseLike,
-  type Transfer,
-} from "./settlementMath";
+import { getOutstandingTransfers } from "./settlements";
+import { round2, type Transfer } from "./settlementMath";
 
 /** One "X owes you ₹A" / "You owe X ₹A" line, client-safe (no emails). */
 export interface BalanceLine {
@@ -38,52 +29,9 @@ export interface GroupBalance {
   settled: boolean;
 }
 
-/**
- * Outstanding transfers for a group across every month, aggregated per
- * (from, to) pair. Emails as ids — server-side only.
- */
-export async function getOutstandingAllMonths(
-  groupId: string,
-  memberEmails: string[],
-): Promise<Transfer[]> {
-  const [expenses, settlements] = await Promise.all([
-    prisma.expense.findMany({
-      where: { groupId },
-      select: { date: true, payer: true, split: true, amount: true, shares: true, payers: true },
-    }),
-    prisma.settlement.findMany({
-      where: { groupId },
-      orderBy: { settledAt: "asc" },
-    }),
-  ]);
-
-  const byMonth = new Map<string, ExpenseLike[]>();
-  for (const e of expenses) {
-    const m = monthKey(e.date);
-    const row = { ...e, shares: parseShares(e.shares), payers: parseShares(e.payers) };
-    const list = byMonth.get(m);
-    if (list) list.push(row);
-    else byMonth.set(m, [row]);
-  }
-
-  const remaining: Transfer[] = [];
-  for (const [m, rows] of Array.from(byMonth.entries())) {
-    const transfers = simplifyDebts(computeNets(rows, memberEmails));
-    const pays = settlements
-      .filter((s) => s.month === m)
-      .map((s) => ({ from: s.settledBy, to: s.settledTo ?? null, amount: s.amount }));
-    remaining.push(...applyPayments(transfers, pays));
-  }
-
-  // Aggregate the per-month leftovers into one line per debtor→creditor pair.
-  const agg = new Map<string, Transfer>();
-  for (const t of remaining) {
-    const k = `${t.from}\n${t.to}`;
-    const cur = agg.get(k);
-    if (cur) cur.amount = round2(cur.amount + t.amount);
-    else agg.set(k, { ...t });
-  }
-  return Array.from(agg.values()).filter((t) => t.amount > SETTLE_EPS);
+/** Outstanding transfers for a group, all time. Emails as ids: server-side only. */
+export function getOutstandingAllMonths(groupId: string, memberEmails: string[]): Promise<Transfer[]> {
+  return getOutstandingTransfers(groupId, memberEmails);
 }
 
 /** Reduces outstanding transfers to lines relative to one user, masked. */

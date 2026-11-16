@@ -1,18 +1,14 @@
 // Excel export of one context (Personal or a group): a Summary sheet followed
 // by one sheet per month, newest first. Server-side only (exceljs + emails).
+// What is owed is all time, as on the Balances tab: a payment settles the
+// overall balance, not a month, so months show spending and the payments
+// recorded in them, and the Summary shows who owes whom today.
 
 import ExcelJS from "exceljs";
 import type { ExpenseDTO } from "./expenses";
-import type { SettlementDTO } from "./settlements";
+import { settledDay, type SettlementDTO } from "./settlements";
 import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "./constants";
-import {
-  applyPayments,
-  computeNets,
-  paidFor,
-  round2,
-  simplifyDebts,
-  type Transfer,
-} from "./settlementMath";
+import { computeNets, paidFor, round2, type Transfer } from "./settlementMath";
 
 export interface ExportInput {
   title: string;
@@ -23,8 +19,10 @@ export interface ExportInput {
   nameFor: (email: string) => string;
   /** Expenses already limited to the range, ascending by date. */
   expenses: ExpenseDTO[];
-  /** Settlements already limited to the range's months. */
+  /** Payments recorded within the range. */
   settlements: SettlementDTO[];
+  /** Who owes whom today, all time, whatever the range (groups only). */
+  outstanding: Transfer[];
   range: { from: string; to: string } | null;
   exportedAt: Date;
 }
@@ -81,12 +79,6 @@ function monthNets(rows: ExpenseDTO[], memberEmails: string[]) {
   return computeNets(rows, memberEmails);
 }
 
-function monthOutstanding(rows: ExpenseDTO[], memberEmails: string[], settlements: SettlementDTO[]): Transfer[] {
-  const transfers = simplifyDebts(monthNets(rows, memberEmails));
-  const pays = settlements.map((s) => ({ from: s.settledBy, to: s.settledTo, amount: s.amount }));
-  return applyPayments(transfers, pays);
-}
-
 export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
   const { expenses, settlements, isPersonal, nameFor } = input;
   const memberEmails = Array.from(input.memberNames.keys());
@@ -115,7 +107,7 @@ export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
     else byMonth.set(k, [r]);
   }
   const monthKeys = Array.from(byMonth.keys()).sort().reverse();
-  const settlementsFor = (m: string) => settlements.filter((s) => s.month === m);
+  const settlementsFor = (m: string) => settlements.filter((s) => settledDay(s.settledAt).slice(0, 7) === m);
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Ledger";
@@ -165,27 +157,20 @@ export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
     totalRow(ws, ["Total", expenses.length, grand], [3]);
   } else {
     const names = memberEmails.map((e) => input.memberNames.get(e) ?? nameFor(e));
-    const header = ["Month", "Expenses", "Total", ...names.map((n) => `${n} paid`), "Outstanding"];
-    const moneyCols = [3, ...names.map((_, i) => 4 + i), 4 + names.length];
+    const header = ["Month", "Expenses", "Total", ...names.map((n) => `${n} paid`)];
+    const moneyCols = [3, ...names.map((_, i) => 4 + i)];
     table(
       ws,
       header,
       monthKeys.map((m) => {
         const rows = byMonth.get(m)!;
         const paid = memberEmails.map((e) => round2(rows.reduce((s, r) => s + paidFor(r, e), 0)));
-        const out = monthOutstanding(rows, memberEmails, settlementsFor(m));
-        return [
-          monthLabel(m),
-          rows.length,
-          round2(rows.reduce((s, r) => s + r.amount, 0)),
-          ...paid,
-          round2(out.reduce((s, t) => s + t.amount, 0)),
-        ];
+        return [monthLabel(m), rows.length, round2(rows.reduce((s, r) => s + r.amount, 0)), ...paid];
       }),
       moneyCols,
     );
     const paidTotals = memberEmails.map((e) => round2(expenses.reduce((s, r) => s + paidFor(r, e), 0)));
-    totalRow(ws, ["Total", expenses.length, grand, ...paidTotals, null], moneyCols);
+    totalRow(ws, ["Total", expenses.length, grand, ...paidTotals], moneyCols);
   }
   ws.addRow([]);
 
@@ -206,21 +191,29 @@ export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
 
   if (!isPersonal) {
     ws.addRow([]);
-    heading(ws, "Outstanding balances (after recorded settlements)");
-    const agg = new Map<string, Transfer>();
-    for (const m of monthKeys) {
-      for (const t of monthOutstanding(byMonth.get(m)!, memberEmails, settlementsFor(m))) {
-        const k = `${t.from}\n${t.to}`;
-        const cur = agg.get(k);
-        if (cur) cur.amount = round2(cur.amount + t.amount);
-        else agg.set(k, { ...t });
-      }
-    }
-    const lines = Array.from(agg.values()).sort((a, b) => b.amount - a.amount);
+    heading(ws, "Outstanding today (all time, after every recorded payment)");
+    const lines = input.outstanding.slice().sort((a, b) => b.amount - a.amount);
     if (lines.length === 0) {
-      ws.addRow(["All settled up for this range."]).font = { italic: true };
+      ws.addRow(["Everyone is settled up."]).font = { italic: true };
     } else {
       table(ws, ["Who owes", "To whom", "Amount"], lines.map((t) => [nameFor(t.from), nameFor(t.to), t.amount]), [3]);
+    }
+    // Every payment in the range here too: one made in a month with no
+    // expenses has no month sheet to appear on.
+    ws.addRow([]);
+    heading(ws, "Payments recorded");
+    if (settlements.length === 0) {
+      ws.addRow(["None"]).font = { italic: true };
+    } else {
+      table(
+        ws,
+        ["Date", "From", "To", "Amount", "Note"],
+        settlements
+          .slice()
+          .sort((a, b) => a.settledAt.localeCompare(b.settledAt))
+          .map((s) => [settledDay(s.settledAt), nameFor(s.settledBy), s.settledTo ? nameFor(s.settledTo) : "", s.amount, s.note]),
+        [4],
+      );
     }
   }
   autoWidth(ws, 12);
@@ -262,7 +255,7 @@ export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
 
       const pays = settlementsFor(m);
       sheet.addRow([]);
-      heading(sheet, "Settlements recorded");
+      heading(sheet, "Payments recorded this month");
       if (pays.length === 0) {
         sheet.addRow(["None"]).font = { italic: true };
       } else {
@@ -272,17 +265,9 @@ export async function buildWorkbook(input: ExportInput): Promise<Buffer> {
           pays
             .slice()
             .sort((a, b) => a.settledAt.localeCompare(b.settledAt))
-            .map((s) => [s.settledAt.slice(0, 10), nameFor(s.settledBy), s.settledTo ? nameFor(s.settledTo) : "", s.amount, s.note]),
+            .map((s) => [settledDay(s.settledAt), nameFor(s.settledBy), s.settledTo ? nameFor(s.settledTo) : "", s.amount, s.note]),
           [4],
         );
-      }
-      sheet.addRow([]);
-      heading(sheet, "Still outstanding");
-      const out = monthOutstanding(rows, memberEmails, pays);
-      if (out.length === 0) {
-        sheet.addRow(["Settled"]).font = { italic: true };
-      } else {
-        table(sheet, ["Who owes", "To whom", "Amount"], out.map((x) => [nameFor(x.from), nameFor(x.to), x.amount]), [3]);
       }
     }
     autoWidth(sheet);

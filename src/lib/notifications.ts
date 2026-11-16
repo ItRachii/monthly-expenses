@@ -27,12 +27,13 @@ export interface DeletedExpense {
  * - deleted: what went, as a snapshot of each (one expense), or only a
  *   count and total when many went at once (a removed card or statement
  *   leaves no item names behind);
- * - settlement: the recorded payment.
+ * - settlement: the recorded payment (older ones also stored the month
+ *   it was for, which is no longer read: balances are all-time).
  */
 export type NotificationTarget =
   | { kind: "expenses"; ids: number[] }
   | { kind: "deleted"; items: DeletedExpense[]; count: number; total: number }
-  | { kind: "settlement"; id: number; month: string };
+  | { kind: "settlement"; id: number };
 
 const isInt = (n: unknown): n is number => Number.isInteger(n);
 const isStr = (v: unknown): v is string => typeof v === "string";
@@ -58,8 +59,8 @@ export function parseTarget(raw: unknown): NotificationTarget | null {
       total: t.total,
     };
   }
-  if (t.kind === "settlement" && isInt(t.id) && isStr(t.month) && /^\d{4}-\d{2}$/.test(t.month)) {
-    return { kind: "settlement", id: t.id, month: t.month };
+  if (t.kind === "settlement" && isInt(t.id)) {
+    return { kind: "settlement", id: t.id };
   }
   return null;
 }

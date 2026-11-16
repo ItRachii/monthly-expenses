@@ -9,19 +9,17 @@ import type { ExpenseDTO } from "@/lib/expenses";
 import type { SettlementDTO } from "@/lib/settlements";
 import {
   SETTLE_EPS,
-  applyPayments,
   computeNets,
+  outstandingAllTime,
   pairAmount,
   paymentLineage,
   round2,
-  simplifyDebts,
   totalOutstanding,
   type LineageEntry,
   type PaymentLike,
 } from "@/lib/settlementMath";
 import { formatINR } from "@/lib/format";
 import { Metric } from "@/components/Metric";
-import { MonthSelect, monthLabel } from "@/components/MonthSelect";
 import { DateBadge } from "@/components/DateBadge";
 import {
   ActiveFilters,
@@ -86,43 +84,42 @@ export function Settlement({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const months = useMemo(() => {
-    const set = new Set(rows.map((r) => r.date.slice(0, 7)));
-    return Array.from(set).sort().reverse();
-  }, [rows]);
-
-  // Opened from a payment notification: its month above, the payment
-  // highlighted in the history below.
+  // Opened from a payment notification: the payment highlighted in the
+  // history below.
   const [landing, setLanding] = useState(() =>
     focus && !landedNotifications.has(focus.id) ? settlementLanding(focus, settlements.map((s) => s.id)) : null,
   );
   useLandingScroll(focus?.id ?? null, landing !== null);
   const marked = landing?.present ? landing.id : null;
 
-  const [month, setMonth] = useState(() => (landing && months.includes(landing.month) ? landing.month : months[0] ?? ""));
-
   const nameOf = (v: string) => nameMap[v] ?? v;
 
-  const selectedMonth = months.includes(month) ? month : months[0];
-  const monthRows = rows.filter((r) => r.date.slice(0, 7) === selectedMonth);
-  const total = monthRows.reduce((s, r) => s + r.amount, 0);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
   const nMembers = members.length;
   const memberKeys = useMemo(() => members.map((m) => m.key), [members]);
 
-  // Expense-derived balances and debts for the month, then subtract every
-  // recorded payment. The month is only "settled" when nothing remains.
-  const nets = computeNets(monthRows, memberKeys);
+  // All time, the same figure as the group header: every expense, minus
+  // every recorded payment, netted per person. The group is only "settled"
+  // when nothing remains.
+  const nets = computeNets(rows, memberKeys);
   const balances = nets.map((n) => ({ ...n, displayName: nameOf(n.id) }));
-  const expenseTransfers = simplifyDebts(nets);
-  const monthPayments: PaymentLike[] = settlements
-    .filter((s) => s.month === selectedMonth)
-    .sort((a, b) => a.settledAt.localeCompare(b.settledAt))
-    .map((s) => ({ from: s.settledBy, to: s.settledTo, amount: s.amount }));
-  const remainingTransfers = applyPayments(expenseTransfers, monthPayments);
+  const payments: PaymentLike[] = useMemo(
+    () =>
+      settlements
+        .slice()
+        .sort((a, b) => a.settledAt.localeCompare(b.settledAt))
+        .map((s) => ({ from: s.settledBy, to: s.settledTo, amount: s.amount })),
+    [settlements],
+  );
+  const expenseTransfers = outstandingAllTime(rows, memberKeys, []);
+  const remainingTransfers = outstandingAllTime(rows, memberKeys, payments);
   const owedTotal = totalOutstanding(expenseTransfers);
   const outstanding = totalOutstanding(remainingTransfers);
-  const recoveredTotal = round2(owedTotal - outstanding);
+  const paidTotal = round2(payments.reduce((s, p) => s + p.amount, 0));
   const fullySettled = expenseTransfers.length > 0 && remainingTransfers.length === 0;
+  /** Paid so far from one person to another, all time. */
+  const paidBetween = (from: string, to: string) =>
+    round2(payments.filter((p) => p.from === from && p.to === to).reduce((s, p) => s + p.amount, 0));
 
   // Settle form state (group only; personal/solo has nothing to settle).
   const [settledBy, setSettledBy] = useState(payerOptions[0]?.value ?? "");
@@ -133,8 +130,8 @@ export function Settlement({
   const pairRemaining = pairAmount(remainingTransfers, settledBy, settledTo);
   const toOptions = payerOptions.filter((o) => o.value !== settledBy);
 
-  // Default the form to the first outstanding pair whenever the month or the
-  // recorded payments change and the current selection has nothing due.
+  // Default the form to the first outstanding pair whenever the recorded
+  // payments change and the current selection has nothing due.
   useEffect(() => {
     const first = remainingTransfers[0];
     if (first && pairAmount(remainingTransfers, settledBy, settledTo) <= SETTLE_EPS) {
@@ -142,38 +139,28 @@ export function Settlement({
       setSettledTo(first.to);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMonth, settlements]);
+  }, [settlements]);
 
   // Prefill the amount with what is still owed for the selected pair.
   useEffect(() => {
     setGroupAmount(pairRemaining > SETTLE_EPS ? pairRemaining.toFixed(2) : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settledBy, settledTo, selectedMonth, settlements]);
+  }, [settledBy, settledTo, settlements]);
 
-  // History lineage: for every recorded payment, where it sat in its debt's
-  // lifetime (owed → paid so far → remaining), computed per month.
+  // History lineage: for every recorded payment, what was owed between the
+  // two just before it and what was left after, on the all-time balance.
   const lineageById = useMemo(() => {
     const map = new Map<number, LineageEntry>();
-    const historyMonths = Array.from(new Set(settlements.map((s) => s.month)));
-    for (const m of historyMonths) {
-      const mRows = rows.filter((r) => r.date.slice(0, 7) === m);
-      const transfers = simplifyDebts(computeNets(mRows, memberKeys));
-      const pays = settlements
-        .filter((s) => s.month === m)
-        .sort((a, b) => a.settledAt.localeCompare(b.settledAt));
-      const entries = paymentLineage(
-        transfers,
-        pays.map((s) => ({ from: s.settledBy, to: s.settledTo, amount: s.amount })),
-      );
-      pays.forEach((s, i) => map.set(s.id, entries[i]));
-    }
+    const ordered = settlements.slice().sort((a, b) => a.settledAt.localeCompare(b.settledAt));
+    const entries = paymentLineage(rows, memberKeys, payments);
+    ordered.forEach((s, i) => map.set(s.id, entries[i]));
     return map;
-  }, [settlements, rows, memberKeys]);
+  }, [settlements, rows, memberKeys, payments]);
 
   function progressText(entry: LineageEntry | undefined): string {
     if (!entry || entry.owed <= SETTLE_EPS) return "";
     if (entry.remaining > SETTLE_EPS)
-      return `${formatINR(entry.paidToDate)} of ${formatINR(entry.owed)}, ${formatINR(entry.remaining)} left`;
+      return `${formatINR(entry.paid)} of ${formatINR(entry.owed)}, ${formatINR(entry.remaining)} left`;
     return `${formatINR(entry.owed)} fully recovered`;
   }
 
@@ -202,7 +189,6 @@ export function Settlement({
     startTransition(async () => {
       const res = await settleAction({
         ctx,
-        month: selectedMonth,
         settledBy,
         settledTo,
         amount,
@@ -223,31 +209,31 @@ export function Settlement({
     );
   }
 
-  const isPartial = monthPayments.length > 0 && outstanding > SETTLE_EPS;
+  const isPartial = payments.length > 0 && outstanding > SETTLE_EPS;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="section-title">Balance</h2>
-        <MonthSelect months={months} value={selectedMonth} onChange={setMonth} />
+        <span className="text-xs text-muted">All time</span>
       </div>
 
       {fullySettled ? (
         <div className="space-y-3">
           <div className="alert-success">
-            This month is <strong>fully settled</strong>: {formatINR(owedTotal)} recovered
-            across {monthPayments.length} payment{monthPayments.length === 1 ? "" : "s"}.
+            Everyone is <strong>fully settled</strong>: {formatINR(owedTotal)} recovered
+            across {payments.length} payment{payments.length === 1 ? "" : "s"}.
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Metric label="Amount Owed" value={formatINR(owedTotal)} />
-            <Metric label="Recovered" value={formatINR(recoveredTotal)} />
-            <Metric label="Payments" value={String(monthPayments.length)} />
+            <Metric label="Paid back" value={formatINR(paidTotal)} />
+            <Metric label="Payments" value={String(payments.length)} />
           </div>
         </div>
       ) : (
         <div className="space-y-4">
           <p className="text-sm">
-            <strong>Total spent this month:</strong> {formatINR(total)}
+            <strong>Total spent:</strong> {formatINR(total)}
           </p>
           {nMembers ? (
             <>
@@ -331,8 +317,8 @@ export function Settlement({
               {remainingTransfers.length > 0 ? (
                 <div className="card space-y-1">
                   {remainingTransfers.map((t, idx) => {
-                    const owedPair = pairAmount(expenseTransfers, t.from, t.to);
-                    const paidPair = round2(owedPair - t.amount);
+                    const paidPair = paidBetween(t.from, t.to);
+                    const owedPair = round2(t.amount + paidPair);
                     return (
                       <p key={idx} className="text-sm">
                         <strong>{nameOf(t.from)}</strong> owes <strong>{nameOf(t.to)}</strong>{" "}
@@ -352,17 +338,15 @@ export function Settlement({
                   ) : null}
                 </div>
               ) : (
-                <div className="alert-success">
-                  Everyone is settled up for {monthLabel(selectedMonth)}.
-                </div>
+                <div className="alert-success">Everyone is settled up.</div>
               )}
 
               {remainingTransfers.length > 0 ? (
                 <form onSubmit={settle} className="card space-y-4">
                   <h3 className="section-title">Record a Settlement Payment</h3>
                   <p className="text-xs text-muted">
-                    Part payments are fine: the month stays open until the full
-                    amount is recovered.
+                    Part payments are fine: whatever is left stays owed until
+                    it is paid.
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
@@ -436,7 +420,7 @@ export function Settlement({
         {landing ? (
           <LandingNote onDismiss={() => setLanding(null)}>
             {landing.present
-              ? `The payment from this notification is highlighted below. The balances above are for ${monthLabel(landing.month)}, the month it was for.`
+              ? "The payment from this notification is highlighted below."
               : "The payment from this notification is no longer on record."}
           </LandingNote>
         ) : null}
@@ -450,12 +434,12 @@ export function Settlement({
   );
 }
 
-type HistoryKey = "settledAt" | "amount" | "month";
+type HistoryKey = "settledAt" | "amount";
 
 /**
  * Recorded payments, styled and filtered like the expense list: the count
  * and total of what is shown, a search, and filters in the column headings
- * (month, who paid, who received, a date range), each shown as a chip above
+ * (who paid, who received, a date range), each shown as a chip above
  * the table. Read only: a payment is not edited or deleted here. Desktop has
  * the table; phones keep one compact row per payment.
  */
@@ -472,8 +456,7 @@ function SettlementHistory({
   progress: (id: number) => string;
 }) {
   const [query, setQuery] = useState("");
-  const [sort, onSort] = useSort<HistoryKey>({ key: "settledAt", dir: "desc" }, ["settledAt", "amount", "month"]);
-  const [month, setMonth] = useState<string | null>(null);
+  const [sort, onSort] = useSort<HistoryKey>({ key: "settledAt", dir: "desc" }, ["settledAt", "amount"]);
   const [from, setFrom] = useState<string | null>(null);
   const [to, setTo] = useState<string | null>(null);
   const [range, setRange] = useState<DateRange | null>(null);
@@ -494,7 +477,6 @@ function SettlementHistory({
     settlements.filter((s) => {
       const day = settledAt(s.settledAt).day;
       return (
-        (!month || s.month === month) &&
         (!from || s.settledBy === from) &&
         (!to || s.settledTo === to) &&
         (!range?.from || day >= range.from) &&
@@ -502,15 +484,14 @@ function SettlementHistory({
         (!q ||
           nameOf(s.settledBy).toLowerCase().includes(q) ||
           (s.settledTo ? nameOf(s.settledTo).toLowerCase().includes(q) : false) ||
-          (s.note ?? "").toLowerCase().includes(q) ||
-          monthLabel(s.month).toLowerCase().includes(q))
+          (s.note ?? "").toLowerCase().includes(q))
       );
     }),
     sort,
-    (s, k) => (k === "amount" ? s.amount : k === "month" ? s.month : s.settledAt),
+    (s, k) => (k === "amount" ? s.amount : s.settledAt),
   );
   const total = round2(shown.reduce((t, s) => t + s.amount, 0));
-  const filtered = Boolean(month || from || to || range);
+  const filtered = Boolean(from || to || range);
 
   return (
     <div className="space-y-3">
@@ -524,13 +505,11 @@ function SettlementHistory({
 
       <ActiveFilters
         filters={[
-          month ? { label: `Month: ${monthLabel(month)}`, onClear: () => setMonth(null) } : null,
           range ? { label: `Settled: ${rangeLabel(range)}`, onClear: () => setRange(null) } : null,
           from ? { label: `From: ${nameOf(from)}`, onClear: () => setFrom(null) } : null,
           to ? { label: `To: ${nameOf(to)}`, onClear: () => setTo(null) } : null,
         ]}
         onClearAll={() => {
-          setMonth(null);
           setRange(null);
           setFrom(null);
           setTo(null);
@@ -548,17 +527,6 @@ function SettlementHistory({
             <table className="list-table">
               <thead>
                 <tr>
-                  <FilterHeader
-                    label="Month"
-                    allLabel="All months"
-                    options={Array.from(new Set(settlements.map((s) => s.month)))
-                      .sort((a, b) => b.localeCompare(a))
-                      .map((m) => ({ value: m, label: monthLabel(m) }))}
-                    value={month}
-                    onChange={setMonth}
-                    sort={{ sortKey: "month" as HistoryKey, sort, onSort }}
-                    className="w-32"
-                  />
                   <DateRangeHeader
                     label="Settled at"
                     value={range}
@@ -585,11 +553,9 @@ function SettlementHistory({
                       className={`hover:bg-ink/[0.03] ${marked === s.id ? "landing-mark" : ""}`}
                     >
                       <td className="whitespace-nowrap">
-                        <span className="font-semibold">{monthLabel(s.month)}</span>
+                        <span className="font-semibold">{tableDate(at.day)}</span>
+                        <span className="text-muted">, {at.time}</span>
                         {marked === s.id ? <LandingPill className="ml-1.5">Recorded</LandingPill> : null}
-                      </td>
-                      <td className="whitespace-nowrap text-muted">
-                        {tableDate(at.day)}, {at.time}
                       </td>
                       <td className="whitespace-nowrap">
                         <Person id={s.settledBy} name={nameOf(s.settledBy)} />
@@ -623,7 +589,7 @@ function SettlementHistory({
                       {nameOf(s.settledBy)} paid{s.settledTo ? ` ${nameOf(s.settledTo)}` : ""}
                     </div>
                     <div className="mt-0.5 truncate text-xs text-muted">
-                      For {monthLabel(s.month)} · {at.time}
+                      {at.time}
                       {s.note ? ` · ${s.note}` : ""}
                     </div>
                     {p ? <div className="truncate text-xs text-muted">{p}</div> : null}
