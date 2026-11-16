@@ -1,9 +1,7 @@
 # Monthly Expense Tracker (Ledger)
 
-Two-person and group expense tracker. Originally a Streamlit app, now a
-**Next.js 15** app deployable to **Vercel** with Google sign-in.
-
-The previous Streamlit version is preserved under [`legacy-streamlit/`](./legacy-streamlit).
+Personal and group expense tracker: a **Next.js 15** app on **Vercel**
+with Google sign-in, installable on a phone as a web app.
 
 ## Stack
 
@@ -14,6 +12,7 @@ The previous Streamlit version is preserved under [`legacy-streamlit/`](./legacy
 | Database | Postgres via Prisma 6 (your existing tables) |
 | Charts   | Recharts                                |
 | Email    | Nodemailer (Gmail SMTP) for group invites |
+| Push     | Web Push (`web-push`, VAPID) for group activity |
 
 ## Local development
 
@@ -51,8 +50,11 @@ A free second Supabase project works too: use its pooler URLs as in
 ### Environment variables
 
 See [`.env.example`](./.env.example). Required: `DATABASE_URL`, `DIRECT_URL`,
-`AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `PII_SECRET`. SMTP vars
-are optional (invite emails).
+`AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `PII_SECRET`. Optional:
+the SMTP vars (invite emails) and `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+`VAPID_SUBJECT` (push notifications; generate the pair once with
+`npx web-push generate-vapid-keys` and keep it, since changing it stops every
+saved device getting pushes until it opens the app again).
 
 Generate a secret with `openssl rand -base64 32`, or in PowerShell:
 
@@ -84,10 +86,31 @@ on in local development and hidden in production until `STATEMENTS_ENABLED=1`
 is set. To try it, sign in locally and
 open **Statements** in the sidebar (**Import** in the phone bottom bar).
 
+### Group balances
+
+What people owe each other is **all time**: every expense in the group,
+minus every recorded payment, netted per person and reduced to the fewest
+payments. Debts in opposite directions in different months cancel out. The
+group header, the home screen, the Balances tab, the server's overpayment
+check and the Excel export all use the same calculation
+(`outstandingAllTime` in `src/lib/settlementMath.ts`), so they always agree.
+A payment settles the overall balance, not a month; part payments are fine.
+Run `npm run test:balances` after changing it.
+
+### Notifications, push and the app icon badge
+
+Group activity (expenses added, edited or deleted, payments, renames) shows
+on the Notifications page. On a device that turned notifications on (the
+prompt is on that page), the same notification also arrives as a push while
+the app is closed, and the installed app's icon shows the unread count. On
+iPhone this needs the app added to the Home Screen (iOS 16.4 or later).
+Without the VAPID variables the app never offers push. The badge also
+catches up whenever the app comes back to the foreground. Run
+`npm run test:push` after changing the push payload.
+
 ## Database
 
-This app reuses the **same Postgres tables** the Streamlit app created, so your
-existing data works as-is. The Prisma models in
+The Prisma models in
 [`prisma/schema.prisma`](./prisma/schema.prisma) `@map` to the real snake_case
 columns.
 
@@ -100,7 +123,7 @@ npx prisma generate
 
 For a brand-new empty database, create the tables with `npm run db:push`.
 
-Schema changes since the Streamlit era live as SQL files in [`db/`](./db).
+Schema changes live as SQL files in [`db/`](./db).
 Apply them once, in date order, to an existing database (Supabase SQL editor
 or `psql`). `2026_09_group_name_history.sql` adds the table that keeps every past
 group name with the dates it was in use; `2026_09_app_users_last_name.sql`
@@ -125,22 +148,20 @@ run it before deploying that code.
 `2026_10_expense_import_key.sql` adds `expenses.import_key`, a keyed hash of
 the statement row an expense was imported from, so a statement read twice
 is not added twice; run it before deploying that code.
-`2026_11_settlement_any_month.sql` lets `settlements.month` be empty:
-balances are all-time, so new payments are not tied to a month; run it
-before deploying that code, or recording a payment fails.
 `2026_10_push_subscriptions.sql` adds `push_subscriptions`, the devices that
 turned notifications on; run it before deploying that code (until then the
 app saves no devices and sends no pushes).
+`2026_11_settlement_any_month.sql` lets `settlements.month` be empty:
+balances are all-time, so new payments are not tied to a month; run it
+before deploying that code, or recording a payment fails.
 
 ## Google OAuth setup
 
-Auth.js uses a **different callback path** than Streamlit did. In Google Cloud
-Console → Credentials → your OAuth client, set **Authorized redirect URIs** to:
+In Google Cloud Console → Credentials → your OAuth client, set
+**Authorized redirect URIs** to:
 
 - Local: `http://localhost:3000/api/auth/callback/google`
 - Production: `https://<your-domain>/api/auth/callback/google`
-
-(The old Streamlit `/oauth2callback` URI is no longer used.)
 
 ## Deploy to Vercel
 
@@ -161,12 +182,17 @@ src/
   auth.ts                 Auth.js (Google, JWT)
   app/
     login/                Sign-in screen
-    api/auth/[...nextauth] Auth.js route handlers
+    api/                  Auth.js, scan, export, push, unread count
     (app)/                Authenticated area (sidebar layout)
-      page.tsx            Home + pending invites
-      add/ log/ summary/ settlement/ groups/ profile/
+      page.tsx            Home: groups and balances, pending invites
+      g/[ctx]/            A group or Personal: Expenses, Balances, Summary tabs
+      add/ groups/ notifications/ statements/ profile/ dev/
+      log/ settlement/ summary/   Old URLs, redirect to the tabs
   components/             Sidebar, charts, shared UI
   lib/                    Prisma client, business logic, server actions
 prisma/schema.prisma      Mapped to existing Postgres tables
-legacy-streamlit/         Previous Streamlit app (reference)
+db/                       SQL changes to apply to an existing database
+public/sw.js              Service worker: offline pages, push, icon badge
+docling-service/          Receipt scanner (runs on your machine)
+tests/                    `npm run test:*` checks (no network)
 ```

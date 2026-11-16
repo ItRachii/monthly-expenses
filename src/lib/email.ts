@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import { escapeHtml } from "./pii";
 
-// Ported from legacy-streamlit/utils/email.py — Gmail SMTP with a 587 STARTTLS
+// Gmail SMTP with a 587 STARTTLS
 // attempt and a 465 SSL fallback. Reads SMTP_* env vars. TLS is mandatory on
 // both paths so credentials and recipient PII never travel in plaintext.
 

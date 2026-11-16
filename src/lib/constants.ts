@@ -1,4 +1,3 @@
-// Ported from legacy-streamlit/utils/calculations.py
 export const CATEGORIES = [
   "Housing",
   "Groceries",

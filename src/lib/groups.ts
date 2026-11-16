@@ -6,8 +6,6 @@ import { UNNAMED_MEMBER, maskEmail } from "./pii";
 import { emailId } from "./piiCrypto";
 import { decryptEmail, encryptEmail, maskedEmailsFor } from "./piiStore";
 
-// Ported from legacy-streamlit/utils/groups.py
-
 /** Masked address of an invitee, from the invite's encrypted copy. */
 function maskedInvitee(enc: string | null): string {
   const plain = decryptEmail(enc);
