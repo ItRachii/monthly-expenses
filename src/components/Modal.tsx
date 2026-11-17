@@ -1,0 +1,77 @@
+"use client";
+
+import { useLayoutEffect, useRef } from "react";
+
+/**
+ * A modal window on the native <dialog>, opened with showModal() while it is
+ * mounted. The browser provides what custom overlays rebuild by hand: the page
+ * behind goes inert, focus stays inside, Esc and the phone's back gesture
+ * close it, and focus returns to the control that opened it. A press outside
+ * the window closes it too.
+ *
+ * Every way of closing ends in onClose; the parent then unmounts the Modal.
+ * Give the window a heading and pass its id as labelledBy.
+ */
+export function Modal({
+  labelledBy,
+  onClose,
+  className = "",
+  children,
+}: {
+  labelledBy: string;
+  onClose: () => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  // Layout effect: open before paint, and on unmount close while the dialog is
+  // still in the page, so the browser returns focus to the opener.
+  useLayoutEffect(() => {
+    const dialog = ref.current!;
+    if (!dialog.open) dialog.showModal();
+    const onCloseEvent = () => closeRef.current();
+    dialog.addEventListener("close", onCloseEvent);
+
+    // closedby="any" closes on a press outside; Safari has no closedby yet, so
+    // there test the pointer against the window's box. Press and release must
+    // both land outside, so a text selection dragged onto the backdrop stays.
+    let cleanupPointer = () => {};
+    if (!("closedBy" in HTMLDialogElement.prototype)) {
+      const outside = (e: PointerEvent) => {
+        const r = dialog.getBoundingClientRect();
+        return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+      };
+      let pressedOutside = false;
+      const down = (e: PointerEvent) => (pressedOutside = outside(e));
+      const up = (e: PointerEvent) => {
+        if (pressedOutside && outside(e)) dialog.close();
+      };
+      dialog.addEventListener("pointerdown", down);
+      dialog.addEventListener("pointerup", up);
+      cleanupPointer = () => {
+        dialog.removeEventListener("pointerdown", down);
+        dialog.removeEventListener("pointerup", up);
+      };
+    }
+
+    return () => {
+      dialog.removeEventListener("close", onCloseEvent);
+      cleanupPointer();
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  return (
+    <dialog
+      ref={ref}
+      aria-labelledby={labelledBy}
+      {...({ closedby: "any" } as object)}
+      className={`modal text-ink ${className}`}
+    >
+      {children}
+    </dialog>
+  );
+}
