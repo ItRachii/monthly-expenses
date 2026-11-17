@@ -11,18 +11,22 @@ import { useLayoutEffect, useRef } from "react";
  *
  * Every way of closing ends in onClose; the parent then unmounts the Modal.
  * Give the window a heading and pass its id as labelledBy. sheet: a bottom
- * sheet on phones (full width, at the bottom), centred from md up.
+ * sheet on phones (full width, at the bottom), centred from md up. width: the
+ * window's width where it is centred (default 28rem). Put data-autofocus on
+ * the field focus should start on (React's autoFocus does not work here).
  */
 export function Modal({
   labelledBy,
   onClose,
   sheet = false,
+  width,
   className = "",
   children,
 }: {
   labelledBy: string;
   onClose: () => void;
   sheet?: boolean;
+  width?: string;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -35,6 +39,10 @@ export function Modal({
   useLayoutEffect(() => {
     const dialog = ref.current!;
     if (!dialog.open) dialog.showModal();
+    // React's autoFocus runs while the dialog is still closed, where nothing
+    // can take focus, so mark the field to start on with data-autofocus
+    // instead; without one, the browser focuses the first control.
+    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     const onCloseEvent = () => closeRef.current();
     dialog.addEventListener("close", onCloseEvent);
 
@@ -71,6 +79,7 @@ export function Modal({
     <dialog
       ref={ref}
       aria-labelledby={labelledBy}
+      style={width ? ({ "--modal-width": width } as React.CSSProperties) : undefined}
       {...({ closedby: "any" } as object)}
       className={`modal ${sheet ? "modal-sheet" : ""} text-ink ${className}`}
     >

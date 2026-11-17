@@ -248,7 +248,7 @@
    card sits in. overscroll-behavior on the dialog and its backdrop keeps a
    scroll gesture from moving the page behind, with no lock on <body>. */
 dialog.modal {
-  width: min(28rem, calc(100% - 2rem));
+  width: min(var(--modal-width, 28rem), calc(100% - 2rem));
   max-height: none;
   max-width: none;
   margin: auto;
@@ -263,7 +263,7 @@ dialog.modal.modal-sheet {
 }
 @media (min-width: 768px) {
   dialog.modal.modal-sheet {
-    width: min(28rem, calc(100% - 2rem));
+    width: min(var(--modal-width, 28rem), calc(100% - 2rem));
     margin: auto;
   }
 }
