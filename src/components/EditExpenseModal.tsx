@@ -1,6 +1,7 @@
 "use client";
 
 import { XIcon } from "@/components/Icons";
+import { Modal } from "@/components/Modal";
 import { useId, useMemo, useState, useTransition } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
 import { PAYER_MULTIPLE, SPLIT_CUSTOM, SPLIT_EQUAL } from "@/lib/constants";
@@ -118,17 +119,13 @@ export function EditExpenseModal({
   }
 
   return (
-    <div
-      className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
+    <Modal labelledBy={`${uid}-title`} onClose={onClose}>
       <form
-        onClick={(e) => e.stopPropagation()}
         onSubmit={save}
-        className="modal-pop card max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto overscroll-contain"
+        className="modal-pop card max-h-[90dvh] w-full space-y-4 overflow-y-auto overscroll-contain"
       >
         <div className="flex items-center justify-between">
-          <h3 className="section-title">Edit Expense</h3>
+          <h3 id={`${uid}-title`} className="section-title">Edit Expense</h3>
           <button
             type="button"
             onClick={onClose}
@@ -239,6 +236,6 @@ export function EditExpenseModal({
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

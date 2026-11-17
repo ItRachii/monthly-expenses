@@ -244,6 +244,32 @@
     transform 200ms var(--ease-out),
     opacity 200ms var(--ease-out);
 }
+/* The native <dialog> behind components/Modal.tsx: an unstyled box the page's
+   card sits in. overscroll-behavior on the dialog and its backdrop keeps a
+   scroll gesture from moving the page behind, with no lock on <body>. */
+dialog.modal {
+  width: min(28rem, calc(100% - 2rem));
+  max-height: none;
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+dialog.modal:modal {
+  overscroll-behavior: contain;
+}
+dialog.modal::backdrop {
+  background-color: rgb(0 0 0 / 0.6);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  transition: background-color 200ms var(--ease-out);
+}
+@starting-style {
+  dialog.modal[open]::backdrop {
+    background-color: rgb(0 0 0 / 0);
+  }
+}
 .toast-in {
   transition:
     transform 240ms var(--ease-out),
