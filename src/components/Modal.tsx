@@ -10,16 +10,19 @@ import { useLayoutEffect, useRef } from "react";
  * the window closes it too.
  *
  * Every way of closing ends in onClose; the parent then unmounts the Modal.
- * Give the window a heading and pass its id as labelledBy.
+ * Give the window a heading and pass its id as labelledBy. sheet: a bottom
+ * sheet on phones (full width, at the bottom), centred from md up.
  */
 export function Modal({
   labelledBy,
   onClose,
+  sheet = false,
   className = "",
   children,
 }: {
   labelledBy: string;
   onClose: () => void;
+  sheet?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -69,7 +72,7 @@ export function Modal({
       ref={ref}
       aria-labelledby={labelledBy}
       {...({ closedby: "any" } as object)}
-      className={`modal text-ink ${className}`}
+      className={`modal ${sheet ? "modal-sheet" : ""} text-ink ${className}`}
     >
       {children}
     </dialog>

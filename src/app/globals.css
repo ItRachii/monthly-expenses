@@ -256,6 +256,17 @@ dialog.modal {
   border: 0;
   background: transparent;
 }
+/* Phones: the sheet spans the width and sits on the bottom edge. */
+dialog.modal.modal-sheet {
+  width: 100%;
+  margin: auto 0 0;
+}
+@media (min-width: 768px) {
+  dialog.modal.modal-sheet {
+    width: min(28rem, calc(100% - 2rem));
+    margin: auto;
+  }
+}
 dialog.modal:modal {
   overscroll-behavior: contain;
 }
