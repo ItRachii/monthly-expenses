@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { XIcon } from "@/components/Icons";
+import { Modal } from "@/components/Modal";
 import { dismissIncomePromptAction, saveIncomeAction } from "@/lib/actions/income";
 
 /** Digits with an optional decimal point and up to two decimals. */
@@ -27,15 +28,6 @@ export function IncomeDialog({
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const popup = variant === "popup";
-
-  // Escape counts as "Remind me later" for the popup, Cancel otherwise.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !pending) (popup ? dismiss("later") : onClose());
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
 
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -63,14 +55,15 @@ export function IncomeDialog({
   }
 
   return (
-    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="income-title"
-        onSubmit={save}
-        className="modal-pop card w-full max-w-md space-y-4"
-      >
+    // Esc and the back gesture count as "Remind me later" for the popup,
+    // Cancel otherwise; a press outside does nothing. Ignored while saving.
+    <Modal
+      labelledBy="income-title"
+      dismissible={false}
+      keepOpen={pending}
+      onClose={() => (popup ? dismiss("later") : onClose())}
+    >
+      <form onSubmit={save} className="modal-pop card w-full space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="income-title" className="section-title">
@@ -103,7 +96,7 @@ export function IncomeDialog({
               if (isMoneyInput(e.target.value)) setIncome(e.target.value);
               setError(null);
             }}
-            autoFocus
+            data-autofocus
           />
           <p className="mt-1 text-xs text-muted">You can change it any time on your profile.</p>
         </div>
@@ -134,7 +127,7 @@ export function IncomeDialog({
           </div>
         ) : null}
       </form>
-    </div>
+    </Modal>
   );
 }
 
