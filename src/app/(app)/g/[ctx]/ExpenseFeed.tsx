@@ -10,6 +10,7 @@ import type { ExpenseDTO } from "@/lib/expenses";
 import { SETTLE_EPS, paidFor, payersOf, round2, shareFor } from "@/lib/settlementMath";
 import { formatINR, listNames } from "@/lib/format";
 import { deleteExpenseAction, deleteExpensesAction } from "@/lib/actions/expenses";
+import { Modal } from "@/components/Modal";
 import { EditExpenseModal } from "@/components/EditExpenseModal";
 import { EditReceiptModal } from "@/components/EditReceiptModal";
 import { ExportButton } from "./ExportDialog";
@@ -1021,28 +1022,15 @@ function BulkDeleteDialog({
   onClose: () => void;
 }) {
   const cancel = useRef<HTMLButtonElement>(null);
-  // The latest onClose, read when Escape is pressed: the effect runs once,
-  // so a re-render (a live refresh landing) does not move focus back to
-  // Cancel while you are on Delete.
-  const close = useRef(onClose);
-  close.current = onClose;
+  // Focus Cancel once, on open: a re-render (a live refresh landing) does not
+  // move focus back to Cancel while you are on Delete.
   useEffect(() => {
     cancel.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close.current();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
   }, []);
   return (
-    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="bulk-delete-title"
-        className="modal-pop card w-full max-w-sm space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
+    // Nothing closes it while the delete runs.
+    <Modal alert width="24rem" labelledBy="bulk-delete-title" keepOpen={pending} onClose={onClose}>
+      <div className="modal-pop card w-full space-y-4">
         {/* After a partial failure the refused rows that are gone (deleted
             elsewhere) leave nothing ticked: only the reason and Close remain. */}
         <h2 id="bulk-delete-title" className="section-title">
@@ -1069,7 +1057,7 @@ function BulkDeleteDialog({
           ) : null}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1283,8 +1271,6 @@ function ExpenseActions({
 }) {
   const [confirming, setConfirming] = useState(startConfirming);
   const first = useRef<HTMLButtonElement>(null);
-  const close = useRef(onClose);
-  close.current = onClose;
   // The finger that long-pressed to open the sheet is still down; lifting it
   // produces a click on whatever is now under it (the backdrop or an action).
   // Ignore pointer clicks until a fresh press starts inside the sheet.
@@ -1296,38 +1282,24 @@ function ExpenseActions({
     first.current?.focus();
   }, [confirming]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close.current();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   const [, m, d] = expense.date.split("-").map(Number);
   const row = "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-base transition hover:bg-ink/5 disabled:opacity-50";
 
   return (
-    <div
-      className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
-      onPointerDownCapture={() => {
-        armed.current = true;
-      }}
-      onClickCapture={(e) => {
-        if (e.detail !== 0 && !armed.current) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    // A press outside closes it only when it starts after the sheet opened,
+    // so the long-press finger lifting off the backdrop doesn't.
+    <Modal sheet width="24rem" label={`Actions for ${expense.item}`} onClose={onClose}>
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Actions for ${expense.item}`}
-        className="sheet card w-full space-y-1 rounded-b-none p-3 md:max-w-sm md:rounded-xl"
+        onPointerDownCapture={() => {
+          armed.current = true;
+        }}
+        onClickCapture={(e) => {
+          if (e.detail !== 0 && !armed.current) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        className="sheet card w-full space-y-1 rounded-b-none p-3 md:rounded-xl"
         style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
         <div className="px-3 pb-2 pt-1">
@@ -1386,7 +1358,7 @@ function ExpenseActions({
           </>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 

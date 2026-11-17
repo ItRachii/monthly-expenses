@@ -10,7 +10,8 @@ import { useLayoutEffect, useRef } from "react";
  * the window closes it too.
  *
  * Every way of closing ends in onClose; the parent then unmounts the Modal.
- * Give the window a heading and pass its id as labelledBy. sheet: a bottom
+ * Give the window a heading and pass its id as labelledBy, or, with no
+ * visible title, a label. sheet: a bottom
  * sheet on phones (full width, at the bottom), centred from md up. width: the
  * window's width where it is centred (default 28rem). Put data-autofocus on
  * the field focus should start on (React's autoFocus does not work here).
@@ -21,6 +22,7 @@ import { useLayoutEffect, useRef } from "react";
  */
 export function Modal({
   labelledBy,
+  label,
   onClose,
   sheet = false,
   width,
@@ -31,7 +33,8 @@ export function Modal({
   className = "",
   children,
 }: {
-  labelledBy: string;
+  labelledBy?: string;
+  label?: string;
   onClose: () => void;
   sheet?: boolean;
   width?: string;
@@ -59,17 +62,19 @@ export function Modal({
     dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     const onCloseEvent = () => closeRef.current();
     dialog.addEventListener("close", onCloseEvent);
-    // cancel fires for Esc, the back gesture and a closedby press outside.
+    // cancel fires for Esc and the back gesture.
     const onCancel = (e: Event) => {
       if (keepOpenRef.current) e.preventDefault();
     };
     dialog.addEventListener("cancel", onCancel);
 
-    // closedby="any" closes on a press outside; Safari has no closedby yet, so
-    // there test the pointer against the window's box. Press and release must
-    // both land outside, so a text selection dragged onto the backdrop stays.
+    // A press outside closes it: tested against the window's box here, not
+    // with closedby="any", which Safari lacks and which in Chrome also closes
+    // on the release of a press that began before the window opened (a long
+    // press that opens a sheet). Press and release must both land outside
+    // after it opened, so a text selection dragged onto the backdrop stays.
     let cleanupPointer = () => {};
-    if (dismissible && !("closedBy" in HTMLDialogElement.prototype)) {
+    if (dismissible) {
       const outside = (e: PointerEvent) => {
         const r = dialog.getBoundingClientRect();
         return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
@@ -101,10 +106,10 @@ export function Modal({
     <dialog
       ref={ref}
       aria-labelledby={labelledBy}
+      aria-label={label}
       aria-describedby={describedBy}
       role={alert ? "alertdialog" : undefined}
       style={width ? ({ "--modal-width": width } as React.CSSProperties) : undefined}
-      {...({ closedby: dismissible ? "any" : "closerequest" } as object)}
       className={`modal ${sheet ? "modal-sheet" : ""} text-ink ${className}`}
     >
       {children}
