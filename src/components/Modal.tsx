@@ -16,6 +16,8 @@ import { useLayoutEffect, useRef } from "react";
  * the field focus should start on (React's autoFocus does not work here).
  * dismissible={false}: a press outside does not close it (Esc still does).
  * keepOpen: Esc and the back gesture are ignored for now, e.g. while saving.
+ * alert: a confirmation of something destructive (role alertdialog);
+ * describedBy names the text that explains what happens.
  */
 export function Modal({
   labelledBy,
@@ -24,6 +26,8 @@ export function Modal({
   width,
   dismissible = true,
   keepOpen = false,
+  alert = false,
+  describedBy,
   className = "",
   children,
 }: {
@@ -33,6 +37,8 @@ export function Modal({
   width?: string;
   dismissible?: boolean;
   keepOpen?: boolean;
+  alert?: boolean;
+  describedBy?: string;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -95,6 +101,8 @@ export function Modal({
     <dialog
       ref={ref}
       aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
+      role={alert ? "alertdialog" : undefined}
       style={width ? ({ "--modal-width": width } as React.CSSProperties) : undefined}
       {...({ closedby: dismissible ? "any" : "closerequest" } as object)}
       className={`modal ${sheet ? "modal-sheet" : ""} text-ink ${className}`}
