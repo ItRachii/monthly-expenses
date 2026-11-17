@@ -3,6 +3,9 @@
     "DISABLE_TELEMETRY": "1"
   },
   "permissions": {
-    "deny": ["Bash(git reset --hard*)", "Read(./.env)"]
+    "deny": ["Bash(git reset --hard*)", "Read(./.env)", "Read(~/.ssh/**)"]
+  },
+  "sandbox": {
+    "enabled": true
   }
 }
