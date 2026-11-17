@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { XIcon } from "@/components/Icons";
+import { Modal } from "@/components/Modal";
 import { updateReceiptAction } from "@/lib/actions/receipts";
 
 /**
@@ -32,17 +33,11 @@ export function EditReceiptModal({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const first = useRef<HTMLInputElement>(null);
-  const close = useRef(onClose);
-  close.current = onClose;
 
+  // Start on the shop name, selected, so typing replaces it.
   useEffect(() => {
     first.current?.focus();
     first.current?.select();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close.current();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   function save(e: React.FormEvent) {
@@ -68,15 +63,8 @@ export function EditReceiptModal({
   }
 
   return (
-    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`${uid}-title`}
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={save}
-        className="modal-pop card w-full max-w-md space-y-4"
-      >
+    <Modal labelledBy={`${uid}-title`} onClose={onClose}>
+      <form onSubmit={save} className="modal-pop card w-full space-y-4">
         <div className="flex items-center justify-between">
           <h3 id={`${uid}-title`} className="section-title">
             Edit receipt
@@ -114,6 +102,6 @@ export function EditReceiptModal({
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
