@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { XIcon } from "@/components/Icons";
+import { Modal } from "@/components/Modal";
 
 // Excel export: full history, or a date range. The file itself is built
 // server-side by /api/export so no spreadsheet code ships to the browser.
@@ -19,6 +20,7 @@ export function ExportButton({
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const uid = useId();
   const [mode, setMode] = useState<"all" | "range">("all");
   // A date you picked is kept between opens; until then the range follows
   // the expenses on show, so one added after the page loaded is included.
@@ -46,19 +48,13 @@ export function ExportButton({
       </button>
 
       {open ? (
-        <div
-          className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
-          onClick={() => setOpen(false)}
-        >
+        <Modal sheet labelledBy={`${uid}-title`} onClose={() => setOpen(false)}>
           <div
-            role="dialog"
-            aria-label="Export to Excel"
-            onClick={(e) => e.stopPropagation()}
-            className="sheet card w-full space-y-4 rounded-b-none md:max-w-md md:rounded-xl"
+            className="sheet card w-full space-y-4 rounded-b-none md:rounded-xl"
             style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
           >
             <div className="flex items-center justify-between">
-              <h2 className="section-title">Export to Excel</h2>
+              <h2 id={`${uid}-title`} className="section-title">Export to Excel</h2>
               <button type="button" className="icon-btn" aria-label="Close" onClick={() => setOpen(false)}>
                 <XIcon />
               </button>
@@ -101,7 +97,7 @@ export function ExportButton({
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       ) : null}
     </>
   );
