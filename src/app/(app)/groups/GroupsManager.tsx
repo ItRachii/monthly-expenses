@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createGroupAction } from "@/lib/actions/groups";
 import { ChevronRightIcon, GroupAddIcon, XIcon } from "@/components/Icons";
 import { formatINR } from "@/lib/format";
 import { SETTLE_EPS } from "@/lib/settlementMath";
+import { Modal } from "@/components/Modal";
 
 
 export interface GroupItem {
@@ -90,6 +91,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const uid = useId();
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -106,18 +108,14 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div
-      className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
-      onClick={onClose}
-    >
+    <Modal sheet width="32rem" labelledBy={`${uid}-title`} onClose={onClose}>
       <form
-        onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
-        className="sheet card w-full space-y-4 rounded-b-none md:max-w-lg md:rounded-xl"
+        className="sheet card w-full space-y-4 rounded-b-none md:rounded-xl"
         style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between">
-          <h2 className="section-title">Create a group</h2>
+          <h2 id={`${uid}-title`} className="section-title">Create a group</h2>
           <button
             type="button"
             onClick={onClose}
@@ -128,18 +126,20 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div>
-          <label className="label">Group name *</label>
+          <label htmlFor={`${uid}-name`} className="label">Group name *</label>
           <input
+            id={`${uid}-name`}
             className="input"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Apartment Mates"
-            autoFocus
+            data-autofocus
           />
         </div>
         <div>
-          <label className="label">Description (optional)</label>
+          <label htmlFor={`${uid}-description`} className="label">Description (optional)</label>
           <textarea
+            id={`${uid}-description`}
             className="textarea"
             rows={3}
             value={description}
@@ -157,6 +157,6 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
