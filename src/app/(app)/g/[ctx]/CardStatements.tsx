@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { CardStatementView, CardView, StatementExpenseView } from "@/lib/cards";
+import { Modal } from "@/components/Modal";
 import type { LoanView } from "@/lib/loans";
 import {
   cardRemovalPreviewAction,
@@ -354,14 +355,6 @@ function RemoveDialog({
     };
   }, [loader]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !pending) onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel, pending]);
-
   const p = preview;
   const lines: string[] = p
     ? [
@@ -373,16 +366,9 @@ function RemoveDialog({
     : [];
 
   return (
-    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !pending && onCancel()}>
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="remove-title"
-        aria-describedby="remove-text"
-        className="modal-pop card max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-        data-remove={kind}
-      >
+    // Nothing closes it while the removal runs.
+    <Modal alert width="32rem" labelledBy="remove-title" describedBy="remove-text" keepOpen={pending} onClose={onCancel}>
+      <div className="modal-pop card max-h-[90dvh] w-full space-y-4 overflow-y-auto" data-remove={kind}>
         <h2 id="remove-title" className="section-title">
           {title}
         </h2>
@@ -427,11 +413,11 @@ function RemoveDialog({
           <button type="button" className="btn-danger whitespace-nowrap sm:order-last" disabled={pending || !p} onClick={onConfirm}>
             {pending ? "Removing…" : "Delete everything"}
           </button>
-          <button type="button" className="btn-secondary whitespace-nowrap" autoFocus disabled={pending} onClick={onCancel}>
+          <button type="button" className="btn-secondary whitespace-nowrap" data-autofocus disabled={pending} onClick={onCancel}>
             Cancel
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
