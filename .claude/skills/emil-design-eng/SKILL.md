@@ -1,6 +1,6 @@
 ---
 name: emil-design-eng
-description: This skill encodes Emil Kowalski's philosophy on UI polish, component design, animation decisions, and the invisible details that make software feel great.
+description: Emil Kowalski's design engineering philosophy for UI polish, component design and animation decisions. Use when building or reviewing UI components or motion and the user wants that level of craft, asks for a UI or animation review, or names Emil Kowalski.
 ---
 
 # Design Engineering
@@ -37,7 +37,7 @@ People select tools based on the overall experience, not just functionality. Goo
 
 ## Review Format (Required)
 
-When reviewing UI code, you MUST use a markdown table with Before/After columns. Do NOT use a list with "Before:" and "After:" on separate lines. Always output an actual markdown table like this:
+When reviewing UI code, present findings as a markdown table with Before, After and Why columns, like this:
 
 | Before | After | Why |
 | --- | --- | --- |
