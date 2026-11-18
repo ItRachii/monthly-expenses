@@ -138,7 +138,8 @@ export function PersonAvatar({
                 {name}
               </span>
             </span>,
-            document.body,
+            // Inside a modal dialog, into the dialog, where it can be seen.
+            ref.current?.closest("dialog") ?? document.body,
           )
         : null}
     </>

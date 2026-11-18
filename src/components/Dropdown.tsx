@@ -93,6 +93,8 @@ export function Dropdown({
       return;
     }
     if (e.key === "Escape") {
+      // Close the list only: inside a dialog, Esc would close that too.
+      e.preventDefault();
       e.stopPropagation();
       setOpen(false);
     } else if (e.key === "ArrowDown") {
@@ -152,7 +154,9 @@ export function Dropdown({
                 </li>
               ))}
             </ul>,
-            document.body,
+            // Inside a modal dialog, into the dialog: the rest of the page is
+            // inert and drawn under it.
+            button.current?.closest("dialog") ?? document.body,
           )
         : null}
     </>
