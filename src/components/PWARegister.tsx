@@ -46,7 +46,10 @@ export function PWARegister() {
       void warmOfflinePages();
     };
     const onOnline = () => void warmOfflinePages();
-    window.addEventListener("load", onLoad);
+    // The effect often runs after the page has loaded, when a load listener
+    // would never fire and the service worker would never be registered.
+    if (document.readyState === "complete") onLoad();
+    else window.addEventListener("load", onLoad);
     window.addEventListener("online", onOnline);
     return () => {
       window.removeEventListener("load", onLoad);

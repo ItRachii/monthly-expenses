@@ -39,22 +39,28 @@ function pushSupported(): boolean {
 
 /**
  * This device's push subscription, made if needed, saved for the signed-in
- * user. Only once notifications are allowed; never asks by itself.
+ * user. Only once notifications are allowed; never asks by itself. Resolves
+ * true when the server has it.
  */
-async function syncPush(vapidKey: string): Promise<void> {
-  if (!pushSupported() || Notification.permission !== "granted") return;
+async function syncPush(vapidKey: string): Promise<boolean> {
+  if (!pushSupported() || Notification.permission !== "granted") return false;
   try {
-    const reg = await navigator.serviceWorker.ready;
+    // Register here too rather than waiting on serviceWorker.ready, which
+    // never settles while no service worker is registered.
+    const reg = (await navigator.serviceWorker.getRegistration()) ?? (await navigator.serviceWorker.register("/sw.js"));
+    if (!reg.active) await navigator.serviceWorker.ready;
     const sub =
       (await reg.pushManager.getSubscription()) ??
       (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(vapidKey) }));
-    await fetch("/api/push", {
+    const res = await fetch("/api/push", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ subscription: sub.toJSON() }),
     });
+    return res.ok;
   } catch {
     // Push service unreachable or refused: the in-app list still has everything.
+    return false;
   }
 }
 
@@ -132,6 +138,7 @@ function isStandalone(): boolean {
  */
 export function NotificationsPrompt({ unreadCount, vapidKey }: { unreadCount: number; vapidKey: string | null }) {
   const [mode, setMode] = useState<"push" | "badge" | null>(null);
+  const [state, setState] = useState<"idle" | "working" | "failed">("idle");
   useEffect(() => {
     if (!("Notification" in window) || Notification.permission !== "default") return;
     if (vapidKey && pushSupported()) setMode("push");
@@ -140,26 +147,31 @@ export function NotificationsPrompt({ unreadCount, vapidKey }: { unreadCount: nu
   if (!mode) return null;
 
   async function allow() {
+    setState("working");
+    let result: NotificationPermission = "default";
     try {
-      const result = await Notification.requestPermission();
-      if (result === "granted") {
-        setBadge(unreadCount);
-        if (mode === "push" && vapidKey) await syncPush(vapidKey);
-      }
+      result = await Notification.requestPermission();
     } catch {
       // Older Safari takes a callback instead; the prompt simply does not show.
     }
+    if (result !== "granted") return setMode(null);
+    setBadge(unreadCount);
+    if (mode === "push" && vapidKey && !(await syncPush(vapidKey))) return setState("failed");
     setMode(null);
   }
 
   return (
     <div className="alert-info flex flex-wrap items-center justify-between gap-3">
       <span>
-        {mode === "push"
-          ? "Get a notification on this device when someone in your groups adds, edits or settles an expense."
-          : "Show the unread count on the app icon? Your phone asks to allow notifications for this."}
+        {state === "failed"
+          ? "Notifications are allowed, but this device could not be signed up for them. Check your connection and try again."
+          : mode === "push"
+            ? "Get a notification on this device when someone in your groups adds, edits or settles an expense."
+            : "Show the unread count on the app icon? Your phone asks to allow notifications for this."}
       </span>
-      <button className="btn-secondary" onClick={allow}>Turn on</button>
+      <button className="btn-secondary" onClick={allow} disabled={state === "working"}>
+        {state === "working" ? "Turning on…" : state === "failed" ? "Try again" : "Turn on"}
+      </button>
     </div>
   );
 }
