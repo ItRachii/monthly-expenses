@@ -16,6 +16,7 @@ import type { SaveStatementInput } from "@/lib/cards";
 import { applyKeys, lineagePayload, lineageWarnings, resolveLineage, type KnownInstalment } from "@/lib/statements/lineage";
 import { getAddSetupAction } from "@/lib/actions/expenses";
 import { CategorySelect } from "@/components/CategorySelect";
+import { Modal } from "@/components/Modal";
 import { Tabs } from "@/components/Tabs";
 import { FileDropzone } from "@/components/FileDropzone";
 import { EyeIcon, LabelIcon, ReceiptIcon, XIcon } from "@/components/Icons";
@@ -1109,22 +1110,10 @@ function NewCategoryDialog({
   const existing = findCategory(categories, name);
   const formatted = formatCategory(name);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <Modal width="24rem" labelledBy="new-category-title" onClose={onClose}>
       <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-category-title"
-        className="modal-pop card w-full max-w-sm space-y-4"
-        onClick={(e) => e.stopPropagation()}
+        className="modal-pop card w-full space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           const c = existing ?? formatted;
@@ -1141,7 +1130,7 @@ function NewCategoryDialog({
           <input
             id="new-category-name"
             className="input"
-            autoFocus
+            data-autofocus
             maxLength={50}
             placeholder="e.g. Pet care"
             value={name}
@@ -1162,7 +1151,7 @@ function NewCategoryDialog({
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -1178,24 +1167,10 @@ function UnsupportedBankDialog({
   onPickAnother: () => void;
   onReviewAnyway: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onPickAnother();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onPickAnother]);
-
   return (
-    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onPickAnother}>
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="unsupported-bank-title"
-        aria-describedby="unsupported-bank-text"
-        className="modal-pop card w-full max-w-sm space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
+    // Esc and a press outside mean "Choose another file".
+    <Modal alert width="24rem" labelledBy="unsupported-bank-title" describedBy="unsupported-bank-text" onClose={onPickAnother}>
+      <div className="modal-pop card w-full space-y-4">
         <h2 id="unsupported-bank-title" className="section-title">
           Only HDFC and ICICI statements are supported
         </h2>
@@ -1210,12 +1185,12 @@ function UnsupportedBankDialog({
               Review anyway
             </button>
           ) : null}
-          <button type="button" className="btn-primary whitespace-nowrap" autoFocus onClick={onPickAnother}>
+          <button type="button" className="btn-primary whitespace-nowrap" data-autofocus onClick={onPickAnother}>
             Choose another file
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1244,14 +1219,6 @@ function DuplicatesDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !pending) onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel, pending]);
-
   const dupRows = review.rows.filter((r) => review.dups.has(r.id));
   const fresh = review.rows.length - dupRows.length;
   const replacing = [...review.choice.values()].filter((c) => c === "replace").length;
@@ -1264,16 +1231,12 @@ function DuplicatesDialog({
       : [adding > 0 ? `Add ${adding} new` : "", replacing > 0 ? `replace ${replacing}` : ""].filter(Boolean).join(", ").replace(/^./, (c) => c.toUpperCase());
 
   return (
-    <div className="sheet-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !pending && onCancel()}>
+    // Nothing closes it while the rows are saved.
+    <Modal width="36rem" labelledBy="dups-title" describedBy="dups-text" keepOpen={pending} onClose={onCancel}>
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="dups-title"
-        aria-describedby="dups-text"
         // Phones scroll the whole popup; wider screens keep the header and
         // buttons still and scroll the list.
-        className="modal-pop card flex max-h-[90dvh] w-full max-w-xl flex-col gap-4 max-sm:overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+        className="modal-pop card flex max-h-[90dvh] w-full flex-col gap-4 max-sm:overflow-y-auto"
         data-duplicates
       >
         <div className="space-y-1">
@@ -1356,11 +1319,11 @@ function DuplicatesDialog({
           <button type="button" className="btn-secondary whitespace-nowrap" disabled={pending} onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className="btn-primary whitespace-nowrap" autoFocus disabled={pending} onClick={onConfirm}>
+          <button type="button" className="btn-primary whitespace-nowrap" data-autofocus disabled={pending} onClick={onConfirm}>
             {pending ? "Saving…" : action}
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
