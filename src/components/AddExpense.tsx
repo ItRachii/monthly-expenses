@@ -10,6 +10,7 @@ import { SPLIT_EQUAL } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 import type { AddSetup } from "@/lib/addSetup";
 import { XIcon } from "@/components/Icons";
+import { Modal } from "@/components/Modal";
 
 interface Opt {
   value: string;
@@ -155,8 +156,6 @@ function AddExpenseOverlay({
   const cache = useRef(new Map<string, AddSetup>());
   const [setup, setSetup] = useState<AddSetup | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const close = useRef(onClose);
-  close.current = onClose;
 
   // Load (or reuse) the form options for the chosen context.
   useEffect(() => {
@@ -182,42 +181,18 @@ function AddExpenseOverlay({
     };
   }, [ctx]);
 
-  // Escape closes; the page behind does not scroll while the overlay is up.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close.current();
-    };
-    window.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
   const name = contexts.find((c) => c.value === ctx)?.label ?? setup?.name ?? "";
 
   return (
-    <div
-      className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    // Order screenshots list many items with a category and price each: give them room.
+    <Modal sheet width={mode === "orders" ? "56rem" : "36rem"} labelledBy="add-expense-title" onClose={onClose}>
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Add expense"
-        className={`sheet card max-h-[92dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-b-none md:rounded-xl ${
-          // Order screenshots list many items with a category and price each: give them room.
-          mode === "orders" ? "md:max-w-4xl" : "md:max-w-xl"
-        }`}
+        className="sheet card max-h-[92dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-b-none md:rounded-xl"
         style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="section-title">Add expense</h2>
+            <h2 id="add-expense-title" className="section-title">Add expense</h2>
             {locked ? (
               <p className="truncate text-sm text-muted">
                 to <span className="font-semibold text-ink">{name}</span>
@@ -320,6 +295,6 @@ function AddExpenseOverlay({
         )}
 
       </div>
-    </div>
+    </Modal>
   );
 }
