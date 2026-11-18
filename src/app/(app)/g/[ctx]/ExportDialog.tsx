@@ -75,12 +75,12 @@ export function ExportButton({
             {mode === "range" ? (
               <div className="grid grid-cols-2 gap-3 pl-7">
                 <div>
-                  <label className="label">From</label>
-                  <input type="date" className="input" value={from} min={minDate} max={maxDate} onChange={(e) => setFrom(e.target.value)} />
+                  <label htmlFor={`${uid}-from`} className="label">From</label>
+                  <input id={`${uid}-from`} type="date" className="input" value={from} min={minDate} max={maxDate} onChange={(e) => setFrom(e.target.value)} />
                 </div>
                 <div>
-                  <label className="label">To</label>
-                  <input type="date" className="input" value={to} min={minDate} max={maxDate} onChange={(e) => setTo(e.target.value)} />
+                  <label htmlFor={`${uid}-to`} className="label">To</label>
+                  <input id={`${uid}-to`} type="date" className="input" value={to} min={minDate} max={maxDate} onChange={(e) => setTo(e.target.value)} />
                 </div>
                 {invalid ? (
                   <div className="col-span-2 alert-error">Pick a valid range: From must be on or before To.</div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   cancelInviteAction,
@@ -11,6 +11,7 @@ import {
   renameGroupAction,
 } from "@/lib/actions/groups";
 import { CheckIcon, PencilIcon, XIcon } from "@/components/Icons";
+import { Modal } from "@/components/Modal";
 import type { GroupView } from "@/lib/groupView";
 import { localISO, shortDate } from "@/lib/format";
 
@@ -197,6 +198,7 @@ function NameField({
               onKeyDown={(e) => {
                 // Escape cancels the edit without closing the overlay.
                 if (e.key === "Escape") {
+                  e.preventDefault();
                   e.stopPropagation();
                   setEditing(false);
                 }
@@ -340,8 +342,9 @@ function InviteForm({ groupId }: { groupId: string }) {
 }
 
 /**
- * Group settings on top of the group screen. Closes on an outside click, the
- * close button or Escape. Leaving or deleting the group goes back home.
+ * Group settings on top of the group screen. Closes on an outside press, the
+ * close button, Esc or the back gesture. Leaving or deleting the group goes
+ * back home.
  */
 export function GroupSettingsOverlay({
   group,
@@ -350,45 +353,20 @@ export function GroupSettingsOverlay({
   group: GroupView;
   onClose: () => void;
 }) {
-  const close = useRef(onClose);
-  close.current = onClose;
-
-  // Escape closes; the page behind does not scroll while the overlay is up.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close.current();
-    };
-    window.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
   return (
-    <div
-      className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center md:p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <Modal sheet width="36rem" labelledBy="group-settings-title" onClose={onClose}>
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Group settings"
-        className="sheet card max-h-[92dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-b-none md:max-w-xl md:rounded-xl"
+        className="sheet card max-h-[92dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-b-none md:rounded-xl"
         style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between gap-3">
-          <h2 className="section-title">Group settings</h2>
+          <h2 id="group-settings-title" className="section-title">Group settings</h2>
           <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
             <XIcon />
           </button>
         </div>
         <GroupSettingsBody group={group} />
       </div>
-    </div>
+    </Modal>
   );
 }
