@@ -1,6 +1,8 @@
 import { requireUser } from "@/lib/session";
 import { doSignOut } from "@/lib/actions/auth";
 import { ThemeSelect } from "@/components/ThemeSelect";
+import { PushToggle } from "@/components/AppBadge";
+import { vapidPublicKey } from "@/lib/push";
 import { ProfileForm } from "./ProfileForm";
 import { ownEmail } from "@/lib/users";
 import { getIncomeHistory } from "@/lib/income";
@@ -41,6 +43,8 @@ export default async function ProfilePage() {
         </div>
         <ThemeSelect />
       </section>
+
+      <PushToggle vapidKey={vapidPublicKey()} />
 
       <form action={doSignOut}>
         <button type="submit" className="btn-danger">
