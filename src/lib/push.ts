@@ -42,6 +42,11 @@ export async function savePushSubscription(userId: string, sub: { endpoint: stri
   });
 }
 
+/** Forgets a device of this user, when it turns push off. */
+export async function deletePushSubscription(userId: string, endpoint: string): Promise<void> {
+  await prisma.pushSubscription.deleteMany({ where: { userId, endpoint } });
+}
+
 /**
  * Sends one push per device of each recipient: the group, the message, and
  * their unread count for the icon badge. Best-effort, like the in-app

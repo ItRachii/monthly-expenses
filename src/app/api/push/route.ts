@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { savePushSubscription, vapidPublicKey } from "@/lib/push";
+import { deletePushSubscription, savePushSubscription, vapidPublicKey } from "@/lib/push";
 import { parseSubscription } from "@/lib/pushPayload";
 
 // POST /api/push { subscription }
 // Saves this device's push subscription for the signed-in user. The app
-// sends it whenever notifications are allowed, so a device that signs in
-// as someone else, or whose subscription the browser renewed, catches up.
+// sends it whenever notifications are on, so a device that signs in as
+// someone else, or whose subscription the browser renewed, catches up.
+// DELETE /api/push { endpoint }
+// Forgets this device: push turned off on the Profile page.
 async function signedIn(): Promise<string | null> {
   const session = await auth();
   return session?.user?.email ?? null;
@@ -20,5 +22,15 @@ export async function POST(req: Request) {
   const sub = parseSubscription(body?.subscription);
   if (!sub) return NextResponse.json({ error: "Not a push subscription." }, { status: 400 });
   await savePushSubscription(userId, sub);
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(req: Request) {
+  const userId = await signedIn();
+  if (!userId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const body = (await req.json().catch(() => null)) as { endpoint?: unknown } | null;
+  if (typeof body?.endpoint !== "string" || body.endpoint.length > 2000)
+    return NextResponse.json({ error: "No endpoint." }, { status: 400 });
+  await deletePushSubscription(userId, body.endpoint);
   return NextResponse.json({ ok: true });
 }

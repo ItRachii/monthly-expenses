@@ -76,8 +76,9 @@ export function AppBadge({ unreadCount, vapidKey }: { unreadCount: number; vapid
     if (badgeSupported()) setBadge(unreadCount);
   }, [unreadCount]);
 
+  // Unless push was turned off on this device.
   useEffect(() => {
-    if (vapidKey) void syncPush(vapidKey);
+    if (vapidKey && !pushTurnedOff()) void syncPush(vapidKey);
   }, [vapidKey]);
 
   useEffect(() => {
@@ -123,55 +124,145 @@ export function ClearAppBadge() {
   return null;
 }
 
-function isStandalone(): boolean {
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
+// "Off" is remembered on the device, so the app does not sign it up again by
+// itself. Push is on by default once notifications are allowed.
+const OFF_KEY = "ledger.pushOff";
+const pushTurnedOff = () => {
+  try {
+    return window.localStorage.getItem(OFF_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+const rememberPushOff = (off: boolean) => {
+  try {
+    if (off) window.localStorage.setItem(OFF_KEY, "1");
+    else window.localStorage.removeItem(OFF_KEY);
+  } catch {
+    // Storage unavailable: the app may sign this device up again next time.
+  }
+};
+
+/** This device's subscription, if it has one. */
+async function currentSubscription(): Promise<PushSubscription | null> {
+  if (!pushSupported()) return null;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return (await reg?.pushManager.getSubscription()) ?? null;
+  } catch {
+    return null;
+  }
 }
 
-/**
- * Offers to turn notifications on for this device, until it has been asked.
- * With push set up: group activity arrives as a phone notification and keeps
- * the icon badge current. Without it, where the badge needs notification
- * permission (iOS Home Screen apps), it offers just the badge.
- */
-export function NotificationsPrompt({ unreadCount, vapidKey }: { unreadCount: number; vapidKey: string | null }) {
-  const [mode, setMode] = useState<"push" | "badge" | null>(null);
-  const [state, setState] = useState<"idle" | "working" | "failed">("idle");
-  useEffect(() => {
-    if (!("Notification" in window) || Notification.permission !== "default") return;
-    if (vapidKey && pushSupported()) setMode("push");
-    else if (badgeSupported() && isStandalone()) setMode("badge");
-  }, [vapidKey]);
-  if (!mode) return null;
+type PushState = "loading" | "on" | "off" | "blocked" | "unsupported" | "unavailable";
 
-  async function allow() {
-    setState("working");
-    let result: NotificationPermission = "default";
-    try {
-      result = await Notification.requestPermission();
-    } catch {
-      // Older Safari takes a callback instead; the prompt simply does not show.
+/**
+ * The Profile page's switch for push notifications on this device. On asks
+ * the phone for permission if needed and signs the device up; off removes it
+ * here and on the server. Blocked in the phone's settings, it says where to
+ * change that.
+ */
+export function PushToggle({ vapidKey }: { vapidKey: string | null }) {
+  const [state, setState] = useState<PushState>("loading");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      let next: PushState;
+      if (!vapidKey) next = "unavailable";
+      else if (!pushSupported()) next = "unsupported";
+      else if (Notification.permission === "denied") next = "blocked";
+      // Allowed and not turned off: the app signs this device up as it opens,
+      // so finish that here rather than read a subscription not made yet.
+      else next = Notification.permission === "granted" && !pushTurnedOff() && (await syncPush(vapidKey)) ? "on" : "off";
+      if (live) setState(next);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [vapidKey]);
+
+  async function turnOn() {
+    if (!vapidKey) return;
+    let permission = Notification.permission;
+    if (permission === "default") {
+      try {
+        permission = await Notification.requestPermission();
+      } catch {
+        // Older Safari takes a callback instead; treated as not allowed.
+      }
     }
-    if (result !== "granted") return setMode(null);
-    setBadge(unreadCount);
-    if (mode === "push" && vapidKey && !(await syncPush(vapidKey))) return setState("failed");
-    setMode(null);
+    if (permission === "denied") return setState("blocked");
+    if (permission !== "granted") return;
+    rememberPushOff(false);
+    if (await syncPush(vapidKey)) setState("on");
+    else setError("This device could not be signed up for notifications. Check your connection and try again.");
   }
 
+  async function turnOff() {
+    rememberPushOff(true);
+    const sub = await currentSubscription();
+    if (sub) {
+      await fetch("/api/push", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      }).catch(() => {});
+      await sub.unsubscribe().catch(() => false);
+    }
+    setState("off");
+  }
+
+  async function toggle() {
+    setBusy(true);
+    setError(null);
+    try {
+      await (state === "on" ? turnOff() : turnOn());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const on = state === "on";
+  const usable = state === "on" || state === "off";
+  const note =
+    state === "blocked"
+      ? "Notifications are blocked for this app. Allow them in your phone's settings for this app, then come back here."
+      : state === "unsupported"
+        ? "This browser can't receive notifications. On iPhone, add the app to your Home Screen first."
+        : state === "unavailable"
+          ? "Notifications aren't set up on this server."
+          : "When someone in your groups adds, edits or settles an expense. Applies to this device only.";
+
   return (
-    <div className="alert-info flex flex-wrap items-center justify-between gap-3">
-      <span>
-        {state === "failed"
-          ? "Notifications are allowed, but this device could not be signed up for them. Check your connection and try again."
-          : mode === "push"
-            ? "Get a notification on this device when someone in your groups adds, edits or settles an expense."
-            : "Show the unread count on the app icon? Your phone asks to allow notifications for this."}
-      </span>
-      <button className="btn-secondary" onClick={allow} disabled={state === "working"}>
-        {state === "working" ? "Turning on…" : state === "failed" ? "Try again" : "Turn on"}
-      </button>
-    </div>
+    <section className="card space-y-2">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 id="push-toggle-label" className="section-title">
+            Push notifications
+          </h2>
+          <p className="text-sm text-muted">{note}</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-labelledby="push-toggle-label"
+          disabled={!usable || busy}
+          onClick={toggle}
+          className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:opacity-50 ${on ? "bg-primary" : "bg-ink/20"}`}
+        >
+          <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
+          <span className="sr-only">{on ? "On" : "Off"}</span>
+        </button>
+      </div>
+      {error ? (
+        <div className="alert-error" role="alert">
+          {error}
+        </div>
+      ) : null}
+    </section>
   );
 }
