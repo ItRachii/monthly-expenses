@@ -367,8 +367,8 @@ function RemoveDialog({
 
   return (
     // Nothing closes it while the removal runs.
-    <Modal alert width="32rem" labelledBy="remove-title" describedBy="remove-text" keepOpen={pending} onClose={onCancel}>
-      <div className="modal-pop card max-h-[90dvh] w-full space-y-4 overflow-y-auto" data-remove={kind}>
+    <Modal alert sheet width="32rem" labelledBy="remove-title" describedBy="remove-text" keepOpen={pending} onClose={onCancel}>
+      <div className="sheet card max-h-[90dvh] w-full space-y-4 overflow-y-auto rounded-b-none pb-[max(1.25rem,env(safe-area-inset-bottom))] md:rounded-xl md:pb-5" data-remove={kind}>
         <h2 id="remove-title" className="section-title">
           {title}
         </h2>
