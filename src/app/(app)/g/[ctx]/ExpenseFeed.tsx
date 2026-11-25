@@ -1029,8 +1029,8 @@ function BulkDeleteDialog({
   }, []);
   return (
     // Nothing closes it while the delete runs.
-    <Modal alert width="24rem" labelledBy="bulk-delete-title" keepOpen={pending} onClose={onClose}>
-      <div className="modal-pop card w-full space-y-4">
+    <Modal alert sheet width="24rem" labelledBy="bulk-delete-title" keepOpen={pending} onClose={onClose}>
+      <div className="sheet card w-full space-y-4 rounded-b-none pb-[max(1.25rem,env(safe-area-inset-bottom))] md:rounded-xl md:pb-5">
         {/* After a partial failure the refused rows that are gone (deleted
             elsewhere) leave nothing ticked: only the reason and Close remain. */}
         <h2 id="bulk-delete-title" className="section-title">
