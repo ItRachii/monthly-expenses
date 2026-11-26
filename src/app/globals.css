@@ -26,6 +26,18 @@
   --c-positive: 52 211 153;
   --c-negative: 248 113 113;
   --c-warning: 253 230 138;
+  /* Chart categories (Charts.tsx): the Tide / Shell / Midnight / Sunset /
+     Mist palette, plus Clay and Sea stepped from it. Tonal by design, so
+     categories part mostly by lightness. Dark mode lifts each family so it
+     reads on the #1C1F26 card. Checked with validate_palette.js per theme. */
+  --cat-1: #688d99;
+  --cat-2: #cea98b;
+  --cat-3: #5d7185;
+  --cat-4: #b06d48;
+  --cat-5: #94a9ae;
+  --cat-6: #89543c;
+  --cat-7: #afcad0;
+  --cat-other: #5d6470;
   color-scheme: dark;
 }
 [data-theme="light"] {
@@ -39,6 +51,14 @@
   --c-positive: 4 120 87;
   --c-negative: 185 28 28;
   --c-warning: 146 64 14;
+  --cat-1: #395159;
+  --cat-2: #cba688;
+  --cat-3: #23303d;
+  --cat-4: #935430;
+  --cat-5: #90a3a7;
+  --cat-6: #b66946;
+  --cat-7: #57828d;
+  --cat-other: #c4c9cd;
   color-scheme: light;
 }
 
@@ -313,6 +333,28 @@ dialog.modal::backdrop {
     opacity 150ms var(--ease-out),
     background-color 700ms;
 }
+/* Expense list rows (ExpenseFeed): each arrives a beat after the one above
+   (--enter-delay, set per row), and a row a filter drops fades out first
+   (useRowPresence). Doubled class to beat the rows' transition utilities. */
+.row-enter.row-enter {
+  transition:
+    opacity 220ms var(--ease-out) var(--enter-delay, 0ms),
+    transform 220ms var(--ease-out) var(--enter-delay, 0ms),
+    background-color 700ms;
+}
+.row-enter.row-out {
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 150ms ease-out,
+    background-color 700ms;
+}
+@starting-style {
+  .row-enter.row-enter {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
 @starting-style {
   .expand-in {
     grid-template-rows: 0fr;
@@ -369,6 +411,17 @@ dialog.modal::backdrop {
     .menu-pop {
       transform: none;
       opacity: 0;
+    }
+  }
+  /* Rows fade in together, with no rise and no stagger. */
+  .row-enter.row-enter {
+    transition:
+      opacity 150ms ease-out,
+      background-color 700ms;
+  }
+  @starting-style {
+    .row-enter.row-enter {
+      transform: none;
     }
   }
 }
