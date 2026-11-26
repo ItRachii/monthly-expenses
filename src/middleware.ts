@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import { authConfig } from "@/auth.config";
+import { safeNextPath } from "@/lib/contacts";
 
 // Edge-safe instance: no database access here.
 const { auth } = NextAuth(authConfig);
@@ -9,7 +10,12 @@ const { auth } = NextAuth(authConfig);
 // rejects unauthenticated requests at the edge before any server code runs.
 export default auth((req) => {
   if (!req.auth?.user && req.nextUrl.pathname !== "/login") {
-    return NextResponse.redirect(new URL("/login", req.nextUrl));
+    const login = new URL("/login", req.nextUrl);
+    login.search = "";
+    // Someone opening a join link comes back to it after signing in.
+    const next = safeNextPath(req.nextUrl.pathname);
+    if (next) login.searchParams.set("next", next);
+    return NextResponse.redirect(login);
   }
   return NextResponse.next();
 });

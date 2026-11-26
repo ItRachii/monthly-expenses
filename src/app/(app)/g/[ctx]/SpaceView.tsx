@@ -5,7 +5,7 @@ import { BalanceHeadline, BalanceLines } from "@/components/BalanceSummary";
 import { AddExpenseButton } from "@/components/AddExpense";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ExpenseDTO } from "@/lib/expenses";
 import type { SettlementDTO } from "@/lib/settlements";
 import type { BalanceLine } from "@/lib/balances";
@@ -44,6 +44,7 @@ export function SpaceView({
   heroLines,
   initialTab,
   focus,
+  contacts,
   rows,
   settlements,
   nameMap,
@@ -69,6 +70,8 @@ export function SpaceView({
   initialTab: SpaceTab;
   /** Opened from a notification: the record to land on. */
   focus: NotificationFocus | null;
+  /** Back from Google's contacts permission screen: reopen group settings. */
+  contacts: "google" | "denied" | null;
   rows: ExpenseDTO[];
   settlements: SettlementDTO[];
   nameMap: Record<string, string>;
@@ -107,7 +110,11 @@ export function SpaceView({
   // tabs) without reloading the page.
   useLiveRefresh(ctx);
   const [linesOpen, setLinesOpen] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(contacts !== null);
+  // Drop ?contacts= from the address, so a reload does not reopen settings.
+  useEffect(() => {
+    if (contacts !== null) window.history.replaceState(null, "", window.location.pathname);
+  }, [contacts]);
 
   return (
     <PeopleProvider names={nameMap} images={imageMap}>
@@ -209,7 +216,7 @@ export function SpaceView({
         ) : null}
 
         {settings && settingsOpen ? (
-          <GroupSettingsOverlay group={settings} onClose={() => setSettingsOpen(false)} />
+          <GroupSettingsOverlay group={settings} contacts={contacts} onClose={() => setSettingsOpen(false)} />
         ) : null}
       </div>
     </PeopleProvider>

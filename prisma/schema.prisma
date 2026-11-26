@@ -147,6 +147,7 @@ model Group {
   settlements   Settlement[]
   notifications Notification[]
   nameHistory   GroupNameHistory[]
+  joinLinks     GroupJoinLink[]
 
   @@map("groups")
 }
@@ -198,6 +199,25 @@ model GroupInvite {
   group           Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@map("group_invites")
+}
+
+// A link that lets whoever opens it join the group (db/2026_11_group_join_links.sql).
+// Only the hash of its token is stored.
+model GroupJoinLink {
+  id        Int       @id @default(autoincrement())
+  groupId   String    @map("group_id")
+  tokenHash String    @unique(map: "group_join_links_token_hash_key") @map("token_hash")
+  createdBy String    @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  maxUses   Int       @map("max_uses")
+  useCount  Int       @default(0) @map("use_count")
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId], map: "group_join_links_group_idx")
+  @@index([createdBy, createdAt], map: "group_join_links_creator_idx")
+  @@map("group_join_links")
 }
 
 model Notification {

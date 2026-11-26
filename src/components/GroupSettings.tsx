@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import {
   cancelInviteAction,
   deleteGroupAction,
-  inviteAction,
   leaveGroupAction,
   removeMemberAction,
   renameGroupAction,
+  revokeJoinLinkAction,
 } from "@/lib/actions/groups";
+import { AddPeople } from "@/components/AddPeople";
 import { CheckIcon, PencilIcon, XIcon } from "@/components/Icons";
 import { Modal } from "@/components/Modal";
 import type { GroupView } from "@/lib/groupView";
@@ -18,11 +19,13 @@ import { localISO, shortDate } from "@/lib/format";
 // Group settings, opened from the gear on a group screen.
 
 /** Rename, name history, members, invites and leave/delete for one group. */
-function GroupSettingsBody({ group }: { group: GroupView }) {
+function GroupSettingsBody({ group, contacts }: { group: GroupView; contacts: "google" | "denied" | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The contact list takes over the sheet while it is open.
+  const [picking, setPicking] = useState(false);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -33,116 +36,155 @@ function GroupSettingsBody({ group }: { group: GroupView }) {
     });
   }
 
+  // AddPeople keeps its place in the tree while the sections around it come
+  // and go, so its contact list and link survive the switch.
   return (
     <div className="space-y-5">
-      {error ? <div className="alert-error">{error}</div> : null}
-      {/* Name (editable by admins) + name history */}
-      <NameField
-        groupId={group.id}
-        current={group.name}
-        description={group.description}
-        canEdit={group.isAdmin}
-      />
-      {group.nameHistory.length > 1 ? <NameHistory rows={group.nameHistory} /> : null}
+      {picking ? null : (
+        <>
+          {error ? <div className="alert-error">{error}</div> : null}
+          {/* Name (editable by admins) + name history */}
+          <NameField
+            groupId={group.id}
+            current={group.name}
+            description={group.description}
+            canEdit={group.isAdmin}
+          />
+          {group.nameHistory.length > 1 ? <NameHistory rows={group.nameHistory} /> : null}
 
-      {/* Members */}
-      <div>
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-          Members
-        </h3>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Role</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {group.members.map((m) => (
-              <tr key={m.key}>
-                <td>
-                  {m.displayName}
-                  {m.isSelf ? <span className="text-muted"> (you)</span> : null}
-                </td>
-                <td className="capitalize">{m.role}</td>
-                <td className="text-right">
-                  {group.isAdmin && !m.isSelf ? (
-                    <button
-                      className="text-negative hover:text-negative"
-                      disabled={pending}
-                      onClick={() => run(() => removeMemberAction(group.id, m.key))}
-                    >
-                      Remove
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Invite */}
-      <InviteForm groupId={group.id} />
-
-      {/* Pending invites (admin) */}
-      {group.isAdmin && group.pendingInvites.length > 0 ? (
-        <div>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-            Pending Invites ({group.pendingInvites.length})
-          </h3>
-          <div className="space-y-1">
-            {group.pendingInvites.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between text-sm">
-                <span>{inv.invitedEmail}</span>
-                <button
-                  className="btn-secondary px-3 py-1 text-xs"
-                  disabled={pending}
-                  onClick={() => run(() => cancelInviteAction(group.id, inv.id))}
-                >
-                  Cancel
-                </button>
-              </div>
-            ))}
+          {/* Members */}
+          <div>
+            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+              Members
+            </h3>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Role</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.members.map((m) => (
+                  <tr key={m.key}>
+                    <td>
+                      {m.displayName}
+                      {m.isSelf ? <span className="text-muted"> (you)</span> : null}
+                    </td>
+                    <td className="capitalize">{m.role}</td>
+                    <td className="text-right">
+                      {group.isAdmin && !m.isSelf ? (
+                        <button
+                          className="text-negative hover:text-negative"
+                          disabled={pending}
+                          onClick={() => run(() => removeMemberAction(group.id, m.key))}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-      ) : null}
 
-      {/* Danger zone */}
-      <div className="border-t border-ink/10 pt-4">
-        {!group.isCreator ? (
-          <button
-            className="btn-danger"
-            disabled={pending}
-            onClick={() => run(() => leaveGroupAction(group.id))}
-          >
-            Leave Group
-          </button>
-        ) : !confirmDelete ? (
-          <button className="btn-danger" onClick={() => setConfirmDelete(true)}>
-            Delete Group
-          </button>
-        ) : (
-          <div className="space-y-2">
-            <div className="alert-warning">
-              Are you sure? All group expenses and invites will be lost.
+        </>
+      )}
+
+      {/* Add by email, from contacts, or with a join link */}
+      <AddPeople groupId={group.id} groupName={group.name} initial={contacts} onPickingChange={setPicking} />
+
+      {picking ? null : (
+        <>
+          {/* Pending invites (admin) */}
+          {group.isAdmin && group.pendingInvites.length > 0 ? (
+            <div>
+              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+                Pending Invites ({group.pendingInvites.length})
+              </h3>
+              <div className="space-y-1">
+                {group.pendingInvites.map((inv) => (
+                  <div key={inv.id} className="flex items-center justify-between text-sm">
+                    <span>{inv.invitedEmail}</span>
+                    <button
+                      className="btn-secondary px-3 py-1 text-xs"
+                      disabled={pending}
+                      onClick={() => run(() => cancelInviteAction(group.id, inv.id))}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-2">
+          ) : null}
+
+          {/* Join links that still work (admin) */}
+          {group.isAdmin && group.joinLinks.length > 0 ? (
+            <div>
+              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+                Join Links ({group.joinLinks.length})
+              </h3>
+              <div className="space-y-1">
+                {group.joinLinks.map((l) => (
+                  <div key={l.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0">
+                      Shared by {l.sharedBy}
+                      <span className="block text-xs text-muted">
+                        {l.useCount} of {l.maxUses} joined, works until {formatDate(l.expiresAt)}
+                      </span>
+                    </span>
+                    <button
+                      className="btn-secondary shrink-0 px-3 py-1 text-xs"
+                      disabled={pending}
+                      onClick={() => run(() => revokeJoinLinkAction(group.id, l.id))}
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Danger zone */}
+          <div className="border-t border-ink/10 pt-4">
+            {!group.isCreator ? (
               <button
                 className="btn-danger"
                 disabled={pending}
-                onClick={() => run(() => deleteGroupAction(group.id))}
+                onClick={() => run(() => leaveGroupAction(group.id))}
               >
-                Yes, delete permanently
+                Leave Group
               </button>
-              <button className="btn-secondary" onClick={() => setConfirmDelete(false)}>
-                Cancel
+            ) : !confirmDelete ? (
+              <button className="btn-danger" onClick={() => setConfirmDelete(true)}>
+                Delete Group
               </button>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="alert-warning">
+                  Are you sure? All group expenses and invites will be lost.
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="btn-danger"
+                    disabled={pending}
+                    onClick={() => run(() => deleteGroupAction(group.id))}
+                  >
+                    Yes, delete permanently
+                  </button>
+                  <button className="btn-secondary" onClick={() => setConfirmDelete(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -297,50 +339,6 @@ function NameHistory({
   );
 }
 
-function InviteForm({ groupId }: { groupId: string }) {
-  const router = useRouter();
-  const [value, setValue] = useState("");
-  const [message, setMessage] = useState<{ level: string; text: string } | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      const res = await inviteAction(groupId, value);
-      setMessage({ level: res.level ?? "error", text: res.message ?? "" });
-      if (res.ok && res.level === "success") setValue("");
-      router.refresh();
-    });
-  }
-
-  const cls =
-    message?.level === "success"
-      ? "alert-success"
-      : message?.level === "warning"
-        ? "alert-warning"
-        : "alert-error";
-
-  return (
-    <form onSubmit={submit} className="space-y-2">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">
-        Invite by Email
-      </h3>
-      {message ? <div className={cls}>{message.text}</div> : null}
-      <div className="flex gap-2">
-        <input
-          className="input"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="friend@email.com"
-        />
-        <button type="submit" className="btn-primary shrink-0" disabled={pending}>
-          Send Invite
-        </button>
-      </div>
-    </form>
-  );
-}
-
 /**
  * Group settings on top of the group screen. Closes on an outside press, the
  * close button, Esc or the back gesture. Leaving or deleting the group goes
@@ -348,9 +346,12 @@ function InviteForm({ groupId }: { groupId: string }) {
  */
 export function GroupSettingsOverlay({
   group,
+  contacts = null,
   onClose,
 }: {
   group: GroupView;
+  /** Back from Google's permission screen: open its contacts, or say they were not shared. */
+  contacts?: "google" | "denied" | null;
   onClose: () => void;
 }) {
   return (
@@ -365,7 +366,7 @@ export function GroupSettingsOverlay({
             <XIcon />
           </button>
         </div>
-        <GroupSettingsBody group={group} />
+        <GroupSettingsBody group={group} contacts={contacts} />
       </div>
     </Modal>
   );

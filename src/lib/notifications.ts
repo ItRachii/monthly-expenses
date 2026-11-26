@@ -9,7 +9,9 @@ export type NotificationType =
   | "expense_updated"
   | "expense_deleted"
   | "settlement_recorded"
-  | "group_renamed";
+  | "group_renamed"
+  | "member_added"
+  | "member_joined";
 
 /** A deleted expense as it was, since there is no row left to show. */
 export interface DeletedExpense {
