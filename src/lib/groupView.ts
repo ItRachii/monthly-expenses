@@ -4,6 +4,7 @@ import {
   getGroupNameHistory,
   type GroupDTO,
 } from "./groups";
+import { getOpenJoinLinks, type JoinLinkDTO } from "./joinLinks";
 import { safeLabel, wireKey } from "./wire";
 
 /** Everything the group settings UI needs. Emails of members never leave the server. */
@@ -17,6 +18,8 @@ export interface GroupView {
   members: { key: string; displayName: string; role: string; isSelf: boolean }[];
   /** Invitees by masked address only. */
   pendingInvites: { id: number; invitedEmail: string }[];
+  /** Join links that still work, for admins to see and revoke. */
+  joinLinks: JoinLinkDTO[];
   /** SCD Type 2 name history, newest first. validTo is null for the current name. */
   nameHistory: { name: string; validFrom: string; validTo: string | null }[];
 }
@@ -24,10 +27,11 @@ export interface GroupView {
 /** Builds the settings view of one group for the signed-in user. */
 export async function buildGroupView(g: GroupDTO, userEmail: string): Promise<GroupView> {
   const isAdmin = g.role === "admin";
-  const [members, nameHistory, invites] = await Promise.all([
+  const [members, nameHistory, invites, joinLinks] = await Promise.all([
     getGroupMembers(g.id),
     getGroupNameHistory(g.id),
     isAdmin ? getGroupInvites(g.id) : Promise.resolve([]),
+    isAdmin ? getOpenJoinLinks(g.id) : Promise.resolve([]),
   ]);
   return {
     id: g.id,
@@ -46,6 +50,7 @@ export async function buildGroupView(g: GroupDTO, userEmail: string): Promise<Gr
     pendingInvites: invites
       .filter((i) => i.status === "pending")
       .map((i) => ({ id: i.id, invitedEmail: i.invitedEmailMasked })),
+    joinLinks,
     nameHistory,
   };
 }

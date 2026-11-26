@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { doSignIn } from "@/lib/actions/auth";
 import { WalletIcon } from "@/components/Icons";
 import { ClearAppBadge } from "@/components/AppBadge";
+import { safeNextPath } from "@/lib/contacts";
 
 export const dynamic = "force-dynamic";
 
@@ -41,9 +42,15 @@ function GoogleIcon() {
   );
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Sent here while opening a join link: go on to it once signed in.
+  const next = safeNextPath((await searchParams).next);
   const session = await auth();
-  if (session?.user) redirect("/");
+  if (session?.user) redirect(next ?? "/");
 
   return (
     // The sign-in artwork is drawn for a dark page, so this screen keeps the
@@ -64,11 +71,13 @@ export default async function LoginPage() {
           <div className="space-y-2">
             <h1 className="text-3xl font-bold text-ink">Welcome Back!</h1>
             <p className="text-sm text-muted">
-              Sign in with Google to continue to your dashboard.
+              {next
+                ? "Sign in with Google to join the group you were invited to."
+                : "Sign in with Google to continue to your dashboard."}
             </p>
           </div>
 
-          <form action={doSignIn}>
+          <form action={doSignIn.bind(null, next)}>
             <button
               type="submit"
               className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-white px-4 py-3.5 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-white/90"

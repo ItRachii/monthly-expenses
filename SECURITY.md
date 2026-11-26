@@ -85,6 +85,31 @@ Numeric ids are integer-checked before any DB lookup.
   used as a spam relay; invite email HTML-escapes all user input (group name,
   inviter label) to block HTML/phishing injection and strips CRLF from the
   subject.
+- The same cap counts every add, invite and join link a member makes, so it
+  also bounds how many people one member can put into groups in an hour.
+- **Adding by address** (`addOrInvite` in `src/lib/groups.ts`): someone who
+  already has an account joins at once, with no accept step, and is told by
+  notification and email how to leave. Someone who declined that group before
+  is only ever invited again. Deliberate trade-off: any member can add a
+  registered person, and the Add / Invite labels in the contact list tell a
+  member which of the addresses they supply have an account (up to 1000 per
+  request, members only).
+- **Contacts** (`src/lib/contacts.ts`, `src/lib/googleContacts.ts`): only
+  names, email addresses and photos are read, never phone numbers. Google
+  Contacts is asked for separately from sign-in (`contacts.readonly`, with
+  state and PKCE, no refresh token); the access token lives about an hour in
+  an AES-256-GCM encrypted, httpOnly cookie bound to the user id, and the
+  People API is called from the server. Contacts are shown to their owner
+  and neither stored nor logged. The phone contact picker runs in the
+  browser and sends only the picked addresses.
+- **Join links** (`src/lib/joinLinks.ts`): a member can share a link that
+  lets whoever opens it and signs in join the group, so treat it like a key:
+  anyone it is forwarded to can join and see the group's expenses. Limits: 7
+  days, 25 joins, revocable by an admin, one notice to the group per join,
+  and joining needs a press (a chat app previewing the link joins nobody).
+  Only the SHA-256 of the token is stored. Every dead link (unknown, expired,
+  full, revoked, deleted group) gets the same answer. After sign-in the app
+  only ever continues to a `/join/<token>` path, never to another address.
 - `X-Frame-Options: DENY` + `frame-ancestors 'none'` (no clickjacking);
   `X-Content-Type-Options: nosniff`; `X-Powered-By` removed.
 

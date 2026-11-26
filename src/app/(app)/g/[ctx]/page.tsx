@@ -131,6 +131,7 @@ export default async function SpacePage({
       heroLines={heroLines}
       initialTab={initialTab}
       focus={focus}
+      contacts={r.isPersonal ? null : sp.contacts === "1" ? "google" : sp.contacts === "denied" ? "denied" : null}
       rows={rows}
       settlements={settlements}
       nameMap={r.wire.nameMap}
