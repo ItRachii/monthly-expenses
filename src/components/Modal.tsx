@@ -96,7 +96,14 @@ export function Modal({
       dialog.removeEventListener("close", onCloseEvent);
       dialog.removeEventListener("cancel", onCancel);
       cleanupPointer();
-      if (dialog.open) dialog.close();
+      if (dialog.open) {
+        // close() queues its close event instead of firing it now. In
+        // development React StrictMode runs this effect, its cleanup and the
+        // effect again, so that event would arrive at the second run's
+        // listener and look like the user closing. Swallow that one event.
+        dialog.addEventListener("close", (e) => e.stopImmediatePropagation(), { once: true, capture: true });
+        dialog.close();
+      }
     };
     // dismissible is read once: a window doesn't change how it closes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
