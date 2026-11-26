@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { NotificationDTO } from "@/lib/notifications";
-import { AddCircleIcon, PaymentsIcon, PencilIcon, TrashIcon } from "@/components/Icons";
+import { AddCircleIcon, GroupAddIcon, PaymentsIcon, PencilIcon, TrashIcon } from "@/components/Icons";
 import { NotificationsIcon } from "@/components/NavIcons";
 import { markAllReadAction, markReadAction } from "@/lib/actions/notifications";
 
@@ -14,6 +14,8 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   expense_deleted: TrashIcon,
   settlement_recorded: PaymentsIcon,
   group_renamed: PencilIcon,
+  member_added: GroupAddIcon,
+  member_joined: GroupAddIcon,
 };
 
 function TypeIcon({ type }: { type: string }) {

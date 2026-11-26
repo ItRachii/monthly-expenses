@@ -5,6 +5,7 @@ import { displayNameFor } from "./users";
 import { UNNAMED_MEMBER, maskEmail } from "./pii";
 import { emailId } from "./piiCrypto";
 import { decryptEmail, encryptEmail, maskedEmailsFor } from "./piiStore";
+import type { ContactStatus } from "./contacts";
 
 /** Masked address of an invitee, from the invite's encrypted copy. */
 function maskedInvitee(enc: string | null): string {
@@ -56,7 +57,7 @@ export interface GroupNameHistoryDTO {
   validTo: string | null;
 }
 
-export type InviteResult = "ok" | "already_member" | "already_invited";
+export type AddResult = "added" | "invited" | "already_member" | "already_invited";
 
 export async function createGroup(
   name: string,
@@ -288,7 +289,7 @@ export async function getGroupParticipants(groupId: string): Promise<MemberDTO[]
  * Holds a group's member list until the transaction ends, for changes that
  * check it first: joining, leaving, inviting.
  */
-async function lockMembers(tx: Prisma.TransactionClient, groupId: string): Promise<void> {
+export async function lockMembers(tx: Prisma.TransactionClient, groupId: string): Promise<void> {
   await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`members:${groupId}`}))`;
 }
 
@@ -318,40 +319,77 @@ export async function deleteGroup(groupId: string): Promise<void> {
   await prisma.group.update({ where: { id: groupId }, data: { active: 0 } });
 }
 
-/** `invitedEmail` is the typed address; `invitedBy` a user id. */
-export async function sendInvite(
-  groupId: string,
-  invitedEmail: string,
-  invitedBy: string,
-): Promise<InviteResult> {
-  const email = await emailId(invitedEmail);
+/**
+ * Brings someone into a group by address. Someone who already has an account
+ * joins at once; anyone else gets an invite to accept after signing up.
+ * Someone who declined this group before is asked again, never put back in.
+ * `address` is the typed address; `by` a user id.
+ */
+export async function addOrInvite(groupId: string, address: string, by: string): Promise<AddResult> {
+  const email = await emailId(address);
 
-  // Under the group's lock: two admins inviting the same person at once
-  // must not both find no invite and create two.
+  // Under the group's lock: two members adding the same person at once must
+  // not both find nothing and create two invites or two memberships.
   return prisma.$transaction(async (tx) => {
     await lockMembers(tx, groupId);
-    const existingMember = await tx.groupMember.findFirst({
-      where: { groupId, email },
-    });
-    if (existingMember) return "already_member";
+    if (await tx.groupMember.findFirst({ where: { groupId, email } })) return "already_member";
 
-    const existingInvite = await tx.groupInvite.findFirst({
-      where: { groupId, invitedEmail: email, status: "pending" },
+    const invites = await tx.groupInvite.findMany({
+      where: { groupId, invitedEmail: email, status: { in: ["pending", "declined"] } },
+      select: { status: true },
     });
-    if (existingInvite) return "already_invited";
+    if (invites.some((i) => i.status === "pending")) return "already_invited";
 
+    const now = new Date();
+    const registered = (await tx.appUser.findUnique({ where: { email }, select: { email: true } })) !== null;
+    const direct = registered && invites.length === 0;
+    // Kept for direct adds too: the record of who brought whom in, and what
+    // the hourly cap counts.
     await tx.groupInvite.create({
       data: {
         groupId,
         invitedEmail: email,
-        invitedEmailEnc: encryptEmail(invitedEmail),
-        invitedBy,
-        status: "pending",
-        createdAt: new Date(),
+        invitedEmailEnc: encryptEmail(address),
+        invitedBy: by,
+        status: direct ? "accepted" : "pending",
+        createdAt: now,
+        respondedAt: direct ? now : null,
       },
     });
-    return "ok";
+    if (!direct) return "invited";
+    await joinGroup(tx, groupId, email, now);
+    return "added";
   });
+}
+
+/**
+ * Adds the membership row. Call under lockMembers, after checking the person
+ * is not a member. Joining a group nobody manages (its last admin left while
+ * only invites were open) makes you its admin, so someone can.
+ */
+export async function joinGroup(tx: Prisma.TransactionClient, groupId: string, userEmail: string, now: Date): Promise<void> {
+  const admins = await tx.groupMember.count({ where: { groupId, role: "admin" } });
+  await tx.groupMember.create({
+    data: { groupId, email: userEmail, displayName: "", role: admins === 0 ? "admin" : "member", joinedAt: now },
+  });
+}
+
+/**
+ * How each address stands with the group, in the order given: a member, an
+ * open invite, someone with an account, or someone new.
+ */
+export async function contactStatuses(groupId: string, addresses: string[]): Promise<ContactStatus[]> {
+  const ids = await Promise.all(addresses.map((a) => emailId(a)));
+  if (ids.length === 0) return [];
+  const [members, invites, users] = await Promise.all([
+    prisma.groupMember.findMany({ where: { groupId, email: { in: ids } }, select: { email: true } }),
+    prisma.groupInvite.findMany({ where: { groupId, status: "pending", invitedEmail: { in: ids } }, select: { invitedEmail: true } }),
+    prisma.appUser.findMany({ where: { email: { in: ids } }, select: { email: true } }),
+  ]);
+  const member = new Set(members.map((m) => m.email));
+  const invited = new Set(invites.map((i) => i.invitedEmail));
+  const registered = new Set(users.map((u) => u.email));
+  return ids.map((id) => (member.has(id) ? "member" : invited.has(id) ? "invited" : registered.has(id) ? "registered" : "new"));
 }
 
 export async function getPendingInvitesForUser(
@@ -413,20 +451,7 @@ export async function respondToInvite(
     const already = await tx.groupMember.findFirst({
       where: { groupId: invite.groupId, email: userEmail },
     });
-    if (!already) {
-      // Joining a group nobody manages (its last admin left while only
-      // invites were open) makes you its admin, so someone can.
-      const admins = await tx.groupMember.count({ where: { groupId: invite.groupId, role: "admin" } });
-      await tx.groupMember.create({
-        data: {
-          groupId: invite.groupId,
-          email: userEmail,
-          displayName: "",
-          role: admins === 0 ? "admin" : "member",
-          joinedAt: new Date(),
-        },
-      });
-    }
+    if (!already) await joinGroup(tx, invite.groupId, userEmail, new Date());
   });
 }
 
