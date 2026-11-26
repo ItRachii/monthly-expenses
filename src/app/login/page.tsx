@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { doSignIn } from "@/lib/actions/auth";
-import { WalletIcon } from "@/components/Icons";
+import { Showreel } from "@/components/showreel/Showreel";
 import { ClearAppBadge } from "@/components/AppBadge";
 import { safeNextPath } from "@/lib/contacts";
 
@@ -93,77 +93,10 @@ export default async function LoginPage({
           </p>
         </section>
 
-        {/* RIGHT — marketing panel */}
-        <section className="relative hidden flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#0a0a0a] via-[#0b0f12] to-emerald-950/50 p-10 md:flex">
-          {/* Floating decorative shapes. */}
-          <div
-            aria-hidden
-            className="absolute left-12 top-16 h-10 w-10 rotate-45 rounded-md bg-gradient-to-br from-violet-400 to-violet-600 shadow-[0_0_45px_rgba(139,124,246,0.65)]"
-          />
-          <div
-            aria-hidden
-            className="absolute right-16 top-24 h-5 w-5 rotate-12 rounded-sm bg-yellow-400 shadow-[0_0_25px_rgba(250,204,21,0.6)]"
-          />
-          <div
-            aria-hidden
-            className="absolute bottom-32 right-10 h-16 w-16 rounded-full border-[10px] border-emerald-400 shadow-[0_0_45px_rgba(52,211,153,0.55)]"
-          />
-          <div
-            aria-hidden
-            className="absolute bottom-36 left-14 h-0 w-0 rotate-[200deg] border-x-[12px] border-b-[20px] border-x-transparent border-b-lime-400 drop-shadow-[0_0_10px_rgba(163,230,53,0.6)]"
-          />
-
-          <div className="relative z-10 flex flex-col items-center">
-            {/* Hexagon hero (stand-in for the 3D illustration). */}
-            <div className="relative h-64 w-60">
-              <svg
-                viewBox="0 0 220 240"
-                className="h-full w-full drop-shadow-[0_0_30px_rgba(76,114,176,0.45)]"
-                aria-hidden
-              >
-                <defs>
-                  <linearGradient id="hex" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#8B7CF6" />
-                    <stop offset="100%" stopColor="#34D399" />
-                  </linearGradient>
-                </defs>
-                <polygon
-                  points="110,10 205,65 205,175 110,230 15,175 15,65"
-                  fill="url(#hex)"
-                  fillOpacity="0.07"
-                  stroke="url(#hex)"
-                  strokeWidth="2.5"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <WalletIcon className="h-28 w-28 text-primary-light drop-shadow-[0_0_24px_rgba(143,176,230,0.45)]" />
-              </div>
-            </div>
-
-            <h2 className="mt-8 text-center text-2xl font-bold text-ink sm:text-3xl">
-              Manage your Money Anywhere
-            </h2>
-            <p className="mt-3 max-w-xs text-center text-sm text-muted">
-              Track expenses, splits, and settlements on the go — from any
-              device.
-            </p>
-
-            {/* Carousel dots (decorative). */}
-            <div className="mt-6 flex items-center gap-2 rounded-full bg-white/10 px-3 py-2">
-              <span className="h-2 w-2 rounded-full bg-white/25" />
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-              <span className="h-2 w-2 rounded-full bg-white/25" />
-            </div>
-          </div>
-
-          {/* Real artwork: when public/login-hero.png exists it covers the panel;
-              until then this paints nothing and the CSS composition shows. */}
-          <div
-            aria-hidden
-            style={{ backgroundImage: "url('/login-hero.png')" }}
-            className="absolute inset-0 z-20 bg-cover bg-[center_35%]"
-          />
-        </section>
+        {/* RIGHT: the showreel, hidden on phones like the panel it replaces. */}
+        <div className="relative hidden md:block">
+          <Showreel />
+        </div>
       </div>
     </main>
   );

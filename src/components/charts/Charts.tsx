@@ -9,7 +9,6 @@ import {
   LabelList,
   Pie,
   PieChart,
-  Rectangle,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -26,13 +25,16 @@ import { DRAW_MS, useCountUp, useReducedMotion } from "./motion";
 // Colour follows the category everywhere on the Summary tab (trend, donut,
 // bars), never its rank within a month: the seven biggest categories over
 // the whole history get seven fixed hues and everything else is the grey
-// "Other". Validated with the dataviz skill's validate_palette.js against
-// the card surface #1C1F26 (dark): lightness, CVD and normal-vision
-// separation of neighbours, and 3:1 contrast all pass; "Other" is grey on
-// purpose, so only its chroma check fails.
-const HUES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9"];
+// "Other". The hues are the brand's tonal palette (Tide, Shell, Midnight,
+// Sunset, Mist, plus Clay and Sea), themed in globals.css (--cat-1 to
+// --cat-7). Each theme's set passes validate_palette.js against its card
+// surface (#FFFFFF light, #1C1F26 dark) on CVD and normal-vision separation
+// of neighbours. Being muted on purpose, it is below the chroma floor and
+// outside the lightness band, and some slots are under 3:1, so stacked
+// segments keep a hairline divider and every chart has a legend and a tooltip.
+const HUES = [1, 2, 3, 4, 5, 6, 7].map((n) => `var(--cat-${n})`);
 export const OTHER = "Other";
-const OTHER_HUE = "#6e737d";
+const OTHER_HUE = "var(--cat-other)";
 // Theme colours for SVG attributes and styles: CSS variables, so the charts
 // follow the light or dark theme (globals.css, [data-theme]).
 const MUTED = "rgb(var(--c-muted))";
@@ -342,8 +344,13 @@ const RANGES = [
   { id: "12", label: "Last 12 months", months: 12 },
   { id: "all", label: "All time", months: Infinity },
 ] as const;
-const SEGMENT_GAP = 3;
-const SEGMENT_RADIUS = 6;
+// Square, flush segments: a column reads as one block. A hairline in the
+// card colour still parts the categories, as the pastels lean on it.
+const DIVIDER = "rgb(var(--c-surface))";
+// Every column stands on a faint full-height track.
+const TRACK = "rgb(var(--c-ink) / 0.05)";
+// Hovering a month dims the others to this, so its stack stands out.
+const DIMMED = 0.4;
 
 export function MonthlyTrend({
   rows,
@@ -358,6 +365,8 @@ export function MonthlyTrend({
   const data = Number.isFinite(months) ? all.slice(-months) : all;
   const capEvery = data.length > 12 ? 2 : 1;
   const reduced = useReducedMotion();
+  // The month under the pointer, or null.
+  const [active, setActive] = useState<number | null>(null);
 
   return (
     <ChartCard
@@ -379,7 +388,16 @@ export function MonthlyTrend({
     >
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 18, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
+          <BarChart
+            data={data}
+            margin={{ top: 18, right: 4, left: 0, bottom: 0 }}
+            barCategoryGap="22%"
+            onMouseMove={(s) => {
+              const i = s?.activeTooltipIndex;
+              setActive(i === null || i === undefined ? null : Number(i));
+            }}
+            onMouseLeave={() => setActive(null)}
+          >
             <CartesianGrid vertical={false} stroke={GRID} strokeDasharray="4 4" />
             <XAxis
               dataKey="month"
@@ -391,7 +409,8 @@ export function MonthlyTrend({
               minTickGap={8}
             />
             <YAxis tickFormatter={compactINR} tick={{ fill: MUTED, fontSize: 12 }} tickLine={false} axisLine={false} width={48} />
-            <Tooltip cursor={{ fill: "rgb(var(--c-ink) / 0.04)" }} content={<TrendTooltip keys={keys} palette={palette} />} />
+            {/* The track and the dimming mark the month, so no hover band. */}
+            <Tooltip cursor={false} content={<TrendTooltip keys={keys} palette={palette} />} />
             {keys.map((k, i) => (
               <Bar
                 key={k}
@@ -399,26 +418,30 @@ export function MonthlyTrend({
                 stackId="month"
                 fill={palette.colourOf(k)}
                 maxBarSize={64}
+                // The bottom series draws the full-height track behind the column.
+                background={i === 0 ? { fill: TRACK } : undefined}
                 // Columns rise from the axis, each category a beat after the
                 // one below it, so every month visibly adds up.
                 isAnimationActive={!reduced}
                 animationBegin={i * 70}
                 animationDuration={DRAW_MS - 150}
                 animationEasing={STRONG_EASE_OUT}
-                // Each segment is its own rounded block, inset to leave a gap
-                // to its neighbours in the stack.
+                // Square segments, flush in the stack, parted by a hairline.
+                // Opacity only for the hover dim: no layout moves.
                 shape={(props: unknown) => {
-                  const p = props as { x: number; y: number; width: number; height: number; fill: string };
-                  const h = p.height - SEGMENT_GAP;
-                  if (!(h > 0)) return <g />;
+                  const p = props as { x: number; y: number; width: number; height: number; fill: string; index: number };
+                  if (!(p.height > 0)) return <g />;
                   return (
-                    <Rectangle
+                    <rect
                       x={p.x}
-                      y={p.y + SEGMENT_GAP / 2}
+                      y={p.y}
                       width={p.width}
-                      height={h}
+                      height={p.height}
                       fill={p.fill}
-                      radius={Math.min(SEGMENT_RADIUS, h / 2, p.width / 2)}
+                      stroke={DIVIDER}
+                      strokeWidth={1}
+                      shapeRendering="crispEdges"
+                      style={{ opacity: active === null || active === p.index ? 1 : DIMMED, transition: "opacity 200ms ease-out" }}
                     />
                   );
                 }}

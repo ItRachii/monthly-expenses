@@ -3,6 +3,7 @@
 import { AlertTriangleIcon, CalendarIcon, ChevronDownIcon, DownloadIcon, PeopleIcon, PencilIcon, ReceiptIcon, TrashIcon } from "@/components/Icons";
 import { ActiveFilters, DateRangeHeader, FilterHeader, RowCheckbox, rangeLabel, type DateRange, SearchBox, SelectAllCheckbox, SortHeader, StatusPill, Th, sortRows, tableDate, useSort } from "@/components/table/Table";
 import { PendingFlagButton, PendingFlagNote } from "@/components/PendingFlag";
+import { type RowMotion, rowMotion, useRowPresence } from "@/components/table/useRowPresence";
 import { DateBadge } from "@/components/DateBadge";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -209,7 +210,10 @@ export function ExpenseFeed({
   // A scanned receipt's rows fold into one entry (read from all its rows, so
   // a filter that cuts it down shows "2 of 5"), then the entries are sorted,
   // so a receipt sits where its own date, total or name puts it.
-  const entries = useMemo(() => sortRows(groupReceipts(rows, matches), sort, entryValue), [rows, matches, sort]);
+  // Drawn with `draw`: rows the last filter change dropped fade out first.
+  // Counts, totals and selection keep using `matches`.
+  const { draw, leaving } = useRowPresence(rows, matches);
+  const entries = useMemo(() => sortRows(groupReceipts(rows, draw), sort, entryValue), [rows, draw, sort]);
   const shownTotal = round2(shown.reduce((s, r) => s + r.amount, 0));
   // Deleted expenses from the notification, in their month and only while
   // nothing narrows the list (they matched no filter; they no longer exist).
@@ -501,9 +505,10 @@ export function ExpenseFeed({
             <tbody>
               {placed.map(({ row: entry, ghost }, i) => {
                 if (ghost) return <GhostTableRow key={`ghost-${i}`} ghost={ghost} columns={isPersonal ? 6 : 8} />;
-                const tableRow = (r: ExpenseDTO, branch?: Branch, showDate?: boolean) => (
+                const tableRow = (r: ExpenseDTO, branch?: Branch, showDate?: boolean, motion?: RowMotion) => (
                   <ExpenseTableRow
                     key={r.id}
+                    motion={motion}
                     row={r}
                     branch={branch}
                     showDate={showDate}
@@ -521,7 +526,7 @@ export function ExpenseFeed({
                     }}
                   />
                 );
-                if (entry.row) return tableRow(entry.row);
+                if (entry.row) return tableRow(entry.row, undefined, undefined, rowMotion(i, leaving.has(entry.row.id)));
                 const group = entry.group;
                 const open = isOpen(group.receiptId);
                 const gone = ghostsOf(group.receiptId);
@@ -529,6 +534,7 @@ export function ExpenseFeed({
                   <Fragment key={`receipt-${group.receiptId}`}>
                     <ReceiptTableRow
                       group={group}
+                      motion={rowMotion(i, group.items.every((r) => leaving.has(r.id)))}
                       open={open}
                       picked={group.items.filter((r) => selected.has(r.id)).length}
                       isNew={group.items.some((r) => fresh.has(r.id))}
@@ -565,9 +571,10 @@ export function ExpenseFeed({
           <div className="card divide-y divide-ink/5 p-0">
             {placed.map(({ row: entry, ghost }, i) => {
               if (ghost) return <GhostRow key={`ghost-${i}`} ghost={ghost} />;
-              const phoneRow = (r: ExpenseDTO, branch?: Branch, showDate?: boolean) => (
+              const phoneRow = (r: ExpenseDTO, branch?: Branch, showDate?: boolean, motion?: RowMotion) => (
                 <ExpenseRow
                   key={r.id}
+                  motion={motion}
                   id={r.id}
                   branch={branch}
                   showDate={showDate}
@@ -587,7 +594,7 @@ export function ExpenseFeed({
                   }}
                 />
               );
-              if (entry.row) return phoneRow(entry.row);
+              if (entry.row) return phoneRow(entry.row, undefined, undefined, rowMotion(i, leaving.has(entry.row.id)));
               const group = entry.group;
               const open = isOpen(group.receiptId);
               const gone = ghostsOf(group.receiptId);
@@ -595,6 +602,7 @@ export function ExpenseFeed({
                 <div key={`receipt-${group.receiptId}`}>
                   <ReceiptRow
                     group={group}
+                    motion={rowMotion(i, group.items.every((r) => leaving.has(r.id)))}
                     open={open}
                     isNew={group.items.some((r) => fresh.has(r.id))}
                     inv={isPersonal ? null : involvement(group.items, selfKey, memberCount)}
@@ -692,6 +700,7 @@ export function ExpenseFeed({
 /** One expense as a table row (desktop). */
 function ExpenseTableRow({
   row,
+  motion,
   branch,
   showDate = false,
   mark,
@@ -705,6 +714,8 @@ function ExpenseTableRow({
   onDelete,
 }: {
   row: ExpenseDTO;
+  /** Arrival and exit motion for a top-level row; an opened receipt's items have their own (row-in). */
+  motion?: RowMotion;
   /** One item of an opened receipt, hung off it like a tree. */
   branch?: Branch;
   /** An item dated differently from the receipt row: its date shows. */
@@ -730,7 +741,8 @@ function ExpenseTableRow({
       data-expense-id={row.id}
       data-landing={mark ? "" : undefined}
       data-nested={branch ? "" : undefined}
-      className={`duration-700 hover:bg-ink/[0.03] ${branch ? "row-in" : ""} ${isNew ? "!bg-primary/15" : ""} ${mark ? "landing-mark" : ""}`}
+      className={`duration-700 hover:bg-ink/[0.03] ${branch ? "row-in" : ""} ${motion?.className ?? ""} ${isNew ? "!bg-primary/15" : ""} ${mark ? "landing-mark" : ""}`}
+      style={motion?.style}
     >
       <td>
         <RowCheckbox checked={checked} onChange={onToggle} label={`Select ${row.item}`} />
@@ -824,6 +836,7 @@ function receiptSummary(group: ReceiptGroup<ExpenseDTO>) {
 /** A scanned receipt as one table row (desktop): the total, opening to its items. */
 function ReceiptTableRow({
   group,
+  motion,
   open,
   picked,
   isNew,
@@ -836,6 +849,7 @@ function ReceiptTableRow({
   onDelete,
 }: {
   group: ReceiptGroup<ExpenseDTO>;
+  motion: RowMotion;
   open: boolean;
   /** How many of its items are ticked. */
   picked: number;
@@ -855,7 +869,8 @@ function ReceiptTableRow({
   return (
     <tr
       data-receipt-id={items[0].receiptId}
-      className={`cursor-pointer duration-700 hover:bg-ink/[0.03] ${isNew ? "!bg-primary/15" : ""}`}
+      className={`cursor-pointer duration-700 hover:bg-ink/[0.03] ${motion.className} ${isNew ? "!bg-primary/15" : ""}`}
+      style={motion.style}
       onClick={onToggleOpen}
     >
       <td onClick={(e) => e.stopPropagation()}>
@@ -951,12 +966,14 @@ const PHONE_TRUNK = CELL_PAD + DATE_BADGE + ROW_GAP + 10;
 /** A scanned receipt as one row on phones: the total; a tap lists its items. */
 function ReceiptRow({
   group,
+  motion,
   open,
   isNew,
   inv,
   onToggleOpen,
 }: {
   group: ReceiptGroup<ExpenseDTO>;
+  motion: RowMotion;
   open: boolean;
   isNew: boolean;
   inv: ReturnType<typeof involvement> | null;
@@ -971,7 +988,8 @@ function ReceiptRow({
       aria-expanded={open}
       aria-label={`${sum.merchant}, ${sum.count}, ${formatINR(sum.total)}. ${open ? "Hide" : "Show"} items.`}
       onClick={onToggleOpen}
-      className={`relative flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-700 ${
+      style={motion.style}
+      className={`relative flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-700 ${motion.className} ${
         isNew ? "bg-primary/15" : ""
       } outline-none [-webkit-tap-highlight-color:transparent] focus-visible:bg-ink/5 active:bg-ink/5`}
     >
@@ -1072,6 +1090,7 @@ const MOVE_TOLERANCE_PX = 10;
  */
 function ExpenseRow({
   id,
+  motion,
   branch,
   showDate = false,
   mark,
@@ -1087,6 +1106,8 @@ function ExpenseRow({
   onOpenActions,
 }: {
   id: number;
+  /** Arrival and exit motion for a top-level row. */
+  motion?: RowMotion;
   /** One item of an opened receipt, hung off it like a tree: compact, no date unless it differs. */
   branch?: Branch;
   /** An item of a receipt dated differently from the receipt row: say so. */
@@ -1208,7 +1229,8 @@ function ExpenseRow({
       {...pressable}
       data-expense-id={id}
       data-landing={mark ? "" : undefined}
-      className={`flex items-center gap-3 px-3 py-2.5 transition-colors duration-700 ${
+      style={motion?.style}
+      className={`flex items-center gap-3 px-3 py-2.5 transition-colors duration-700 ${motion?.className ?? ""} ${
         isNew ? "bg-primary/15" : ""
       } ${mark ? "landing-mark" : ""} cursor-default touch-pan-y select-none outline-none transition [-webkit-touch-callout:none] focus-visible:bg-ink/5 active:bg-ink/5`}
     >
